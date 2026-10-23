@@ -10,6 +10,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
+  <!-- Firebase (compat SDK · Auth + Firestore) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
   <!-- Tailwind CSS (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -99,6 +104,61 @@
 
 <body class="bg-gradient-to-b from-brand-50 via-white to-brand-50/60 min-h-screen font-sans text-slate-700 text-sm antialiased">
 
+  <!-- ===================== AÇILIŞ / GİRİŞ EKRANI ===================== -->
+  <div id="authScreen" class="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-br from-brand-50 via-white to-brand-100/60">
+    <div class="min-h-full flex items-center justify-center px-4 py-10">
+      <div class="w-full max-w-sm">
+        <div class="flex flex-col items-center text-center mb-6">
+          <span class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white shadow-soft-lg">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+          </span>
+          <h1 class="text-lg font-bold text-slate-800 mt-3">Family Bookshop</h1>
+          <p class="text-xs text-slate-400">Aile Kitaplığı</p>
+        </div>
+
+        <!-- Yükleniyor -->
+        <div id="authLoading" class="bg-white rounded-2xl shadow-soft p-6 flex flex-col items-center gap-3">
+          <span class="w-8 h-8 rounded-full border-[3px] border-brand-100 border-t-brand-500 animate-spin"></span>
+          <p id="authLoadingText" class="text-xs text-slate-500">Bağlanılıyor…</p>
+        </div>
+
+        <!-- Giriş formu -->
+        <div id="authCard" class="hidden bg-white rounded-2xl shadow-soft-lg p-5 sm:p-6">
+          <button type="button" id="googleSignIn"
+            class="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-brand-300 hover:shadow-soft transition">
+            <svg class="w-4 h-4" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Google ile Giriş Yap
+          </button>
+
+          <div class="flex items-center gap-3 my-4 text-[10px] text-slate-400">
+            <span class="flex-1 h-px bg-slate-100"></span>veya e-posta ile<span class="flex-1 h-px bg-slate-100"></span>
+          </div>
+
+          <div class="flex p-1 bg-slate-50 rounded-xl mb-3">
+            <button type="button" data-auth-mode="signin" class="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition">Giriş Yap</button>
+            <button type="button" data-auth-mode="signup" class="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition">Kayıt Ol</button>
+          </div>
+
+          <form id="emailAuthForm" class="space-y-2.5" autocomplete="on" novalidate>
+            <input id="authName" name="name" type="text" maxlength="40" autocomplete="name" placeholder="Ad Soyad"
+              class="hidden w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            <input id="authEmail" name="email" type="email" required autocomplete="email" placeholder="E-posta"
+              class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            <input id="authPassword" name="password" type="password" required minlength="6" autocomplete="current-password" placeholder="Şifre (en az 6 karakter)"
+              class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            <button type="submit" id="authSubmit"
+              class="w-full py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 hover:shadow-soft-lg transition disabled:opacity-60">Giriş Yap</button>
+          </form>
+          <button type="button" id="authReset" class="mt-2.5 w-full text-[11px] font-medium text-brand-600 hover:text-brand-700">Şifremi unuttum</button>
+
+          <p id="authError" class="hidden mt-3 text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2"></p>
+        </div>
+
+        <p class="text-[10px] text-slate-400 text-center mt-4 leading-relaxed">Giriş yapan her aile üyesi kendi hesabıyla kiralama yapar.<br/>Bakiye ve yönetim işlemleri Kontrolcüye aittir.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- ===================== NAVBAR ===================== -->
   <header class="fixed top-0 inset-x-0 z-40 bg-white/80 backdrop-blur-md border-b border-brand-100/70 shadow-soft">
     <nav class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
@@ -157,10 +217,10 @@
               </button>
             </div>
 
-            <!-- Kullanıcı değiştirme -->
+            <!-- Hesap (Firebase Auth) -->
             <div class="p-3">
-              <p class="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Kullanıcı Değiştir</p>
-              <ul id="userSwitchList" class="space-y-1"></ul>
+              <p class="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Hesap</p>
+              <div id="accountBox"></div>
             </div>
 
             <!-- Kontrolcü paneli: Bakiye + Rol & Yetki -->
@@ -285,40 +345,72 @@
 
   <script>
   /* ==========================================================
-     1) MOCK VERİLER  (son aşamada Firebase Firestore'a taşınacak)
+     0) FIREBASE (Auth + Firestore · compat SDK)
+     ----------------------------------------------------------
+     • Web yapılandırması gizli değildir; güvenliği firestore.rules sağlar.
+     • OWNER_EMAIL: ilk girişte otomatik Kontrolcü olan hesap.
+       firestore.rules içindeki isOwner() ile aynı olmalı.
+     ========================================================== */
+  const firebaseConfig = {
+    apiKey: 'AIzaSyBjzTroOLcd-KcivXB3kR9hlAyuHYbDDxA',
+    authDomain: 'family-bookshop.firebaseapp.com',
+    projectId: 'family-bookshop',
+    storageBucket: 'family-bookshop.firebasestorage.app',
+    messagingSenderId: '220079451000',
+    appId: '1:220079451000:web:93f2334c704e4e9152768d'
+  };
+  const OWNER_EMAIL = 'tolga.kagan2017@gmail.com';
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const FieldValue = firebase.firestore.FieldValue;
+  const Timestamp = firebase.firestore.Timestamp;
+  const col = (name) => db.collection(name);
+  const bookRef = (id) => col('books').doc(String(id));
+
+  /* ==========================================================
+     1) VERİ ÖNBELLEĞİ (Firestore onSnapshot ile doldurulur)
+     ----------------------------------------------------------
+     Uygulamanın geri kalanı bu dizileri okur; yazma işlemleri
+     Firestore'a gider ve dinleyiciler dizileri günceller.
      ========================================================== */
   const DAY_MS = 864e5;
   const HOUR_MS = 36e5;
   const NOW_MS = Date.now();
   const isoAt = (ms) => new Date(ms).toISOString();
 
-  /* role: 'admin' (Kontrolcü) | 'member' (Kullanıcı) | 'observer' (Gözlemci)
-     email: Firebase Auth kurulunca gerçek hesaplara bağlanacak (şimdilik boş) */
-  const users = [
-    { id: 'u1', name: 'Kağan Durak',  role: 'admin',  balance: 500, email: null, color: 'from-brand-500 to-brand-700',  joinedAt: '2026-01-05' },
-    { id: 'u2', name: 'Ayşe Durak',   role: 'member', balance: 320, email: null, color: 'from-sky-400 to-cyan-500',      joinedAt: '2026-01-05' },
-    { id: 'u3', name: 'Emre Durak',   role: 'member', balance: 180, email: null, color: 'from-indigo-400 to-violet-500', joinedAt: '2026-02-12' },
-    { id: 'u4', name: 'Zeynep Durak', role: 'member', balance: 95,  email: null, color: 'from-teal-400 to-emerald-500',  joinedAt: '2026-03-20' }
-  ];
+  /* users/{uid} · role: 'admin' (Kontrolcü) | 'member' (Kullanıcı) | 'observer' (Gözlemci)
+     lastTx / lastTxType ('rental' | 'package'): son ödeme · güvenlik kuralı bakiye düşüşünü bununla doğrular */
+  const users = [];
+  const bookTypes = [];      // bookTypes/{id}  · order alanına göre sıralı
+  const books = [];          // books/{id}      · id sayısal, belge adı String(id)
+  const rentals = [];        // rentals/{id}
+  const offerPurchases = []; // offerPurchases/{id}
+  const priceLogs = [];      // priceLogs/{id}
+  const announcements = [];  // announcements/{id}
+  const offers = [];         // offers/{id}
 
-  /* Simüle e-posta havuzu (Firebase Auth hesaplarının yerine geçer · şimdilik boş) */
-  const emailPool = [];
+  /* ==========================================================
+     1.1) ÖRNEK KATALOG (Kontrolcü panelinden bir kez Firestore'a yüklenir)
+     ========================================================== */
 
-  /* Kitap türleri (Kontrolcü "Kategorileri Yönet" panelinden ekler / düzenler / siler)
-     palette: TYPE_PALETTES anahtarı · inDeals: false → bu türdeki kitaplar günlük indirim döngüsüne girmez
+  /* Kitap türleri · palette: TYPE_PALETTES anahtarı
+     inDeals: false → bu türdeki kitaplar günlük indirim döngüsüne girmez
      Günün İndirimleri yalnızca Seri kitaplar üzerinden döner. */
-  const bookTypes = [
+  const SEED_TYPES = [
     { id: 'seri',  label: 'Seri',  palette: 'blue',   inDeals: true },
     { id: 'ozel',  label: 'Özel',  palette: 'rose',   inDeals: false },
     { id: 'album', label: 'Albüm', palette: 'violet', inDeals: false }
   ];
 
-  /* Kitaplar (yazarı Kontrolcü Kağan Durak)
+  /* Kitaplar (yazarı Kontrolcü · authorId yüklenirken Kontrolcünün uid'si olur)
      type: bookTypes[].id
      id: sayısal ve artan; günlük indirim oranları bu ID'ye göre belirlenir
      writtenAt: yazıldığı tarih (liste sıralaması) · releaseDate: çıkış tarihi
-     addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya '' */
-  const books = [
+     addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya ''
+     lockUntil / lockBy / lockRental: kiralama kilidi (güvenlik kuralı müsaitliği bununla denetler) */
+  const SEED_BOOKS = [
     { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri',  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2019-03-14', releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
     { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri',  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2020-01-20', releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
     { id: 3,  title: 'Gece Yolcusu III: Gar',          type: 'seri',  price: 40, pages: 268, rentalDays: 14, place: 'İstanbul – Haydarpaşa',   writtenAt: '2021-02-08', releaseDate: '2021-08-30', authorId: 'u1', cover: '', addedAt: '2026-09-02T12:00:00', newDiscountUntil: null },
@@ -335,39 +427,15 @@
     { id: 14, title: 'Kış Masalları',                  type: 'seri',  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2026-10-20', releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → sonraki döngüye kalır
   ];
 
-  /* Kiralamalar
+  /* Kiralamalar (rentals) — örnek veri yok, gerçek kullanıcılar oluşturur
      listPrice: kiralama anındaki normal fiyat · price: ödenen (paket kitaplarında payı)
      discountSource: 'deal' (günün indirimi) | 'new' (yeni kitap) | 'offer' (özel teklif) | null
-     offerId / purchaseId / offerPrice: özel teklifle alınan kitaplar */
-  const rentals = [
-    // Aktif
-    { id: 'r1',  bookId: 6,  userId: 'u2', listPrice: 22, price: 22,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 2 * DAY_MS),    dueAt: isoAt(NOW_MS + 12 * DAY_MS),  returnedAt: null },
-    { id: 'r2',  bookId: 9,  userId: 'u3', listPrice: 45, price: 27,   discount: 40, discountSource: 'deal', rentedAt: isoAt(NOW_MS - 7 * DAY_MS),    dueAt: isoAt(NOW_MS + 7 * DAY_MS),   returnedAt: null },
-    { id: 'r3',  bookId: 4,  userId: 'u1', listPrice: 35, price: 35,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 3 * DAY_MS),    dueAt: isoAt(NOW_MS + 4 * DAY_MS),   returnedAt: null },
-    { id: 'r4',  bookId: 13, userId: 'u4', listPrice: 16, price: 16,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 13.6 * DAY_MS), dueAt: isoAt(NOW_MS + 0.4 * DAY_MS), returnedAt: null },
-    // Süresi dolan
-    { id: 'r5',  bookId: 11, userId: 'u2', listPrice: 22, price: 22,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 20 * DAY_MS),   dueAt: isoAt(NOW_MS - 6 * DAY_MS),   returnedAt: isoAt(NOW_MS - 7 * DAY_MS) },
-    { id: 'r6',  bookId: 2,  userId: 'u4', listPrice: 15, price: 7.5,  discount: 50, discountSource: 'deal', rentedAt: isoAt(NOW_MS - 25 * DAY_MS),   dueAt: isoAt(NOW_MS - 11 * DAY_MS),  returnedAt: isoAt(NOW_MS - 11 * DAY_MS) },
-    { id: 'r7',  bookId: 5,  userId: 'u3', listPrice: 30, price: 30,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 16 * DAY_MS),   dueAt: isoAt(NOW_MS - 2 * DAY_MS),   returnedAt: null },
-    { id: 'r8',  bookId: 7,  userId: 'u1', listPrice: 60, price: 60,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 40 * DAY_MS),   dueAt: isoAt(NOW_MS - 19 * DAY_MS),  returnedAt: isoAt(NOW_MS - 20 * DAY_MS) },
-    { id: 'r12', bookId: 11, userId: 'u4', listPrice: 22, price: 18.7, discount: 15, discountSource: 'new',  rentedAt: isoAt(NOW_MS - 45 * DAY_MS),   dueAt: isoAt(NOW_MS - 31 * DAY_MS),  returnedAt: null },
-    // Özel teklif paketleri (op1: Emre → o1, op2: Ayşe → o3)
-    { id: 'r9',  bookId: 1,  userId: 'u3', listPrice: 25, price: 11.67, discount: 56, discountSource: 'offer', offerId: 'o1', purchaseId: 'op1', offerPrice: 35, rentedAt: isoAt(NOW_MS - 40 * DAY_MS), dueAt: isoAt(NOW_MS - 26 * DAY_MS), returnedAt: null },
-    { id: 'r10', bookId: 2,  userId: 'u3', listPrice: 15, price: 11.67, discount: 56, discountSource: 'offer', offerId: 'o1', purchaseId: 'op1', offerPrice: 35, rentedAt: isoAt(NOW_MS - 40 * DAY_MS), dueAt: isoAt(NOW_MS - 26 * DAY_MS), returnedAt: null },
-    { id: 'r11', bookId: 3,  userId: 'u3', listPrice: 40, price: 11.66, discount: 56, discountSource: 'offer', offerId: 'o1', purchaseId: 'op1', offerPrice: 35, rentedAt: isoAt(NOW_MS - 40 * DAY_MS), dueAt: isoAt(NOW_MS - 26 * DAY_MS), returnedAt: null },
-    { id: 'r13', bookId: 4,  userId: 'u2', listPrice: 35, price: 15,    discount: 38, discountSource: 'offer', offerId: 'o3', purchaseId: 'op2', offerPrice: 45, rentedAt: isoAt(NOW_MS - 60 * DAY_MS), dueAt: isoAt(NOW_MS - 53 * DAY_MS), returnedAt: null },
-    { id: 'r14', bookId: 8,  userId: 'u2', listPrice: 18, price: 15,    discount: 38, discountSource: 'offer', offerId: 'o3', purchaseId: 'op2', offerPrice: 45, rentedAt: isoAt(NOW_MS - 60 * DAY_MS), dueAt: isoAt(NOW_MS - 53 * DAY_MS), returnedAt: null },
-    { id: 'r15', bookId: 10, userId: 'u2', listPrice: 20, price: 15,    discount: 38, discountSource: 'offer', offerId: 'o3', purchaseId: 'op2', offerPrice: 45, rentedAt: isoAt(NOW_MS - 60 * DAY_MS), dueAt: isoAt(NOW_MS - 53 * DAY_MS), returnedAt: null }
-  ];
+     offerId / purchaseId / offerPrice: özel teklifle alınan kitaplar
+     Özel teklif satın alımları (offerPurchases) harcama istatistiğine paket fiyatı olarak yansır. */
 
-  /* Özel teklif satın alımları (harcama istatistiğine paket fiyatı olarak yansır) */
-  const offerPurchases = [
-    { id: 'op1', offerId: 'o1', offerTitle: 'Gece Yolcusu Üçlemesi', userId: 'u3', price: 35, normalTotal: 80, bookIds: [1, 2, 3],  purchasedAt: isoAt(NOW_MS - 40 * DAY_MS) },
-    { id: 'op2', offerId: 'o3', offerTitle: 'Albüm Koleksiyonu',      userId: 'u2', price: 45, normalTotal: 73, bookIds: [4, 8, 10], purchasedAt: isoAt(NOW_MS - 60 * DAY_MS) }
-  ];
-
-  /* Fiyat logları: changeBookPrice() her çağrıldığında otomatik eklenir */
-  const priceLogs = [
+  /* Fiyat logları: changeBookPrice() her çağrıldığında otomatik eklenir
+     changedBy yüklenirken Kontrolcünün uid'si olur */
+  const SEED_PRICE_LOGS = [
     { id: 'p1', bookId: 3,  oldPrice: 35,   newPrice: 40, changedBy: 'u1', changedAt: isoAt(NOW_MS - 22 * DAY_MS) },
     { id: 'p6', bookId: 3,  oldPrice: 30,   newPrice: 35, changedBy: 'u1', changedAt: isoAt(NOW_MS - 50 * DAY_MS) },
     { id: 'p2', bookId: 1,  oldPrice: 30,   newPrice: 25, changedBy: 'u1', changedAt: isoAt(NOW_MS - 13 * DAY_MS) },
@@ -379,8 +447,8 @@
   /* Duyurular:
      type 'news'   → Haberler sekmesi (category: NEWS_CATEGORIES anahtarı)
      type 'update' → Güncellemeler sekmesi (version, releaseDate, year, items)
-     readBy        → okuyan kullanıcılar (bildirim rozeti bundan hesaplanır) */
-  const announcements = [
+     readBy        → okuyan kullanıcı uid'leri (bildirim rozeti bundan hesaplanır) */
+  const SEED_ANNOUNCEMENTS = [
     { id: 'a1', type: 'news', category: 'Duyuru', title: 'Kitaplığımız açıldı! 🎉',
       body: 'Family Bookshop artık yayında! Aile kitaplığımızdaki tüm kitapları bakiyenle kiralayabilir, her sabah 10:00\'da yenilenen Günün İndirimleri\'nden faydalanabilirsin.\nİyi okumalar!',
       bookId: null, authorId: 'u1', createdAt: '2026-10-01T10:00:00', pinned: true, readBy: ['u1', 'u2', 'u3', 'u4'] },
@@ -399,14 +467,13 @@
   ];
 
   /* Özel Teklifler: 3 kitaplık paketler
-     items[i].cover: vitrin için isteğe bağlı kapak (boşsa kitabın kendi kapağı) */
-  const offers = [
+     items[i].cover: vitrin için isteğe bağlı kapak (boşsa kitabın kendi kapağı)
+     Firestore'da ayrıca bookIds (kurallar için) ve endsAt (son gün 23:59, Timestamp) tutulur. */
+  const SEED_OFFERS = [
     { id: 'o1', title: 'Gece Yolcusu Üçlemesi', description: 'Serinin üç kitabı tek pakette! Karanlık Peron\'dan Gar\'a kadar tüm yolculuk tek kiralamayla senin.',
       price: 35, items: [{ bookId: 1, cover: '' }, { bookId: 2, cover: '' }, { bookId: 3, cover: '' }], validUntil: '2026-11-30', theme: 'blue', createdAt: '2026-10-15T10:00:00' },
     { id: 'o2', title: 'Rüzgâr & Kapadokya Paketi', description: 'Rüzgâr serisinin iki kitabı ve Kapadokya albümü bir arada.',
-      price: 40, items: [{ bookId: 5, cover: '' }, { bookId: 6, cover: '' }, { bookId: 8, cover: '' }], validUntil: '2026-12-31', theme: 'violet', createdAt: '2026-10-20T10:00:00' },
-    { id: 'o3', title: 'Albüm Koleksiyonu', description: 'Üç aile albümü tek fiyata.',
-      price: 45, items: [{ bookId: 4, cover: '' }, { bookId: 8, cover: '' }, { bookId: 10, cover: '' }], validUntil: '2026-08-31', theme: 'emerald', createdAt: '2026-06-01T10:00:00' }
+      price: 40, items: [{ bookId: 5, cover: '' }, { bookId: 6, cover: '' }, { bookId: 8, cover: '' }], validUntil: '2026-12-31', theme: 'violet', createdAt: '2026-10-20T10:00:00' }
   ];
 
   /* Günün İndirimleri ayarları */
@@ -420,7 +487,12 @@
 
   /* Uygulama durumu */
   const state = {
-    currentUserId: 'u1',   // Başlangıçta Kontrolcü (Admin) seçili
+    currentUserId: null,   // giriş yapan Firebase kullanıcısının uid'si
+    authUser: null,        // firebase.User
+    ready: false,          // ilk veriler geldi mi
+    pendingName: '',       // e-posta ile kayıtta girilen ad (profil belgesine yazılır)
+    readPending: new Set(), // okundu olarak yazılmakta olan duyurular
+    purgePending: new Set(), // Kontrolcünün sildiği süresi dolmuş teklifler
     route: 'dashboard',
     profileOpen: false,
     mobileMenuOpen: false,
@@ -842,8 +914,33 @@
   }
 
   /* ==========================================================
-     5) VERİ İŞLEMLERİ (Firebase aşamasında Firestore çağrılarına dönüşecek)
+     5) VERİ İŞLEMLERİ (Firestore yazmaları)
+     ----------------------------------------------------------
+     Yazma sonrası arayüzü onSnapshot dinleyicileri günceller.
+     run(): yazmayı bekler, kural reddini anlaşılır bir toast'a çevirir.
      ========================================================== */
+  function fsErrorMsg(e) {
+    const code = e?.code || '';
+    if (code === 'permission-denied') return 'Bu işlem için yetkin yok (güvenlik kuralı reddetti).';
+    if (code === 'unavailable') return 'Sunucuya ulaşılamıyor. İnternet bağlantını kontrol et.';
+    if (code === 'failed-precondition' || code === 'aborted') return 'Veri bu arada değişti, lütfen tekrar dene.';
+    return 'İşlem başarısız: ' + (e?.message || code || 'bilinmeyen hata');
+  }
+
+  async function run(promise, okMsg, okType = 'success') {
+    try {
+      await promise;
+      if (okMsg) toast(okMsg, okType);
+      return true;
+    } catch (e) {
+      console.error(e);
+      toast(fsErrorMsg(e), 'error');
+      return false;
+    }
+  }
+
+  /* Belgeye yazılacak veri: yerel 'id' alanını çıkarır (belge adı zaten id) */
+  const docData = ({ id, ...rest }) => rest;
 
   /* Haber robotu: yeni kitap için şablon metin (tür adı o anki dinamik kategoriden alınır) */
   function newBookNewsBody(book) {
@@ -861,14 +958,14 @@
     const now = Date.now();
     const id = books.reduce((m, b) => Math.max(m, b.id), 0) + 1;
     const book = {
-      id, authorId: 'u1', ...data,
+      id, authorId: state.currentUserId, ...data,
       addedAt: isoAt(now),
-      newDiscountUntil: isoAt(now + NEW_BOOK_DISCOUNT.days * DAY_MS)
+      newDiscountUntil: isoAt(now + NEW_BOOK_DISCOUNT.days * DAY_MS),
+      lockUntil: null, lockBy: null, lockRental: null
     };
-    books.push(book);
-
-    announcements.push({
-      id: uid('a'),
+    const batch = db.batch();
+    batch.set(bookRef(id), book);
+    batch.set(col('announcements').doc(), {
       type: 'news',
       category: 'Yeni Kitap',
       title: `Yeni kitap: ${book.title}`,
@@ -879,12 +976,12 @@
       pinned: false,
       readBy: []
     });
-    updateBadges();
-    return book;
+    return { book, done: batch.commit() };
   }
 
-  /* Fiyatı değiştirir + Fiyat Loguna otomatik kayıt düşer */
-  function changeBookPrice(bookId, newPrice) {
+  /* Fiyatı değiştirir + Fiyat Loguna otomatik kayıt düşer.
+     batch verilirse işlemleri ona ekler (kitap düzenleme ile tek seferde yazılır). */
+  function changeBookPrice(bookId, newPrice, batch = null) {
     const book = getBook(bookId);
     if (!book) return { ok: false, reason: 'Kitap bulunamadı.' };
     newPrice = round2(newPrice);
@@ -892,33 +989,37 @@
     if (newPrice === book.price) return { ok: false, reason: 'Yeni fiyat mevcut fiyatla aynı.' };
 
     const oldPrice = book.price;
-    book.price = newPrice;
-    priceLogs.push({
-      id: uid('p'), bookId: book.id, oldPrice, newPrice,
+    const own = !batch;
+    const b = batch || db.batch();
+    b.update(bookRef(book.id), { price: newPrice });
+    b.set(col('priceLogs').doc(), {
+      bookId: book.id, oldPrice, newPrice,
       changedBy: state.currentUserId, changedAt: new Date().toISOString()
     });
-    return { ok: true, book, oldPrice, newPrice };
+    return { ok: true, book, oldPrice, newPrice, done: own ? b.commit() : null };
   }
 
-  /* Kiralamayı hafızadan tamamen siler. Paket (özel teklif) kiralamasında paketin
-     tüm kitapları ve satın alım kaydı birlikte silinir. Bakiye iade edilmez. */
+  /* Kiralamayı tamamen siler (Kontrolcü). Paket (özel teklif) kiralamasında paketin
+     tüm kitapları ve satın alım kaydı birlikte silinir; kitap kilitleri açılır.
+     Bakiye iade edilmez. */
   function removeRental(rentalId) {
     const r = getRental(rentalId);
-    if (!r) return [];
+    if (!r) return { removed: [], done: Promise.resolve() };
     const removed = r.purchaseId ? rentals.filter((x) => x.purchaseId === r.purchaseId) : [r];
-    removed.forEach((x) => rentals.splice(rentals.indexOf(x), 1));
-    if (r.purchaseId) {
-      const i = offerPurchases.findIndex((p) => p.id === r.purchaseId);
-      if (i > -1) offerPurchases.splice(i, 1);
-    }
-    return removed;
+    const batch = db.batch();
+    removed.forEach((x) => {
+      batch.delete(col('rentals').doc(x.id));
+      const b = getBook(x.bookId);
+      if (b && b.lockRental === x.id) batch.update(bookRef(b.id), { lockUntil: null, lockBy: null, lockRental: null });
+    });
+    if (r.purchaseId && offerPurchases.some((p) => p.id === r.purchaseId)) batch.delete(col('offerPurchases').doc(r.purchaseId));
+    return { removed, done: batch.commit() };
   }
 
   /* Kitap türü ekle / düzenle / sil */
   function addBookType({ label, palette, inDeals }) {
-    const t = { id: uid('t'), label, palette, inDeals };
-    bookTypes.push(t);
-    return t;
+    const order = bookTypes.reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
+    return col('bookTypes').doc(uid('t')).set({ label, palette, inDeals, order });
   }
 
   /* Türü siler; o türdeki kitaplar indirim davranışı aynı olan ilk türe taşınır
@@ -932,23 +1033,29 @@
     if (inUse.length && !target) {
       return { ok: false, reason: `"${t.label}" türünde ${inUse.length} kitap var ve indirim ayarı aynı olan başka tür yok. Önce kitapları başka türe taşıyın.` };
     }
-    inUse.forEach((b) => { b.type = target.id; });
-    bookTypes.splice(bookTypes.indexOf(t), 1);
-    return { ok: true, moved: inUse.length, target };
+    const batch = db.batch();
+    inUse.forEach((b) => batch.update(bookRef(b.id), { type: target.id }));
+    batch.delete(col('bookTypes').doc(typeId));
+    return { ok: true, moved: inUse.length, target, done: batch.commit() };
   }
 
   /* Okunmamış duyuru sayısı (kullanıcıya göre) */
   const unreadCount = (userId = state.currentUserId) =>
-    announcements.filter((a) => !a.readBy.includes(userId)).length;
+    announcements.filter((a) => !(a.readBy || []).includes(userId)).length;
 
+  /* Duyurular sayfası açıldığında okunmamışları "okundu" yazar (yalnızca kendi uid'i eklenir) */
   function markAnnouncementsRead() {
     const id = state.currentUserId;
+    const batch = db.batch();
+    let n = 0;
     announcements.forEach((a) => {
-      if (!a.readBy.includes(id)) {
-        state.freshAnnIds.add(a.id);
-        a.readBy.push(id);
-      }
+      if ((a.readBy || []).includes(id) || state.readPending.has(a.id)) return;
+      state.freshAnnIds.add(a.id);
+      state.readPending.add(a.id);
+      batch.update(col('announcements').doc(a.id), { readBy: FieldValue.arrayUnion(id) });
+      n++;
     });
+    if (n) batch.commit().catch((e) => console.error(e)).finally(() => state.readPending.clear());
     updateBadges();
   }
 
@@ -1095,6 +1202,7 @@
   };
 
   function renderCurrentPage() {
+    if (!state.ready || !currentUser()) return;
     PAGE_RENDERERS[state.route]?.();
     updateBadges();
   }
@@ -1603,6 +1711,7 @@
         <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
         <div class="absolute top-3 right-3 flex gap-1.5">
           ${backOfferId ? `<button type="button" data-open-offer="${backOfferId}" class="h-8 px-3 rounded-full bg-white shadow-soft text-[11px] font-semibold text-brand-600 hover:bg-brand-50 flex items-center gap-1 transition">${icon('back', 'w-3.5 h-3.5')}Pakete dön</button>` : ''}
+          ${admin ? `<button type="button" data-delete-book="${b.id}" title="Kitabı sil" aria-label="Kitabı sil" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-rose-500 flex items-center justify-center transition">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
           <button type="button" data-modal-close aria-label="Kapat" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close')}</button>
         </div>
         <div class="flex gap-4 sm:gap-5 ${backOfferId ? 'pt-6 sm:pt-0' : ''}">
@@ -1675,14 +1784,19 @@
       </div>`, 'lg');
   }
 
+  /* Kitap kilidi hâlâ geçerli mi (güvenlik kuralı da aynı alanı denetler) */
+  const isBookLocked = (book, now = Date.now()) => !!book.lockUntil && book.lockUntil.toMillis() > now;
+
   function bookRentCheck(book, user, price) {
     if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
-    if (isBookRented(book)) return { ok: false, reason: 'Bu kitap şu an kirada.' };
+    if (isBookRented(book) || isBookLocked(book)) return { ok: false, reason: 'Bu kitap şu an kirada.' };
     if (user.balance < price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(price - user.balance)} eksik.` };
     return { ok: true };
   }
 
-  function rentBook(bookId) {
+  /* Kirala: kiralama kaydı + kitap kilidi + bakiye düşüşü tek batch'te yazılır.
+     Kurallar: kayıt kendi uid'inle, kitap boşta, bakiye tam fiyat kadar düşmeli. */
+  async function rentBook(bookId) {
     const b = getBook(bookId);
     const u = currentUser();
     if (!b || !u) return;
@@ -1693,27 +1807,43 @@
     if (!check.ok) return toast(check.reason, 'error');
 
     const now = Date.now();
-    u.balance = round2(u.balance - price);
-    rentals.push({
-      id: uid('r'), bookId: b.id, userId: u.id,
+    const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
+    const ref = col('rentals').doc();
+    const batch = db.batch();
+    batch.set(ref, {
+      bookId: b.id, userId: u.id,
       listPrice: b.price, price, discount: rate, discountSource: rate ? source : null,
-      rentedAt: isoAt(now), dueAt: isoAt(now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS), returnedAt: null
+      offerId: null, purchaseId: null, offerPrice: null,
+      rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
     });
+    batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
+    batch.update(col('users').doc(u.id), { balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental' });
 
     closeModal();
-    renderProfile();
-    renderCurrentPage();
-    toast(`"${b.title}" kiralandı · ${formatMoney(price)}`, 'success');
+    await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}`);
   }
 
-  function deletePriceLog(logId, bookId, backOfferId) {
+  /* Kitabı sil (Kontrolcü) · geçmiş kiralama kayıtları "Silinmiş kitap" olarak kalır */
+  function deleteBook(bookId) {
     if (!requireAdmin()) return;
-    const i = priceLogs.findIndex((l) => l.id === logId);
-    if (i === -1) return;
-    priceLogs.splice(i, 1);
-    toast('Fiyat geçmişi kaydı silindi.', 'info');
-    openBookModal(bookId, { backOfferId });
-    if (state.route === 'price-logs') renderPriceLogs();
+    const b = getBook(bookId);
+    if (!b) return;
+    const active = activeRentalOf(b);
+    openConfirm({
+      title: 'Kitap silinsin mi?',
+      message: `"${escapeHTML(b.title)}" kitaplıktan kalıcı olarak silinecek.${active ? ' <b>Kitap şu an kirada.</b>' : ''} Geçmiş kiralama kayıtları ve istatistikler korunur.`,
+      onConfirm: () => {
+        closeModal();
+        run(bookRef(b.id).delete(), `"${b.title}" silindi.`, 'info');
+      }
+    });
+  }
+
+  async function deletePriceLog(logId, bookId, backOfferId) {
+    if (!requireAdmin()) return;
+    if (!priceLogs.some((l) => l.id === logId)) return;
+    const ok = await run(col('priceLogs').doc(logId).delete(), 'Fiyat geçmişi kaydı silindi.', 'info');
+    if (ok && state.modalOpen) openBookModal(bookId, { backOfferId });
   }
 
   /* Fiyat Logu sayfasından kayıt silme (onaylı) */
@@ -1726,11 +1856,8 @@
       title: 'Fiyat kaydı silinsin mi?',
       message: `${b ? `"${escapeHTML(b.title)}" · ` : ''}${formatMoney(l.oldPrice)} → ${formatMoney(l.newPrice)} değişimi logdan kaldırılacak. Kitabın güncel fiyatı değişmez.`,
       onConfirm: () => {
-        const i = priceLogs.indexOf(l);
-        if (i > -1) priceLogs.splice(i, 1);
         closeModal();
-        renderCurrentPage();
-        toast('Fiyat geçmişi kaydı silindi.', 'info');
+        run(col('priceLogs').doc(l.id).delete(), 'Fiyat geçmişi kaydı silindi.', 'info');
       }
     });
   }
@@ -2390,14 +2517,24 @@
   const offerRate = (o) => { const n = offerNormalTotal(o); return n > 0 ? Math.max(0, Math.round((1 - o.price / n) * 100)) : 0; };
   const offerPurchaseCount = (o) => offerPurchases.filter((p) => p.offerId === o.id).length;
 
-  /* Süresi biten teklifler vitrinden direkt silinir (kiralamalar ve istatistikler korunur) */
+  /* Süresi biten teklifler vitrinden direkt silinir (kiralamalar ve istatistikler korunur).
+     Herkes için yerel listeden çıkarılır; Kontrolcü açıksa Firestore'dan da silinir. */
   function purgeExpiredOffers(now = new Date()) {
     const before = offers.length;
     for (let i = offers.length - 1; i >= 0; i--) {
-      if (!isOfferActive(offers[i], now)) offers.splice(i, 1);
+      const o = offers[i];
+      if (isOfferActive(o, now)) continue;
+      offers.splice(i, 1);
+      if (isAdmin() && !state.purgePending.has(o.id)) {
+        state.purgePending.add(o.id);
+        col('offers').doc(o.id).delete().catch((e) => { console.error(e); state.purgePending.delete(o.id); });
+      }
     }
     return offers.length !== before;
   }
+
+  /* Teklifin son anı (Timestamp) · kural, satın alımın bu andan önce olduğunu denetler */
+  const offerEndsAt = (validUntil) => Timestamp.fromDate(offerEnd({ validUntil }));
 
   /* 3 kapak yan yana, hafif üst üste — 3D derinlikli vitrin */
   function showcaseHTML(o, size = 'md') {
@@ -2418,7 +2555,7 @@
     if (!isOfferActive(o)) return { ok: false, reason: 'Bu teklifin süresi doldu.' };
     const bs = offerBooks(o);
     if (bs.length < 3) return { ok: false, reason: 'Paketteki kitaplardan biri artık kitaplıkta yok.' };
-    const rented = bs.find((b) => isBookRented(b));
+    const rented = bs.find((b) => isBookRented(b) || isBookLocked(b));
     if (rented) return { ok: false, reason: `"${rented.title}" şu an kirada.` };
     if (user.balance < o.price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(o.price - user.balance)} eksik.` };
     return { ok: true };
@@ -2577,7 +2714,9 @@
   }
 
   /* Teklifi kirala: 1 işlemde 3 kitap kiralanır, bakiyeden paket fiyatı düşer */
-  function rentOffer(offerId) {
+  /* Paket kiralama: satın alım + 3 kiralama + 3 kitap kilidi + bakiye düşüşü tek batch'te.
+     Kural: satın alım fiyatı = teklif fiyatı, teklif süresi dolmamış, bakiye paket fiyatı kadar düşer. */
+  async function rentOffer(offerId) {
     if (purgeExpiredOffers()) { closeModal(); renderCurrentPage(); }
     const o = getOffer(offerId);
     const u = currentUser();
@@ -2590,7 +2729,8 @@
     const bs = offerBooks(o);
     const normal = offerNormalTotal(o);
     const rate = offerRate(o);
-    const purchaseId = uid('op');
+    const purchaseRef = col('offerPurchases').doc();
+    const purchaseId = purchaseRef.id;
 
     // Paket fiyatını kitaplara normal fiyat oranında paylaştır (kuruş farkı son kitaba)
     let allocated = 0;
@@ -2601,22 +2741,26 @@
       return share;
     });
 
-    u.balance = round2(u.balance - o.price);
-    offerPurchases.push({
-      id: purchaseId, offerId: o.id, offerTitle: o.title, userId: u.id,
+    const batch = db.batch();
+    batch.set(purchaseRef, {
+      offerId: o.id, offerTitle: o.title, userId: u.id,
       price: o.price, normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now)
     });
-    bs.forEach((b, i) => rentals.push({
-      id: uid('r'), bookId: b.id, userId: u.id,
-      listPrice: b.price, price: shares[i], discount: rate, discountSource: 'offer',
-      offerId: o.id, purchaseId, offerPrice: o.price,
-      rentedAt: isoAt(now), dueAt: isoAt(now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS), returnedAt: null
-    }));
+    bs.forEach((b, i) => {
+      const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
+      const ref = col('rentals').doc();
+      batch.set(ref, {
+        bookId: b.id, userId: u.id,
+        listPrice: b.price, price: shares[i], discount: rate, discountSource: 'offer',
+        offerId: o.id, purchaseId, offerPrice: o.price,
+        rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
+      });
+      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
+    });
+    batch.update(col('users').doc(u.id), { balance: round2(u.balance - o.price), lastTx: purchaseId, lastTxType: 'package' });
 
     closeModal();
-    renderProfile();
-    renderCurrentPage();
-    toast(`🎁 "${o.title}" kiralandı · 3 kitap · ${formatMoney(o.price)}`, 'success');
+    await run(batch.commit(), `🎁 "${o.title}" kiralandı · 3 kitap · ${formatMoney(o.price)}`);
   }
 
   /* ==========================================================
@@ -2743,7 +2887,7 @@
           ${field('Yazıldığı Tarih', `<input name="writtenAt" type="date" required max="${today}" value="${b ? b.writtenAt : today}" class="${INPUT_CLS}" />`)}
           ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" required value="${b ? b.releaseDate : today}" class="${INPUT_CLS}" />`, 'Çıkış yılı bu tarihten alınır')}
         </div>
-        <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : getUser('u1').name)}</b></p>
+        <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : currentUser().name)}</b></p>
         ${formFooter(b ? 'Değişiklikleri Kaydet' : `${icon('plus', 'w-3.5 h-3.5')}Kitabı Ekle`)}
       </form>`);
   }
@@ -2779,23 +2923,22 @@
     if (editId) {
       const b = getBook(editId);
       if (!b) return;
+      const batch = db.batch();
       let priceMsg = '';
       if (price !== b.price) {
-        const res = changeBookPrice(b.id, price);
+        const res = changeBookPrice(b.id, price, batch);
         if (res.ok) priceMsg = ' · fiyat loga işlendi';
       }
-      Object.assign(b, data);
+      batch.update(bookRef(b.id), data);
       closeModal();
-      renderCurrentPage();
-      toast(`"${b.title}" güncellendi${priceMsg}.`, 'success');
+      run(batch.commit(), `"${title}" güncellendi${priceMsg}.`);
       return;
     }
 
-    const book = addBook({ ...data, price });
+    const { book, done } = addBook({ ...data, price });
     state.bookTab = 'all';
     closeModal();
-    renderCurrentPage();
-    toast(`"${book.title}" eklendi · Duyurular'a haber düştü 📣`, 'success');
+    run(done, `"${book.title}" eklendi · Duyurular'a haber düştü 📣`);
   }
 
   /* --- Hızlı fiyat güncelleme (Fiyat Logu sayfası) --- */
@@ -2827,8 +2970,7 @@
     if (!res.ok) return toast(res.reason, 'error');
     const diff = round2(res.newPrice - res.oldPrice);
     closeModal();
-    renderCurrentPage();
-    toast(`"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${diff > 0 ? '+' : '−'}${formatMoney(Math.abs(diff))})`, 'success');
+    run(res.done, `"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${diff > 0 ? '+' : '−'}${formatMoney(Math.abs(diff))})`);
   }
 
   /* --- Sürüm notu ekle / düzenle / sil --- */
@@ -2864,17 +3006,14 @@
     const year = parseInt(fd.year, 10) || Number(fd.releaseDate.slice(0, 4));
 
     const data = { version, title: fd.title.trim(), releaseDate: fd.releaseDate, year, items };
-    if (editId) {
-      Object.assign(getAnn(editId), data);
-      toast(`${version} güncellendi.`, 'success');
-    } else {
-      announcements.push({ id: uid('a'), type: 'update', ...data, authorId: state.currentUserId, createdAt: new Date().toISOString(), readBy: [] });
-      toast(`${version} yayınlandı.`, 'success');
-    }
+    const done = editId
+      ? col('announcements').doc(editId).update(data)
+      : col('announcements').add({ type: 'update', ...data, authorId: state.currentUserId, createdAt: new Date().toISOString(), readBy: [] });
     state.annTab = 'update';
     closeModal();
     if (state.route !== 'announcements') location.hash = '#announcements';
     else renderCurrentPage();
+    run(done, editId ? `${version} güncellendi.` : `${version} yayınlandı.`);
   }
 
   function deleteUpdate(id) {
@@ -2885,11 +3024,8 @@
       title: `${escapeHTML(a.version)} silinsin mi?`,
       message: 'Bu sürüm notu kalıcı olarak silinecek.',
       onConfirm: () => {
-        const i = announcements.indexOf(a);
-        if (i > -1) announcements.splice(i, 1);
         closeModal();
-        renderCurrentPage();
-        toast(`${a.version} silindi.`, 'info');
+        run(col('announcements').doc(a.id).delete(), `${a.version} silindi.`, 'info');
       }
     });
   }
@@ -2910,10 +3046,9 @@
       message: `${what} Kitap anında tekrar Müsait olur. Bakiye iade edilmez.`,
       confirmLabel: 'İptal Et / Sil',
       onConfirm: () => {
-        const removed = removeRental(id);
+        const { removed, done } = removeRental(id);
         closeModal();
-        renderCurrentPage();
-        toast(removed.length > 1 ? `Paket kiralaması silindi · ${removed.length} kitap müsait.` : `Kiralama silindi · "${b?.title || 'Kitap'}" müsait.`, 'info');
+        run(done, removed.length > 1 ? `Paket kiralaması silindi · ${removed.length} kitap müsait.` : `Kiralama silindi · "${b?.title || 'Kitap'}" müsait.`, 'info');
       }
     });
   }
@@ -2961,24 +3096,22 @@
       </div>`);
   }
 
-  function handleSaveType(fd, editId) {
+  async function handleSaveType(fd, editId) {
     if (!requireAdmin()) return;
     const label = (fd.label || '').trim();
     if (!label) return toast('Tür adı boş olamaz.', 'error');
     if (bookTypes.some((t) => t.id !== editId && t.label.toLocaleLowerCase('tr') === label.toLocaleLowerCase('tr')))
       return toast(`"${label}" adında bir tür zaten var.`, 'error');
     const palette = TYPE_PALETTES[fd.palette] ? fd.palette : 'slate';
+    let done;
     if (editId) {
-      const t = getType(editId);
-      if (!t) return;
-      Object.assign(t, { label, palette });
-      toast(`"${label}" güncellendi.`, 'success');
+      if (!getType(editId)) return;
+      done = col('bookTypes').doc(editId).update({ label, palette });
     } else {
-      addBookType({ label, palette, inDeals: fd.inDeals === 'on' });
-      toast(`"${label}" türü eklendi.`, 'success');
+      done = addBookType({ label, palette, inDeals: fd.inDeals === 'on' });
     }
-    renderCurrentPage();
-    openTypeManager();
+    const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" türü eklendi.`);
+    if (ok && state.modalOpen) openTypeManager();
   }
 
   function deleteType(id) {
@@ -2992,12 +3125,11 @@
       message: count
         ? (target ? `Bu türdeki ${count} kitap <b>${escapeHTML(target.label)}</b> türüne taşınacak.` : `Bu türde ${count} kitap var.`)
         : 'Bu türde kitap yok, güvenle silinebilir.',
-      onConfirm: () => {
+      onConfirm: async () => {
         const res = removeBookType(id);
         if (!res.ok) { toast(res.reason, 'error'); return openTypeManager(); }
-        renderCurrentPage();
-        openTypeManager();
-        toast(res.moved ? `"${t.label}" silindi · ${res.moved} kitap "${res.target.label}" türüne taşındı.` : `"${t.label}" silindi.`, 'info');
+        await run(res.done, res.moved ? `"${t.label}" silindi · ${res.moved} kitap "${res.target.label}" türüne taşındı.` : `"${t.label}" silindi.`, 'info');
+        if (state.modalOpen) openTypeManager();
       }
     });
   }
@@ -3024,8 +3156,8 @@
     if (!requireAdmin()) return;
     const title = (fd.title || '').trim(), body = (fd.body || '').trim();
     if (!title || !body) return toast('Başlık ve içerik zorunlu.', 'error');
-    announcements.push({
-      id: uid('a'), type: 'news',
+    const done = col('announcements').add({
+      type: 'news',
       category: NEWS_CATEGORIES[fd.category] ? fd.category : 'Duyuru',
       title, body, bookId: null,
       authorId: state.currentUserId, createdAt: new Date().toISOString(),
@@ -3035,7 +3167,7 @@
     closeModal();
     if (state.route !== 'announcements') location.hash = '#announcements';
     else renderCurrentPage();
-    toast('Duyuru yayınlandı 📣', 'success');
+    run(done, 'Duyuru yayınlandı 📣');
   }
 
   function deleteNews(id) {
@@ -3046,11 +3178,8 @@
       title: 'Haber silinsin mi?',
       message: `"${escapeHTML(a.title)}" kalıcı olarak silinecek.`,
       onConfirm: () => {
-        const i = announcements.indexOf(a);
-        if (i > -1) announcements.splice(i, 1);
         closeModal();
-        renderCurrentPage();
-        toast('Haber silindi.', 'info');
+        run(col('announcements').doc(a.id).delete(), 'Haber silindi.', 'info');
       }
     });
   }
@@ -3146,19 +3275,18 @@
 
     const data = {
       title, description, price, validUntil: fd.validUntil,
+      endsAt: offerEndsAt(fd.validUntil),
       theme: OFFER_THEMES[fd.theme] ? fd.theme : 'blue',
-      items: ids.map((bookId, i) => ({ bookId, cover: state.offerDraftCovers[i] || '' }))
+      items: ids.map((bookId, i) => ({ bookId, cover: state.offerDraftCovers[i] || '' })),
+      bookIds: ids
     };
-    if (editId) {
-      Object.assign(getOffer(editId), data);
-      toast('Teklif güncellendi.', 'success');
-    } else {
-      offers.push({ id: uid('o'), ...data, createdAt: new Date().toISOString() });
-      toast('Teklif yayınlandı 🎉', 'success');
-    }
+    const done = editId
+      ? col('offers').doc(editId).update(data)
+      : col('offers').add({ ...data, createdAt: new Date().toISOString() });
     closeModal();
     if (state.route !== 'offers') location.hash = '#offers';
     else renderCurrentPage();
+    run(done, editId ? 'Teklif güncellendi.' : 'Teklif yayınlandı 🎉');
   }
 
   function deleteOffer(id) {
@@ -3169,10 +3297,8 @@
       title: 'Teklif silinsin mi?',
       message: `"${escapeHTML(o.title)}" vitrinden kaldırılacak. Daha önce yapılan kiralamalar ve istatistikler korunur.`,
       onConfirm: () => {
-        offers.splice(offers.indexOf(o), 1);
         closeModal();
-        renderCurrentPage();
-        toast('Teklif silindi.', 'info');
+        run(col('offers').doc(o.id).delete(), 'Teklif silindi.', 'info');
       }
     });
   }
@@ -3212,98 +3338,21 @@
   }
 
   /* ==========================================================
-     16) ROL & HESAP BAĞLAMA
+     16) ROL YÖNETİMİ (hesaplar Firebase Auth'tan gelir)
      ========================================================== */
-  function setRole(userId, role) {
+  const isOwnerUser = (u) => (u?.email || '').toLowerCase() === OWNER_EMAIL;
+
+  async function setRole(userId, role) {
     const u = getUser(userId);
     if (!u || !ROLES[role]) return;
     if (!isAdmin()) { toast('Rol değiştirme yalnızca Kontrolcü yetkisindedir.', 'error'); return renderProfile(); }
     if (u.role === role) return;
-    if (u.role === 'admin' && role !== 'admin' && users.filter((x) => x.role === 'admin').length === 1) {
-      toast('Sistemde en az bir Kontrolcü kalmalı.', 'error');
+    if (isOwnerUser(u) && role !== 'admin') {
+      toast('Ana Kontrolcü hesabının rolü değiştirilemez.', 'error');
       return renderProfile();
     }
-    u.role = role;
-    renderProfile();
-    renderCurrentPage();
-    toast(`${u.name} artık ${ROLES[role].label}.`, 'success');
-  }
-
-  const emailOwner = (email) => users.find((u) => u.email === email);
-
-  function openLinkModal(userId) {
-    if (!requireAdmin()) return;
-    const u = getUser(userId);
-    if (!u) return;
-    openModal(`
-      ${modalHeader('Kullanıcı Bağla 🔗', `${escapeHTML(u.name)} için e-posta hesabı eşleştir`, 'link')}
-      <div class="p-5 space-y-4">
-        <div class="flex items-center gap-3 p-3 rounded-xl ${u.email ? 'bg-emerald-50/70 border border-emerald-100' : 'bg-slate-50'}">
-          ${avatarHTML(u, 'w-9 h-9 text-xs')}
-          <div class="flex-1 min-w-0">
-            <p class="text-xs font-semibold text-slate-800">${escapeHTML(u.name)}</p>
-            <p class="text-[11px] ${u.email ? 'text-emerald-600' : 'text-slate-400'} truncate">${u.email ? '🔗 ' + escapeHTML(u.email) : 'Henüz bağlı hesap yok'}</p>
-          </div>
-          ${u.email ? `<button type="button" data-unlink-user="${u.id}" class="${BTN_SOFT} !py-1.5 !text-rose-500 !border-rose-100">Bağlantıyı Kaldır</button>` : ''}
-        </div>
-
-        <div>
-          <p class="text-[11px] font-semibold text-slate-500 mb-2">E-posta Havuzu</p>
-          <ul class="space-y-1.5">
-            ${emailPool.map((mail) => {
-              const owner = emailOwner(mail);
-              const mine = owner?.id === u.id;
-              return `
-                <li class="flex items-center gap-2.5 px-3 py-2 rounded-xl border ${mine ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-100'}">
-                  <span class="text-slate-300">${icon('link', 'w-3.5 h-3.5')}</span>
-                  <span class="flex-1 min-w-0 text-xs text-slate-700 truncate">${escapeHTML(mail)}</span>
-                  ${mine
-                    ? '<span class="text-[10px] font-semibold text-emerald-600">Bağlı ✓</span>'
-                    : owner
-                      ? `<span class="text-[10px] font-medium text-slate-400 truncate">${escapeHTML(owner.name)}'a bağlı</span>`
-                      : `<button type="button" data-link-email="${escapeHTML(mail)}" data-user="${u.id}" class="text-[11px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-lg transition">Bağla</button>`}
-                </li>`;
-            }).join('')}
-          </ul>
-        </div>
-
-        <form data-form="addEmail" data-user-id="${u.id}" class="flex gap-2" autocomplete="off">
-          <input name="email" type="email" required placeholder="yeni.hesap@example.com" class="${INPUT_CLS} flex-1" />
-          <button type="submit" class="${BTN_PRIMARY} shrink-0">Ekle & Bağla</button>
-        </form>
-        <p class="text-[10px] text-slate-400 leading-relaxed">Firebase aşamasında bu e-postalar Firebase Authentication hesaplarıyla eşleştirilecek; giriş yapan kişi otomatik olarak bağlı olduğu aile üyesi profiliyle açılacak.</p>
-      </div>`);
-  }
-
-  function linkEmail(userId, email) {
-    if (!requireAdmin()) return;
-    const u = getUser(userId);
-    const owner = emailOwner(email);
-    if (!u) return;
-    if (owner && owner.id !== u.id) return toast(`${email} zaten ${owner.name} hesabına bağlı.`, 'error');
-    u.email = email;
-    toast(`${u.name} → ${email} bağlandı.`, 'success');
-    renderProfile();
-    openLinkModal(userId);
-  }
-
-  function unlinkEmail(userId) {
-    if (!requireAdmin()) return;
-    const u = getUser(userId);
-    if (!u || !u.email) return;
-    const old = u.email;
-    u.email = null;
-    toast(`${u.name} hesabından ${old} ayrıldı.`, 'info');
-    renderProfile();
-    openLinkModal(userId);
-  }
-
-  function handleAddEmail(fd, userId) {
-    if (!requireAdmin()) return;
-    const email = String(fd.email || '').trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return toast('Geçerli bir e-posta girin.', 'error');
-    if (!emailPool.includes(email)) emailPool.push(email);
-    linkEmail(userId, email);
+    const ok = await run(col('users').doc(u.id).update({ role }), `${u.name} artık ${ROLES[role].label}.`);
+    if (!ok) renderProfile();
   }
 
   /* ==========================================================
@@ -3311,6 +3360,7 @@
      ========================================================== */
   function renderProfile() {
     const u = currentUser();
+    if (!u) return;
 
     // Navbar
     const nav = $('#navAvatar');
@@ -3328,25 +3378,18 @@
     $('#panelBalance').textContent = formatMoney(u.balance);
     $('#panelStatsBtn').dataset.userStats = u.id;
 
-    // Kullanıcı listesi
-    $('#userSwitchList').innerHTML = users.map((usr) => {
-      const active = usr.id === u.id;
-      const unread = unreadCount(usr.id);
-      return `
-        <li>
-          <button type="button" data-switch-user="${usr.id}"
-            class="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition ${active ? 'bg-brand-50 ring-1 ring-brand-200' : 'hover:bg-slate-50'}">
-            ${avatarHTML(usr, 'w-8 h-8 text-[11px]')}
-            <span class="text-left min-w-0">
-              <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(usr.name)}</span>
-              <span class="block text-[10px] text-slate-400">${ROLES[usr.role].label} · ${formatMoney(usr.balance)}</span>
-            </span>
-            ${active
-              ? '<span class="ml-auto text-[10px] font-semibold text-brand-600 bg-white px-2 py-0.5 rounded-full shadow-soft">Aktif</span>'
-              : unread ? `<span class="ml-auto text-[10px] font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">${unread} yeni</span>` : ''}
-          </button>
-        </li>`;
-    }).join('');
+    // Hesap (giriş yöntemi + çıkış)
+    const providers = (state.authUser?.providerData || []).map((p) => p.providerId);
+    const via = providers.includes('google.com') ? 'Google hesabı' : 'E-posta / şifre';
+    $('#accountBox').innerHTML = `
+      <div class="flex items-center gap-3 px-2.5 py-2 rounded-xl bg-slate-50/80">
+        <span class="w-8 h-8 rounded-full bg-white shadow-soft flex items-center justify-center text-brand-500 shrink-0">${icon('lock', 'w-4 h-4')}</span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.email || state.authUser?.email || '')}</span>
+          <span class="block text-[10px] text-slate-400">${via} ile giriş yapıldı</span>
+        </span>
+        <button type="button" data-sign-out class="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 transition">Çıkış Yap</button>
+      </div>`;
 
     renderAdminPanel();
   }
@@ -3367,7 +3410,9 @@
       <button type="button" data-panel-tab="${key}"
         class="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${state.panelTab === key ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600'}">${label}</button>`;
 
+    // Canlı güncellemede yazılmakta olan değerler kaybolmasın
     const prevTarget = $('#bmUser')?.value;
+    const prevAmount = $('#bmAmount')?.value;
     let body;
 
     if (state.panelTab === 'roles') {
@@ -3380,16 +3425,14 @@
                 ${avatarHTML(u, 'w-7 h-7 text-[10px]')}
                 <div class="min-w-0 flex-1">
                   <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</p>
-                  <p class="text-[10px] truncate ${u.email ? 'text-emerald-600' : 'text-slate-400'}">${u.email ? '🔗 ' + escapeHTML(u.email) : 'Bağlı hesap yok'}</p>
+                  <p class="text-[10px] truncate text-slate-400">${escapeHTML(u.email || '—')}</p>
                 </div>
               </div>
               <div class="flex gap-1.5 mt-2">
-                <select data-role-user="${u.id}" aria-label="${escapeHTML(u.name)} rolü"
-                  class="flex-1 min-w-0 text-[11px] rounded-lg border border-brand-100 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200">
+                <select data-role-user="${u.id}" aria-label="${escapeHTML(u.name)} rolü" ${isOwnerUser(u) ? 'disabled title="Ana Kontrolcü"' : ''}
+                  class="flex-1 min-w-0 text-[11px] rounded-lg border border-brand-100 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:bg-slate-50 disabled:text-slate-400">
                   ${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${r.label}</option>`).join('')}
                 </select>
-                <button type="button" data-link-user="${u.id}"
-                  class="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition">Kullanıcı Bağla 🔗</button>
               </div>
             </li>`).join('')}
         </ul>
@@ -3412,16 +3455,29 @@
         </div>`;
     }
 
+    // Firestore boşsa (ilk kurulum): örnek kataloğu taşıma kartı
+    const seedCard = !bookTypes.length && !books.length ? `
+      <div class="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+        <p class="text-[11px] font-bold text-amber-800">🗄️ İlk kurulum · Firestore boş</p>
+        <p class="text-[10px] text-amber-700 mt-0.5 leading-relaxed">Örnek katalog: türler, ${SEED_BOOKS.length} kitap, fiyat logu, duyurular ve özel teklifler. Kullanıcı ve kiralama verisi taşınmaz.</p>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <button type="button" data-seed="catalog" class="py-1.5 rounded-lg text-[11px] font-semibold bg-amber-500 text-white hover:bg-amber-600 transition">Kataloğu Yükle</button>
+          <button type="button" data-seed="types" class="py-1.5 rounded-lg text-[11px] font-semibold bg-white text-amber-700 border border-amber-200 hover:bg-amber-100 transition">Sadece Türler</button>
+        </div>
+      </div>` : '';
+
     box.innerHTML = `
+      ${seedCard}
       <div class="flex gap-1 p-1 bg-white rounded-xl border border-brand-100 mb-3">
         ${tab('balance', '💰 Bakiye Yönetimi')}
         ${tab('roles', '⚙️ Rol & Yetki')}
       </div>
       ${body}`;
     if (prevTarget && $('#bmUser')) $('#bmUser').value = prevTarget;
+    if (prevAmount && $('#bmAmount')) $('#bmAmount').value = prevAmount;
   }
 
-  function handleBalanceAction(action) {
+  async function handleBalanceAction(action) {
     if (!isAdmin()) return toast('Bu işlem için yetkiniz yok.', 'error');
 
     const target = getUser($('#bmUser').value);
@@ -3437,23 +3493,31 @@
 
     if (newBalance < 0) return toast('Bakiye sıfırın altına düşemez.', 'error');
 
-    target.balance = round2(newBalance);
-    renderProfile();
-    renderCurrentPage();
+    newBalance = round2(newBalance);
     $('#bmAmount').value = '';
-
     const labels = { add: 'eklendi', subtract: 'düşüldü', set: 'eşitlendi' };
-    toast(`${target.name}: bakiye ${labels[action]} → ${formatMoney(target.balance)}`, 'success');
+    await run(col('users').doc(target.id).update({ balance: newBalance }),
+      `${target.name}: bakiye ${labels[action]} → ${formatMoney(newBalance)}`);
   }
 
-  function switchUser(id) {
-    if (id === state.currentUserId) return;
-    state.currentUserId = id;
-    if (state.route === 'announcements') state.freshAnnIds = new Set();
-    closeModal();
-    renderCurrentPage();   // önce sayfa (duyurular okundu işaretlenir)
-    renderProfile();
-    toast(`${currentUser().name} olarak giriş yapıldı.`, 'info');
+  /* ==========================================================
+     17.1) İLK KURULUM: ÖRNEK KATALOĞU FIRESTORE'A TAŞI (Kontrolcü)
+     ========================================================== */
+  async function seedCatalog(mode) {
+    if (!requireAdmin()) return;
+    if (bookTypes.length || books.length) return toast('Firestore zaten dolu; taşıma yapılmadı.', 'info');
+    const me = state.currentUserId;
+    const batch = db.batch();
+    SEED_TYPES.forEach((t, i) => batch.set(col('bookTypes').doc(t.id), { ...docData(t), order: i + 1 }));
+    if (mode === 'catalog') {
+      SEED_BOOKS.forEach((b) => batch.set(bookRef(b.id), { ...b, authorId: me, lockUntil: null, lockBy: null, lockRental: null }));
+      SEED_PRICE_LOGS.forEach((l) => batch.set(col('priceLogs').doc(l.id), { ...docData(l), changedBy: me }));
+      SEED_ANNOUNCEMENTS.forEach((a) => batch.set(col('announcements').doc(a.id), { ...docData(a), authorId: me, readBy: [] }));
+      SEED_OFFERS.filter((o) => isOfferActive(o)).forEach((o) => batch.set(col('offers').doc(o.id), {
+        ...docData(o), endsAt: offerEndsAt(o.validUntil), bookIds: o.items.map((it) => it.bookId)
+      }));
+    }
+    await run(batch.commit(), mode === 'catalog' ? 'Örnek katalog Firestore\'a yüklendi 🗄️' : 'Kitap türleri oluşturuldu.');
   }
 
   /* ==========================================================
@@ -3484,6 +3548,7 @@
      19) CANLI SAYAÇ (her saniye)
      ========================================================== */
   function tick() {
+    if (!state.ready) return;
     const now = new Date();
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
     if (purgeExpiredOffers(now) && state.route === 'offers' && !state.modalOpen) renderCurrentPage();
@@ -3518,11 +3583,11 @@
       e.stopPropagation();
       const t = e.target;
       let m;
-      if ((m = t.closest('[data-switch-user]')))     return switchUser(m.dataset.switchUser);
+      if ((m = t.closest('[data-sign-out]')))        return signOut();
+      if ((m = t.closest('[data-seed]')))            return seedCatalog(m.dataset.seed);
       if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction);
       if ((m = t.closest('[data-panel-tab]')))       { state.panelTab = m.dataset.panelTab; return renderAdminPanel(); }
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
-      if ((m = t.closest('[data-link-user]')))       return openLinkModal(m.dataset.linkUser);
     });
 
     // Sayfa geneli tıklamalar (tek merkezden event delegation)
@@ -3543,6 +3608,7 @@
       if ((m = el('[data-rent-offer]')))       return m.disabled ? null : rentOffer(m.dataset.rentOffer);
       if ((m = el('[data-quick]')))            return runQuick(m.dataset.quick);
       if ((m = el('[data-edit-book]')))        return openBookFormModal(m.dataset.editBook);
+      if ((m = el('[data-delete-book]')))      return deleteBook(m.dataset.deleteBook);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-delete-type]')))      return deleteType(m.dataset.deleteType);
@@ -3559,8 +3625,6 @@
       if ((m = el('[data-open-book]')))        return openBookModal(m.dataset.openBook, { backOfferId: m.dataset.backOffer || '' });
       if ((m = el('[data-open-offer]')))       return openOfferDetail(m.dataset.openOffer);
       if ((m = el('[data-user-stats]')))       return openUserStatsModal(m.dataset.userStats);
-      if ((m = el('[data-link-email]')))       return linkEmail(m.dataset.user, m.dataset.linkEmail);
-      if ((m = el('[data-unlink-user]')))      return unlinkEmail(m.dataset.unlinkUser);
     });
 
     // Modal backdrop
@@ -3579,7 +3643,6 @@
         case 'saveOffer':   return handleSaveOffer(fd, editId);
         case 'saveType':    return handleSaveType(fd, editId);
         case 'saveNews':    return handleSaveNews(fd);
-        case 'addEmail':    return handleAddEmail(fd, form.dataset.userId);
       }
     });
 
@@ -3617,13 +3680,236 @@
     window.addEventListener('hashchange', router);
   }
 
+  /* ==========================================================
+     21) KİMLİK DOĞRULAMA (Google + e-posta/şifre) & CANLI SENKRON
+     ========================================================== */
+  const USER_COLORS = [
+    'from-brand-500 to-brand-700', 'from-sky-400 to-cyan-500', 'from-indigo-400 to-violet-500',
+    'from-teal-400 to-emerald-500', 'from-rose-400 to-orange-400', 'from-amber-400 to-orange-500'
+  ];
+  const colorFor = (uid) => USER_COLORS[[...uid].reduce((s, c) => s + c.charCodeAt(0), 0) % USER_COLORS.length];
+
+  /* Koleksiyon → yerel dizi eşlemesi (belge adı id olur; kitapta sayısal id alanı korunur) */
+  const SYNC = [
+    ['users', users],
+    ['bookTypes', bookTypes, (q) => q.orderBy('order')],
+    ['books', books, null, (d) => ({ ...d.data(), id: Number(d.data().id ?? d.id) })],
+    ['rentals', rentals],
+    ['offerPurchases', offerPurchases],
+    ['priceLogs', priceLogs],
+    ['announcements', announcements],
+    ['offers', offers]
+  ];
+  let unsubscribers = [];
+  let renderQueued = false;
+
+  /* Snapshot'lar art arda gelince tek karede çiz */
+  function scheduleRender() {
+    if (!state.ready || renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => {
+      renderQueued = false;
+      if (!state.ready || !currentUser()) return;
+      renderProfile();
+      renderCurrentPage();
+    });
+  }
+
+  function startSync() {
+    const waiting = new Set(SYNC.map(([name]) => name));
+    return new Promise((resolve, reject) => {
+      SYNC.forEach(([name, arr, query, map]) => {
+        const q = query ? query(col(name)) : col(name);
+        unsubscribers.push(q.onSnapshot((snap) => {
+          arr.splice(0, arr.length, ...snap.docs.map(map || ((d) => ({ id: d.id, ...d.data() }))));
+          if (waiting.delete(name) && !waiting.size) resolve();
+          scheduleRender();
+        }, (err) => {
+          console.error(`[${name}]`, err);
+          if (waiting.size) reject(err);
+          else toast(`Canlı bağlantı koptu (${name}): ${fsErrorMsg(err)}`, 'error');
+        }));
+      });
+    });
+  }
+
+  function stopSync() {
+    unsubscribers.forEach((fn) => fn());
+    unsubscribers = [];
+    SYNC.forEach(([, arr]) => { arr.length = 0; });
+  }
+
+  /* İlk girişte users/{uid} belgesi oluşturulur (bakiye 0; ana Kontrolcü e-postası → Kontrolcü) */
+  async function ensureUserDoc(user) {
+    const ref = col('users').doc(user.uid);
+    const snap = await ref.get();
+    if (snap.exists) return;
+    const email = (user.email || '').toLowerCase();
+    const owner = email === OWNER_EMAIL && user.emailVerified;
+    await ref.set({
+      name: (state.pendingName || user.displayName || email.split('@')[0] || 'Aile Üyesi').trim(),
+      email,
+      photoURL: user.photoURL || null,
+      role: owner ? 'admin' : 'member',
+      balance: 0,
+      color: colorFor(user.uid),
+      joinedAt: localDateKey(),
+      lastTx: null,
+      lastTxType: null
+    });
+  }
+
+  async function handleAuthState(user) {
+    stopSync();
+    state.ready = false;
+    state.authUser = user;
+    state.currentUserId = user?.uid || null;
+    if (!user) { closeModal(); toggleProfile(false); return showAuth('form'); }
+
+    showAuth('loading', 'Veriler yükleniyor…');
+    try {
+      await ensureUserDoc(user);
+      state.pendingName = '';
+      await startSync();
+      state.ready = true;
+      state.freshAnnIds = new Set();
+      hideAuth();
+      router();
+      renderProfile();
+    } catch (e) {
+      console.error(e);
+      stopSync();
+      await auth.signOut().catch(() => {});
+      showAuth('form');
+      showAuthError(fsErrorMsg(e));
+    }
+  }
+
+  /* --- Giriş ekranı --- */
+  let authMode = 'signin';
+
+  function showAuth(view, text = '') {
+    $('#authScreen').hidden = false;
+    $('#authLoading').classList.toggle('hidden', view !== 'loading');
+    $('#authCard').classList.toggle('hidden', view !== 'form');
+    if (text) $('#authLoadingText').textContent = text;
+    if (view === 'form') setAuthMode(authMode);
+  }
+  function hideAuth() { $('#authScreen').hidden = true; showAuthError(''); }
+
+  function showAuthError(msg) {
+    const el = $('#authError');
+    el.textContent = msg;
+    el.classList.toggle('hidden', !msg);
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const signup = mode === 'signup';
+    $$('[data-auth-mode]').forEach((b) => {
+      const on = b.dataset.authMode === mode;
+      b.classList.toggle('bg-white', on);
+      b.classList.toggle('shadow-soft', on);
+      b.classList.toggle('text-brand-600', on);
+      b.classList.toggle('text-slate-400', !on);
+    });
+    $('#authName').classList.toggle('hidden', !signup);
+    $('#authPassword').autocomplete = signup ? 'new-password' : 'current-password';
+    $('#authSubmit').textContent = signup ? 'Hesap Oluştur' : 'Giriş Yap';
+    $('#authReset').classList.toggle('hidden', signup);
+    showAuthError('');
+  }
+
+  function authErrorMsg(e) {
+    const map = {
+      'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+      'auth/wrong-password': 'E-posta veya şifre hatalı.',
+      'auth/user-not-found': 'Bu e-postayla kayıtlı hesap yok.',
+      'auth/invalid-email': 'Geçerli bir e-posta girin.',
+      'auth/email-already-in-use': 'Bu e-posta zaten kayıtlı. Giriş Yap sekmesini kullan.',
+      'auth/weak-password': 'Şifre en az 6 karakter olmalı.',
+      'auth/too-many-requests': 'Çok fazla deneme yapıldı. Biraz sonra tekrar dene.',
+      'auth/popup-closed-by-user': 'Google penceresi kapatıldı.',
+      'auth/cancelled-popup-request': 'Google penceresi kapatıldı.',
+      'auth/network-request-failed': 'İnternet bağlantısı yok.',
+      'auth/operation-not-allowed': 'Bu giriş yöntemi Firebase konsolunda açık değil (Authentication → Sign-in method).',
+      'auth/unauthorized-domain': `Bu adres (${location.hostname || 'file://'}) Firebase'de yetkili değil. Authentication → Settings → Authorized domains listesine ekle.`
+    };
+    return map[e?.code] || ('Giriş başarısız: ' + (e?.message || e?.code || 'bilinmeyen hata'));
+  }
+
+  async function signInGoogle() {
+    if (location.protocol === 'file:') return showAuthError('Google girişi dosyadan (file://) açılınca çalışmaz. Sayfayı http://localhost üzerinden aç.');
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    showAuthError('');
+    try {
+      await auth.signInWithPopup(provider);
+    } catch (e) {
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+        return auth.signInWithRedirect(provider);
+      }
+      showAuthError(authErrorMsg(e));
+    }
+  }
+
+  async function handleEmailAuth(e) {
+    e.preventDefault();
+    const email = $('#authEmail').value.trim();
+    const password = $('#authPassword').value;
+    const name = $('#authName').value.trim();
+    if (!email || !password) return showAuthError('E-posta ve şifre zorunlu.');
+    if (authMode === 'signup' && !name) return showAuthError('Ad Soyad zorunlu.');
+    const btn = $('#authSubmit');
+    btn.disabled = true;
+    try {
+      if (authMode === 'signup') {
+        state.pendingName = name;
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName: name });
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+    } catch (err) {
+      state.pendingName = '';
+      showAuthError(authErrorMsg(err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function resetPassword() {
+    const email = $('#authEmail').value.trim();
+    if (!email) return showAuthError('Önce e-posta adresini yaz.');
+    try {
+      await auth.sendPasswordResetEmail(email);
+      showAuthError('');
+      toast('Şifre sıfırlama bağlantısı e-postana gönderildi.', 'success');
+    } catch (err) {
+      showAuthError(authErrorMsg(err));
+    }
+  }
+
+  function signOut() {
+    closeModal();
+    toggleProfile(false);
+    auth.signOut();
+  }
+
+  function bindAuthEvents() {
+    $('#googleSignIn').addEventListener('click', signInGoogle);
+    $('#emailAuthForm').addEventListener('submit', handleEmailAuth);
+    $('#authReset').addEventListener('click', resetPassword);
+    $$('[data-auth-mode]').forEach((b) => b.addEventListener('click', () => setAuthMode(b.dataset.authMode)));
+  }
+
   function init() {
     renderMenus();
-    renderProfile();
     bindEvents();
-    router();
-    updateBadges();
+    bindAuthEvents();
     setInterval(tick, 1000);
+    auth.getRedirectResult().catch((e) => showAuthError(authErrorMsg(e)));
+    auth.onAuthStateChanged(handleAuthState);
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -1,0 +1,179 @@
+rules_version = '2';
+
+// Family Bookshop — Firestore güvenlik kuralları
+// • Okuma: yalnızca giriş yapmış kullanıcılar.
+// • Yönetim (kitap/tür/teklif/duyuru/fiyat logu, bakiye ve rol): yalnızca Kontrolcü.
+// • Kiralama: kullanıcı yalnızca kendi adına; bakiyesi tam ödediği tutar kadar düşer,
+//   kitap boşta olmalı (books/{id}.lockUntil). Bakiye artırmak yalnızca Kontrolcüye açık.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Yardımcılar ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function path(c, id) { return /databases/$(database)/documents/$(c)/$(id); }
+
+    // Ana Kontrolcü (index.html → OWNER_EMAIL ile aynı olmalı)
+    function isOwner() {
+      return signedIn()
+        && request.auth.token.email == 'tolga.kagan2017@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    // Profil belgesi yoksa get() hata verir → kural reddeder
+    function me() { return get(path('users', uid())).data; }
+    function isAdmin() { return isOwner() || (signedIn() && me().role == 'admin'); }
+    function canRent() { return signedIn() && me().role in ['admin', 'member']; }
+    function changedKeys() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function near(a, b) { return math.abs(a - b) < 0.005; }
+
+    // ---------- Kullanıcılar ----------
+    match /users/{userId} {
+      allow read: if signedIn();
+
+      // İlk girişte kendi profilini oluşturur: bakiye 0, rol 'member' (ana Kontrolcü 'admin')
+      allow create: if signedIn() && userId == uid()
+        && request.resource.data.keys().hasOnly(['name', 'email', 'photoURL', 'role', 'balance', 'color', 'joinedAt', 'lastTx', 'lastTxType'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.email == request.auth.token.email.lower()
+        && request.resource.data.balance == 0
+        && request.resource.data.lastTx == null
+        && request.resource.data.get('lastTxType', null) == null
+        && (request.resource.data.role == 'member' || (isOwner() && request.resource.data.role == 'admin'));
+
+      // Kontrolcü her şeyi; kullanıcı yalnızca kiralama ödemesi (bakiye düşüşü + lastTx)
+      allow update: if isAdmin() || (userId == uid() && isPayment());
+      allow delete: if isAdmin();
+
+      // lastTxType hangi koleksiyona bakılacağını söyler (gereksiz erişim çağrısı yapılmaz)
+      function isPayment() {
+        let before = resource.data;
+        let after = request.resource.data;
+        let tx = after.lastTx;
+        return changedKeys().hasOnly(['balance', 'lastTx', 'lastTxType'])
+          && tx is string && tx != before.get('lastTx', null)
+          && after.balance is number && after.balance >= 0 && after.balance < before.balance
+          && ((after.lastTxType == 'rental' && paidRental(tx, before.balance, after.balance))
+            || (after.lastTxType == 'package' && paidPackage(tx, before.balance, after.balance)));
+      }
+      // Tekli kiralama: yeni kiralama kaydının fiyatı kadar düşer
+      function paidRental(tx, oldBal, newBal) {
+        let r = getAfter(path('rentals', tx)).data;
+        return !exists(path('rentals', tx))
+          && r.userId == uid() && r.purchaseId == null
+          && near(newBal, oldBal - r.price);
+      }
+      // Paket kiralama: yeni satın alım kaydının fiyatı kadar düşer
+      function paidPackage(tx, oldBal, newBal) {
+        let p = getAfter(path('offerPurchases', tx)).data;
+        return !exists(path('offerPurchases', tx))
+          && p.userId == uid()
+          && near(newBal, oldBal - p.price);
+      }
+    }
+
+    // ---------- Kitaplar ----------
+    match /books/{bookId} {
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+      // Kontrolcü her şeyi; kullanıcı yalnızca boştaki kitabı kendi yeni kiralamasıyla kilitler
+      allow update: if isAdmin() || isLock();
+
+      function isLock() {
+        let after = request.resource.data;
+        return canRent()
+          && changedKeys().hasOnly(['lockUntil', 'lockBy', 'lockRental'])
+          && (resource.data.get('lockUntil', null) == null || resource.data.lockUntil < request.time)
+          && after.lockBy == uid()
+          && after.lockUntil is timestamp
+          && after.lockUntil <= request.time + duration.value(resource.data.rentalDays + 1, 'd')
+          && after.lockRental is string
+          // kilit yalnızca bu batch'te oluşturulan yeni bir kiralamaya bağlanabilir
+          && !exists(path('rentals', after.lockRental))
+          && getAfter(path('rentals', after.lockRental)).data.bookId == resource.data.id;
+      }
+    }
+
+    // ---------- Kiralamalar ----------
+    match /rentals/{rentalId} {
+      allow read: if signedIn();
+      allow create: if canRent() && validRental();
+      allow update, delete: if isAdmin();
+
+      function validRental() {
+        let r = request.resource.data;
+        let bookPath = path('books', string(r.bookId));
+        return r.userId == uid()
+          && r.bookId is int
+          && r.listPrice == get(bookPath).data.price
+          && r.price is number && r.price >= 0 && r.price <= r.listPrice + 0.001
+          && r.returnedAt == null
+          // aynı batch'te kitap bu kiralamayla kilitlenmiş olmalı (kitap boştaydı)
+          && getAfter(bookPath).data.lockRental == rentalId
+          && getAfter(bookPath).data.lockBy == uid()
+          && (singleRental(r) || packageRental(r));
+      }
+      // Tekli: indirim en fazla %50 (Günün İndirimi üst sınırı); ödeme kullanıcı belgesinde
+      function singleRental(r) {
+        return r.purchaseId == null && r.offerId == null
+          && r.discountSource in [null, 'deal', 'new']
+          && r.discount is int && r.discount >= 0 && r.discount <= 50
+          && r.price >= r.listPrice * 0.5 - 0.01
+          && getAfter(path('users', uid())).data.lastTx == rentalId;
+      }
+      // Paket: aynı batch'teki satın alıma ait olmalı
+      function packageRental(r) {
+        let p = getAfter(path('offerPurchases', r.purchaseId)).data;
+        return r.purchaseId is string && r.discountSource == 'offer'
+          && p.userId == uid() && p.offerId == r.offerId
+          && r.bookId in p.bookIds;
+      }
+    }
+
+    // ---------- Özel teklif satın alımları ----------
+    match /offerPurchases/{purchaseId} {
+      allow read: if signedIn();
+      allow create: if canRent() && validPurchase();
+      allow update, delete: if isAdmin();
+
+      function validPurchase() {
+        let p = request.resource.data;
+        let offer = get(path('offers', p.offerId)).data;
+        return p.userId == uid()
+          && p.price == offer.price
+          && p.bookIds == offer.bookIds
+          && request.time <= offer.endsAt
+          && getAfter(path('users', uid())).data.lastTx == purchaseId;
+      }
+    }
+
+    // ---------- Duyurular ----------
+    match /announcements/{annId} {
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+      // Kontrolcü düzenler; herkes yalnızca kendi uid'ini "okundu" listesine ekleyebilir
+      allow update: if isAdmin() || (signedIn()
+        && changedKeys().hasOnly(['readBy'])
+        && request.resource.data.readBy.toSet().hasAll(resource.data.readBy)
+        && request.resource.data.readBy.toSet().difference(resource.data.readBy.toSet()) == [uid()].toSet());
+    }
+
+    // ---------- Yalnızca Kontrolcünün yazdığı koleksiyonlar ----------
+    match /bookTypes/{typeId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /priceLogs/{logId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /offers/{offerId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Diğer her şey kapalı
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
