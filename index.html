@@ -72,6 +72,28 @@
     .showcase-host:hover .sc-0 { transform: translateX(-86%) rotateY(18deg) scale(.9); }
     .showcase-host:hover .sc-1 { transform: translateZ(50px) translateY(-6px) scale(1.04); }
     .showcase-host:hover .sc-2 { transform: translateX(86%) rotateY(-18deg) scale(.9); }
+    /* Yeni Kitap vitrini — altın, sürekli akan parıltı + yanıp sönen yıldızlar */
+    .new-glow { position: relative; overflow: hidden; }
+    .new-glow::before {
+      content: ''; position: absolute; inset: -2px; border-radius: inherit; z-index: 0;
+      background: linear-gradient(120deg, #fde68a, #f59e0b, #fbbf24, #fef3c7, #f59e0b);
+      background-size: 300% 300%; animation: goldFlow 5s ease infinite;
+    }
+    .new-glow > * { position: relative; z-index: 1; }
+    .new-glow::after {
+      content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+      background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.7) 50%, transparent 65%);
+      transform: translateX(-130%); animation: goldSweep 3.2s ease-in-out infinite;
+    }
+    @keyframes goldFlow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    @keyframes goldSweep { 0%, 55% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+    .twinkle { animation: twinkle 1.8s ease-in-out infinite; }
+    .twinkle-d1 { animation-delay: .6s; }
+    .twinkle-d2 { animation-delay: 1.2s; }
+    @keyframes twinkle { 0%, 100% { opacity: .25; transform: scale(.7) rotate(0deg); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .new-glow::before, .new-glow::after, .twinkle { animation: none; }
+    }
   </style>
 </head>
 
@@ -172,6 +194,9 @@
       <!-- 1) İstatistik kartları -->
       <div id="dashStats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6"></div>
 
+      <!-- 1.5) Yeni Kitap vitrini (1 haftalık yeni kitap indirimi) -->
+      <div id="newBooksSection"></div>
+
       <!-- 2) Günün İndirimleri -->
       <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -267,29 +292,25 @@
   const NOW_MS = Date.now();
   const isoAt = (ms) => new Date(ms).toISOString();
 
-  /* role: 'admin' (Kontrolcü) | 'member' (Kullanıcı) | 'observer' (Gözlemci) */
+  /* role: 'admin' (Kontrolcü) | 'member' (Kullanıcı) | 'observer' (Gözlemci)
+     email: Firebase Auth kurulunca gerçek hesaplara bağlanacak (şimdilik boş) */
   const users = [
-    { id: 'u1', name: 'Kağan Durak',  role: 'admin',  balance: 500, email: 'kagan.durak@example.com', color: 'from-brand-500 to-brand-700',  joinedAt: '2026-01-05' },
-    { id: 'u2', name: 'Ayşe Durak',   role: 'member', balance: 320, email: 'ayse.durak@example.com',  color: 'from-sky-400 to-cyan-500',      joinedAt: '2026-01-05' },
-    { id: 'u3', name: 'Emre Durak',   role: 'member', balance: 180, email: null,                       color: 'from-indigo-400 to-violet-500', joinedAt: '2026-02-12' },
-    { id: 'u4', name: 'Zeynep Durak', role: 'member', balance: 95,  email: null,                       color: 'from-teal-400 to-emerald-500',  joinedAt: '2026-03-20' }
+    { id: 'u1', name: 'Kağan Durak',  role: 'admin',  balance: 500, email: null, color: 'from-brand-500 to-brand-700',  joinedAt: '2026-01-05' },
+    { id: 'u2', name: 'Ayşe Durak',   role: 'member', balance: 320, email: null, color: 'from-sky-400 to-cyan-500',      joinedAt: '2026-01-05' },
+    { id: 'u3', name: 'Emre Durak',   role: 'member', balance: 180, email: null, color: 'from-indigo-400 to-violet-500', joinedAt: '2026-02-12' },
+    { id: 'u4', name: 'Zeynep Durak', role: 'member', balance: 95,  email: null, color: 'from-teal-400 to-emerald-500',  joinedAt: '2026-03-20' }
   ];
 
-  /* Simüle e-posta havuzu (Firebase Auth hesaplarının yerine geçer) */
-  const emailPool = [
-    'kagan.durak@example.com',
-    'ayse.durak@example.com',
-    'emre.durak@example.com',
-    'zeynep.durak@example.com',
-    'aile.ortak@example.com'
-  ];
+  /* Simüle e-posta havuzu (Firebase Auth hesaplarının yerine geçer · şimdilik boş) */
+  const emailPool = [];
 
   /* Kitap türleri (Kontrolcü "Kategorileri Yönet" panelinden ekler / düzenler / siler)
-     palette: TYPE_PALETTES anahtarı · inDeals: false → bu türdeki kitaplar günlük indirim döngüsüne girmez */
+     palette: TYPE_PALETTES anahtarı · inDeals: false → bu türdeki kitaplar günlük indirim döngüsüne girmez
+     Günün İndirimleri yalnızca Seri kitaplar üzerinden döner. */
   const bookTypes = [
     { id: 'seri',  label: 'Seri',  palette: 'blue',   inDeals: true },
     { id: 'ozel',  label: 'Özel',  palette: 'rose',   inDeals: false },
-    { id: 'album', label: 'Albüm', palette: 'violet', inDeals: true }
+    { id: 'album', label: 'Albüm', palette: 'violet', inDeals: false }
   ];
 
   /* Kitaplar (yazarı Kontrolcü Kağan Durak)
@@ -405,6 +426,9 @@
     mobileMenuOpen: false,
     modalOpen: false,
     lastDealDay: null,
+    lastNewKey: '',        // ana sayfadaki Yeni Kitap vitrininde gösterilen kitaplar
+    statsUserId: null,     // açık istatistik modalındaki kullanıcı
+    statsPage: { rentals: 1, purchases: 1 },
     confirmAction: null,
     panelTab: 'balance',   // profil panelindeki Kontrolcü sekmesi: 'balance' | 'roles'
     bookTab: 'all',
@@ -716,7 +740,7 @@
      4) GÜNÜN İNDİRİMLERİ — SIRALI DÖNGÜ MOTORU
      ----------------------------------------------------------
      • Bir "indirim günü" saat 10:00'da başlar, ertesi gün 09:59'da biter.
-     • Her döngünün başında, o an mevcut olan "Özel" olmayan kitapların ID
+     • Her döngünün başında, o an mevcut olan Seri kitapların (inDeals türler) ID
        sıralı anlık görüntüsü (snapshot) alınır. Döngü süresince eklenen
        kitaplar bu listeye girmez → sıra bozulmaz, sonraki döngüye kalır.
      • Gün N'de snapshot'tan [N*3, N*3+3) aralığı gösterilir; son gün
@@ -806,6 +830,9 @@
     }
     return { rate, source };
   }
+  /* 1 haftalık yeni kitap indirimi süren kitap */
+  const isNewBook = (book, now = new Date()) => !!book.newDiscountUntil && new Date(book.newDiscountUntil) > now;
+  const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now)).map((b) => b.id).join(',');
   const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
@@ -1080,6 +1107,7 @@
     const u = currentUser();
     $('#page-dashboard [data-page-desc]').textContent = `Merhaba ${u.name.split(' ')[0]} 👋 Kitaplığın genel görünümü ve günün fırsatları.`;
     renderStats(now);
+    renderNewBooks(now);
     renderDeals(now);
     renderActiveRentals(now);
     renderExpiredRentals(now);
@@ -1114,6 +1142,72 @@
         </div>
         <span class="w-9 h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
       </div>`).join('');
+  }
+
+  /* --- 8.1.5 Yeni Kitap vitrini (altın parıltılı, günün indirimlerinden ayrı) --- */
+  function renderNewBooks(now) {
+    const list = books
+      .filter((b) => isNewBook(b, now))
+      .sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
+    const box = $('#newBooksSection');
+    state.lastNewKey = newBooksKey(now);
+    if (!list.length) { box.innerHTML = ''; return; }
+
+    const cards = list.map((b) => {
+      const eff = getEffectiveDiscount(b, now);
+      const newPrice = round2(b.price * (1 - eff.rate / 100));
+      const rented = isBookRented(b, now.getTime());
+      return `
+        <button type="button" data-open-book="${b.id}"
+          class="group relative text-left bg-white/90 backdrop-blur rounded-2xl border border-amber-200 p-4 shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 hover:border-amber-300 transition duration-200 focus:outline-none focus:ring-2 focus:ring-amber-300">
+          <span class="absolute -top-2 -right-2 text-[10px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-2.5 py-1 rounded-full shadow-soft">★ YENİ KİTAP</span>
+          <div class="flex gap-3">
+            <div class="relative shrink-0">
+              ${coverHTML(b, 'md')}
+              <span class="twinkle absolute -top-1.5 -left-1.5 text-amber-400 text-sm">✦</span>
+              <span class="twinkle twinkle-d1 absolute -bottom-1 -right-1.5 text-yellow-400 text-xs">✦</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-600">#${b.id} · ${escapeHTML(typeLabel(b.type))}</p>
+              <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
+              <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
+              <span class="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${rented ? 'text-amber-700 bg-amber-100' : 'text-emerald-600 bg-emerald-50'}">${rented ? 'Kiralı' : 'Müsait'}</span>
+            </div>
+          </div>
+          <div class="flex items-end justify-between mt-3 pt-3 border-t border-dashed border-amber-200">
+            <div>
+              <div class="flex items-baseline gap-1">
+                <span class="text-4xl font-black leading-none tracking-tight bg-gradient-to-br from-amber-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent">%${eff.rate}</span>
+                <span class="text-[10px] font-extrabold text-amber-500 tracking-wider">İNDİRİM</span>
+              </div>
+              <p class="text-[10px] font-semibold text-amber-700 mt-1">⏳ ${formatRemaining(new Date(b.newDiscountUntil) - now)}</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[11px] text-slate-400 line-through">${formatMoney(b.price)}</p>
+              <p class="text-sm font-bold text-emerald-600">${formatMoney(newPrice)}</p>
+            </div>
+          </div>
+        </button>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="new-glow rounded-3xl p-[2px] shadow-soft-lg mb-6">
+        <div class="rounded-[22px] bg-gradient-to-br from-amber-50 via-white to-yellow-50 p-4 sm:p-5">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-white flex items-center justify-center shadow-soft text-lg">★</span>
+              <div>
+                <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">Yeni Kitap <span class="twinkle text-amber-400">✨</span></h2>
+                <p class="text-[11px] text-slate-500">Yeni eklenen kitaplar ${NEW_BOOK_DISCOUNT.days} gün boyunca %${NEW_BOOK_DISCOUNT.rate} indirimli</p>
+              </div>
+            </div>
+            <span class="hidden sm:flex items-center gap-1 text-amber-400">
+              <span class="twinkle">✦</span><span class="twinkle twinkle-d1 text-lg">✦</span><span class="twinkle twinkle-d2">✦</span>
+            </span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>
+        </div>
+      </div>`;
   }
 
   /* --- 8.2 Günün indirimleri --- */
@@ -1316,16 +1410,29 @@
       return;
     }
 
+    const nowDate = new Date(now);
     const rows = list.map((b) => {
       const rented = isBookRented(b, now);
+      const fresh = isNewBook(b, nowDate);
       return `
         <li>
           <button type="button" data-open-book="${b.id}"
-            class="w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 hover:bg-brand-50/40 focus:bg-brand-50/60 focus:outline-none transition">
-            ${coverHTML(b, 'sm')}
+            class="w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${fresh
+              ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
+              : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
+            <div class="relative shrink-0">
+              ${coverHTML(b, 'sm')}
+              ${fresh ? `
+                <span class="twinkle absolute -top-1.5 -left-1.5 text-amber-400 text-xs">✦</span>
+                <span class="twinkle twinkle-d1 absolute -bottom-1 -right-1.5 text-yellow-400 text-[10px]">✦</span>` : ''}
+            </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</p>
-              <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">${icon('pencil', 'w-3 h-3')}${writtenAgo(b.writtenAt)}</p>
+              <p class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
+                ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
+              </p>
+              <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${icon('pencil', 'w-3 h-3')}${writtenAgo(b.writtenAt)}${fresh
+                ? `<span class="text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(new Date(b.newDiscountUntil) - nowDate)}</span>` : ''}</p>
             </div>
             <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full ${rented ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">
               <span class="w-1.5 h-1.5 rounded-full ${rented ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
@@ -1609,6 +1716,25 @@
     if (state.route === 'price-logs') renderPriceLogs();
   }
 
+  /* Fiyat Logu sayfasından kayıt silme (onaylı) */
+  function deletePriceLogFromPage(logId) {
+    if (!requireAdmin()) return;
+    const l = priceLogs.find((x) => x.id === logId);
+    if (!l) return;
+    const b = getBook(l.bookId);
+    openConfirm({
+      title: 'Fiyat kaydı silinsin mi?',
+      message: `${b ? `"${escapeHTML(b.title)}" · ` : ''}${formatMoney(l.oldPrice)} → ${formatMoney(l.newPrice)} değişimi logdan kaldırılacak. Kitabın güncel fiyatı değişmez.`,
+      onConfirm: () => {
+        const i = priceLogs.indexOf(l);
+        if (i > -1) priceLogs.splice(i, 1);
+        closeModal();
+        renderCurrentPage();
+        toast('Fiyat geçmişi kaydı silindi.', 'info');
+      }
+    });
+  }
+
   /* ==========================================================
      10) KULLANICILAR — LİDERLİK TABLOSU
      ========================================================== */
@@ -1751,6 +1877,104 @@
       </div>`;
   }
 
+  /* İstatistik modalı listeleri: sayfa başına kayıt + sayfalama */
+  const STATS_PAGE_SIZE = 5;
+
+  function pageSlice(list, kind) {
+    const pages = Math.max(1, Math.ceil(list.length / STATS_PAGE_SIZE));
+    const page = Math.min(Math.max(1, state.statsPage[kind] || 1), pages);
+    state.statsPage[kind] = page;
+    return { items: list.slice((page - 1) * STATS_PAGE_SIZE, page * STATS_PAGE_SIZE), page, pages };
+  }
+
+  function pagerHTML(kind, page, pages, total) {
+    if (pages <= 1) return '';
+    const btn = (p, label, disabled, active = false) => `
+      <button type="button" data-stats-page="${kind}" data-page="${p}" ${disabled ? 'disabled' : ''}
+        class="min-w-[2rem] h-8 px-2 rounded-lg text-[11px] font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${active
+          ? 'bg-gradient-to-r from-brand-500 to-brand-700 text-white shadow-soft'
+          : 'bg-white border border-brand-100 text-slate-600 hover:border-brand-300'}">${label}</button>`;
+    const nums = Array.from({ length: pages }, (_, i) => i + 1)
+      .filter((p) => p === 1 || p === pages || Math.abs(p - page) <= 1);
+    const parts = [];
+    nums.forEach((p, i) => {
+      if (i && p - nums[i - 1] > 1) parts.push('<span class="text-[11px] text-slate-300 px-0.5">…</span>');
+      parts.push(btn(p, p, false, p === page));
+    });
+    return `
+      <div class="flex items-center justify-between gap-2 mt-3">
+        <span class="text-[10px] text-slate-400">${(page - 1) * STATS_PAGE_SIZE + 1}–${Math.min(page * STATS_PAGE_SIZE, total)} / ${total}</span>
+        <div class="flex items-center gap-1">
+          ${btn(page - 1, '‹', page === 1)}${parts.join('')}${btn(page + 1, '›', page === pages)}
+        </div>
+      </div>`;
+  }
+
+  function statsRentalsHTML(userId) {
+    const nowMs = Date.now();
+    const list = rentals.filter((r) => r.userId === userId)
+      .sort((a, b) => new Date(b.rentedAt) - new Date(a.rentedAt));
+    if (!list.length) return '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz kiralama yok.</p>';
+    const { items, page, pages } = pageSlice(list, 'rentals');
+    const rows = items.map((r) => {
+      const b = getBook(r.bookId);
+      const active = isActiveRental(r, nowMs);
+      const statusChip = active
+        ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-emerald-50 text-emerald-600">Aktif</span>'
+        : '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-slate-100 text-slate-500">Süresi Doldu</span>';
+      const discChip = r.offerId
+        ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-violet-50 text-violet-600">🎁 Paket</span>'
+        : r.discount ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>` : '';
+      return `
+        <li class="flex items-center gap-3 p-2.5 rounded-xl ${active ? 'bg-emerald-50/30 border border-emerald-100' : 'bg-slate-50/80'}">
+          ${coverHTML(b, 'xs')}
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
+            <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">${statusChip}${discChip}</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">Kiraladı: ${formatDate(r.rentedAt, true)} · Bitiş: ${formatDate(r.dueAt, true)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            ${r.offerId ? rentalPriceHTML(r) : `
+              ${r.discount ? `<p class="text-[10px] text-slate-400 line-through">${formatMoney(r.listPrice ?? r.price)}</p>` : ''}
+              <p class="text-xs font-bold text-slate-800">${formatMoney(r.price)}</p>`}
+          </div>
+        </li>`;
+    }).join('');
+    return `<ul class="space-y-2">${rows}</ul>${pagerHTML('rentals', page, pages, list.length)}`;
+  }
+
+  function statsPurchasesHTML(userId) {
+    const list = offerPurchases.filter((p) => p.userId === userId)
+      .sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
+    if (!list.length) return '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz özel teklif satın alınmadı.</p>';
+    const { items, page, pages } = pageSlice(list, 'purchases');
+    const rows = items.map((p) => {
+      const pBooks = p.bookIds.map(getBook).filter(Boolean);
+      return `
+        <li class="flex items-center gap-3 p-3 rounded-xl bg-violet-50/40 border border-violet-100">
+          <div class="flex -space-x-4 shrink-0">${pBooks.map((b) => `<div class="ring-2 ring-white rounded-md">${coverHTML(b, 'xs')}</div>`).join('')}</div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-800 truncate">${escapeHTML(p.offerTitle)}</p>
+            <p class="text-[10px] text-slate-400 truncate">${pBooks.map((b) => escapeHTML(b.title)).join(' · ')}</p>
+            <p class="text-[10px] text-slate-400">Satın aldı: ${formatDate(p.purchasedAt, true)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-[10px] text-slate-400 line-through">${formatMoney(p.normalTotal)}</p>
+            <p class="text-xs font-bold text-violet-600">${formatMoney(p.price)}</p>
+            <p class="text-[10px] font-semibold text-emerald-600">+${formatMoney(Math.max(0, p.normalTotal - p.price))}</p>
+          </div>
+        </li>`;
+    }).join('');
+    return `<ul class="space-y-2">${rows}</ul>${pagerHTML('purchases', page, pages, list.length)}`;
+  }
+
+  function goStatsPage(kind, page) {
+    if (!state.statsUserId || !(kind in state.statsPage)) return;
+    state.statsPage[kind] = Number(page) || 1;
+    const box = kind === 'rentals' ? $('#statsRentals') : $('#statsPurchases');
+    if (box) box.innerHTML = kind === 'rentals' ? statsRentalsHTML(state.statsUserId) : statsPurchasesHTML(state.statsUserId);
+  }
+
   /* Detaylı Aile Üyesi İstatistikleri modalı */
   function openUserStatsModal(userId) {
     const u = getUser(userId);
@@ -1773,47 +1997,8 @@
         <p class="text-sm sm:text-base font-bold ${t.tone} truncate">${t.value}</p>
       </div>`).join('');
 
-    const purchasesHTML = s.purchases.length
-      ? s.purchases.map((p) => {
-          const pBooks = p.bookIds.map(getBook).filter(Boolean);
-          return `
-            <li class="flex items-center gap-3 p-3 rounded-xl bg-violet-50/40 border border-violet-100">
-              <div class="flex -space-x-4 shrink-0">${pBooks.map((b) => `<div class="ring-2 ring-white rounded-md">${coverHTML(b, 'xs')}</div>`).join('')}</div>
-              <div class="flex-1 min-w-0">
-                <p class="text-xs font-semibold text-slate-800 truncate">${escapeHTML(p.offerTitle)}</p>
-                <p class="text-[10px] text-slate-400 truncate">${pBooks.map((b) => escapeHTML(b.title)).join(' · ')}</p>
-                <p class="text-[10px] text-slate-400">${formatDate(p.purchasedAt)}</p>
-              </div>
-              <div class="text-right shrink-0">
-                <p class="text-[10px] text-slate-400 line-through">${formatMoney(p.normalTotal)}</p>
-                <p class="text-xs font-bold text-violet-600">${formatMoney(p.price)}</p>
-                <p class="text-[10px] font-semibold text-emerald-600">+${formatMoney(Math.max(0, p.normalTotal - p.price))}</p>
-              </div>
-            </li>`;
-        }).join('')
-      : '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz özel teklif kiralanmadı.</li>';
-
-    const discountedHTML = s.discounted.length
-      ? s.discounted.map((r) => {
-          const b = getBook(r.bookId);
-          return `
-            <li class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50/80">
-              ${coverHTML(b, 'xs')}
-              <div class="flex-1 min-w-0">
-                <p class="text-xs font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
-                <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  <span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-sky-50 text-sky-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>
-                  <span class="text-[10px] text-slate-400">${formatDate(r.rentedAt)}</span>
-                </p>
-              </div>
-              <div class="text-right shrink-0">
-                <p class="text-[10px] text-slate-400 line-through">${formatMoney(r.listPrice ?? r.price)}</p>
-                <p class="text-xs font-bold text-slate-800">${formatMoney(r.price)}</p>
-                <p class="text-[10px] font-semibold text-emerald-600">+${formatMoney(s.saveOf(r))}</p>
-              </div>
-            </li>`;
-        }).join('')
-      : '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz indirimli kitap kiralanmadı.</li>';
+    state.statsUserId = userId;
+    state.statsPage = { rentals: 1, purchases: 1 };
 
     openModal(`
       <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
@@ -1848,18 +2033,18 @@
 
         <div>
           <div class="flex items-center justify-between mb-2.5">
-            <h4 class="text-xs font-bold text-slate-700">🎁 Satın Aldığı Özel Teklifler</h4>
-            <span class="text-[10px] text-slate-400">${s.purchases.length} paket</span>
+            <h4 class="text-xs font-bold text-slate-700">📚 Geçmiş Kiralamalar</h4>
+            <span class="text-[10px] text-slate-400">Aktif + süresi dolan · ${rentals.filter((r) => r.userId === userId).length} kayıt</span>
           </div>
-          <ul class="space-y-2">${purchasesHTML}</ul>
+          <div id="statsRentals">${statsRentalsHTML(userId)}</div>
         </div>
 
         <div>
           <div class="flex items-center justify-between mb-2.5">
-            <h4 class="text-xs font-bold text-slate-700">🏷️ İndirimli Aldığı Kitaplar</h4>
-            <span class="text-[10px] text-slate-400">${s.discounted.length} kitap</span>
+            <h4 class="text-xs font-bold text-slate-700">🎁 Geçmiş Satın Alımlar</h4>
+            <span class="text-[10px] text-slate-400">Özel teklifler · ${s.purchases.length} paket</span>
           </div>
-          <ul class="space-y-2">${discountedHTML}</ul>
+          <div id="statsPurchases">${statsPurchasesHTML(userId)}</div>
         </div>
 
         <div class="flex justify-end">
@@ -1876,6 +2061,7 @@
       ? `<button type="button" data-quick="changePrice" class="${BTN_PRIMARY}">${icon('pencil', 'w-3.5 h-3.5')}Fiyat Güncelle</button>`
       : '');
 
+    const admin = isAdmin();
     const logs = [...priceLogs].sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt));
     const ups = logs.filter((l) => l.newPrice > l.oldPrice).length;
     const downs = logs.length - ups;
@@ -1921,8 +2107,8 @@
           <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
           <span class="font-semibold text-slate-800">${formatMoney(l.newPrice)}</span>`;
         return `
-          <li>
-            <button type="button" ${b ? `data-open-book="${b.id}"` : 'disabled'} class="w-full text-left flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-slate-50/70 transition">
+          <li class="flex items-stretch">
+            <button type="button" ${b ? `data-open-book="${b.id}"` : 'disabled'} class="flex-1 min-w-0 text-left flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-slate-50/70 transition">
               ${coverHTML(b, 'sm')}
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-slate-800 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
@@ -1935,6 +2121,8 @@
                 <span class="text-[11px] font-medium text-slate-400 tabular-nums sm:w-10">${formatTime(l.changedAt)}</span>
               </div>
             </button>
+            ${admin ? `<button type="button" data-delete-page-log="${l.id}" title="Bu kaydı sil" aria-label="Bu kaydı sil"
+              class="shrink-0 w-10 sm:w-12 flex items-center justify-center border-l border-slate-100 text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition">${icon('trash', 'w-4 h-4')}</button>` : ''}
           </li>`;
       }).join('');
 
@@ -2764,7 +2952,7 @@
             <select name="palette" aria-label="Renk" class="${INPUT_CLS} !py-1.5 !w-24 shrink-0">${paletteOptions('emerald')}</select>
           </div>
           <label class="flex items-center gap-2 text-[11px] text-slate-500">
-            <input type="checkbox" name="inDeals" checked class="rounded border-slate-300 text-brand-600" />
+            <input type="checkbox" name="inDeals" class="rounded border-slate-300 text-brand-600" />
             Günün indirimi döngüsüne girsin
           </label>
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Türü Ekle</button>
@@ -3304,6 +3492,8 @@
     if (state.route === 'dashboard') {
       // 10:00 geçildiyse yeni indirim grubuna geç
       if (discountDayNumber(now) !== state.lastDealDay) return renderDashboard();
+      // Yeni kitap indirimi biten kitap vitrinden düşsün
+      if (newBooksKey(now) !== state.lastNewKey) return renderDashboard();
       updateCountdown(now);
     }
 
@@ -3345,6 +3535,8 @@
       let m;
       if ((m = el('[data-modal-close]')))      return closeModal();
       if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
+      if ((m = el('[data-stats-page]')))       return goStatsPage(m.dataset.statsPage, m.dataset.page);
+      if ((m = el('[data-delete-page-log]')))  return deletePriceLogFromPage(m.dataset.deletePageLog);
       if ((m = el('[data-delete-log]')))       return deletePriceLog(m.dataset.deleteLog, m.dataset.bookId, m.dataset.backOffer);
       if ((m = el('[data-remove-cover]')))     return removeDraftCover(m.dataset.removeCover);
       if ((m = el('[data-rent-book]')))        return m.disabled ? null : rentBook(m.dataset.rentBook);
