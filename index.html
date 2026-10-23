@@ -1,0 +1,3062 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Family Bookshop</title>
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand: {
+              50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+              400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8'
+            }
+          },
+          boxShadow: {
+            soft: '0 2px 12px -2px rgba(30, 64, 175, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04)',
+            'soft-lg': '0 12px 40px -8px rgba(30, 64, 175, 0.18), 0 2px 6px rgba(15, 23, 42, 0.05)'
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body { -webkit-tap-highlight-color: transparent; }
+    /* Sayfa geçiş animasyonu */
+    .page-enter { animation: pageIn .28s ease-out; }
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    /* Kaydırma çubuğu */
+    .soft-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .soft-scroll::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 999px; }
+    /* Sayı inputlarındaki okları gizle */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+    /* İndirim kartındaki hafif parıltı */
+    .deal-shine { position: relative; overflow: hidden; }
+    .deal-shine::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.55) 50%, transparent 60%);
+      transform: translateX(-120%); transition: transform .8s ease;
+    }
+    .deal-shine:hover::after { transform: translateX(120%); }
+    /* Bildirim rozeti giriş animasyonu */
+    .badge-pop { animation: badgePop .35s cubic-bezier(.34,1.56,.64,1); }
+    @keyframes badgePop {
+      from { transform: scale(.4); opacity: 0; }
+      to   { transform: scale(1);  opacity: 1; }
+    }
+    /* Özel Teklif vitrini — 3 kapak, 3D derinlik */
+    .showcase { perspective: 900px; }
+    .sc-stage { transform-style: preserve-3d; }
+    .sc { position: absolute; inset: 0; transition: transform .55s cubic-bezier(.2,.8,.2,1), box-shadow .55s; will-change: transform; }
+    .sc-0 { transform: translateX(-62%) rotateY(28deg) scale(.86); z-index: 1; }
+    .sc-1 { transform: translateZ(30px); z-index: 3; }
+    .sc-2 { transform: translateX(62%) rotateY(-28deg) scale(.86); z-index: 2; }
+    .showcase-host:hover .sc-0 { transform: translateX(-86%) rotateY(18deg) scale(.9); }
+    .showcase-host:hover .sc-1 { transform: translateZ(50px) translateY(-6px) scale(1.04); }
+    .showcase-host:hover .sc-2 { transform: translateX(86%) rotateY(-18deg) scale(.9); }
+  </style>
+</head>
+
+<body class="bg-gradient-to-b from-brand-50 via-white to-brand-50/60 min-h-screen font-sans text-slate-700 text-sm antialiased">
+
+  <!-- ===================== NAVBAR ===================== -->
+  <header class="fixed top-0 inset-x-0 z-40 bg-white/80 backdrop-blur-md border-b border-brand-100/70 shadow-soft">
+    <nav class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+
+      <!-- Sol: Logo -->
+      <a href="#dashboard" class="flex items-center gap-2.5 shrink-0">
+        <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white shadow-soft">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+        </span>
+        <span class="leading-tight">
+          <span class="block font-bold text-slate-800 text-sm">Family Bookshop</span>
+          <span class="block text-[10px] text-brand-500 font-medium tracking-wide">Aile Kitaplığı</span>
+        </span>
+      </a>
+
+      <!-- Orta: Menü (masaüstü) -->
+      <ul id="desktopMenu" class="hidden lg:flex items-center gap-1 bg-brand-50/70 p-1 rounded-full"></ul>
+
+      <!-- Sağ: Profil + Mobil menü butonu -->
+      <div class="flex items-center gap-2">
+        <div class="relative" id="profileWrapper">
+          <button id="profileBtn" type="button" aria-haspopup="true" aria-expanded="false"
+            class="flex items-center gap-2.5 pl-1 pr-2 sm:pr-3 py-1 rounded-full bg-white border border-brand-100 hover:border-brand-300 hover:shadow-soft transition">
+            <span id="navAvatar" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold"></span>
+            <span class="text-left leading-tight">
+              <span id="navName" class="hidden sm:block text-xs font-semibold text-slate-800"></span>
+              <span id="navBalance" class="block text-[11px] font-semibold text-brand-600"></span>
+            </span>
+            <svg id="profileChevron" class="w-3.5 h-3.5 text-slate-400 transition-transform duration-300" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+          </button>
+
+          <!-- Profil Paneli (Dropdown) -->
+          <div id="profilePanel"
+            class="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-[4.25rem] sm:top-auto sm:mt-2 sm:w-[22rem]
+                   max-h-[calc(100vh-5.5rem)] overflow-y-auto soft-scroll
+                   bg-white rounded-2xl shadow-soft-lg border border-brand-100
+                   origin-top-right transition duration-200 ease-out
+                   opacity-0 scale-95 -translate-y-1 pointer-events-none">
+
+            <!-- Aktif kullanıcı başlığı -->
+            <div class="p-4 bg-gradient-to-br from-brand-500 to-brand-700 text-white">
+              <div class="flex items-center gap-3">
+                <span id="panelAvatar" class="w-11 h-11 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold"></span>
+                <div class="min-w-0">
+                  <p id="panelName" class="font-semibold text-sm truncate"></p>
+                  <p id="panelRole" class="text-[11px] text-brand-100"></p>
+                </div>
+                <div class="ml-auto text-right">
+                  <p class="text-[10px] uppercase tracking-wider text-brand-100">Bakiye</p>
+                  <p id="panelBalance" class="font-bold text-sm"></p>
+                </div>
+              </div>
+              <button id="panelStatsBtn" type="button" data-user-stats=""
+                class="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-[11px] font-semibold transition">
+                📊 İstatistiklerim
+              </button>
+            </div>
+
+            <!-- Kullanıcı değiştirme -->
+            <div class="p-3">
+              <p class="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Kullanıcı Değiştir</p>
+              <ul id="userSwitchList" class="space-y-1"></ul>
+            </div>
+
+            <!-- Kontrolcü paneli: Bakiye + Rol & Yetki -->
+            <div id="adminPanel" class="border-t border-brand-50 p-3 bg-brand-50/40"></div>
+          </div>
+        </div>
+
+        <!-- Mobil menü butonu -->
+        <button id="mobileMenuBtn" type="button" aria-label="Menüyü aç"
+          class="relative lg:hidden w-9 h-9 rounded-xl bg-white border border-brand-100 flex items-center justify-center text-slate-600 hover:text-brand-600 transition">
+          <svg id="iconMenuOpen" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+          <svg id="iconMenuClose" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          <span id="menuDot" class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white transition duration-300 opacity-0 scale-50"></span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Mobil Menü -->
+    <div id="mobileMenu" class="lg:hidden overflow-hidden max-h-0 transition-all duration-300 ease-out">
+      <ul id="mobileMenuList" class="px-4 pb-4 pt-1 grid grid-cols-2 gap-2"></ul>
+    </div>
+  </header>
+
+  <!-- ===================== SAYFALAR ===================== -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-12">
+
+    <!-- ========== ANA SAYFA (DASHBOARD) ========== -->
+    <section id="page-dashboard" data-page class="hidden">
+      <div data-page-header></div>
+
+      <!-- 1) İstatistik kartları -->
+      <div id="dashStats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6"></div>
+
+      <!-- 2) Günün İndirimleri -->
+      <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3">
+            <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-orange-400 text-white flex items-center justify-center shadow-soft">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z"/></svg>
+            </span>
+            <div>
+              <h2 class="text-sm font-bold text-slate-800">Günün İndirimleri</h2>
+              <p id="dealsMeta" class="text-[11px] text-slate-400"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 self-start sm:self-auto px-3 py-1.5 rounded-full bg-brand-50 text-[11px] text-brand-700 font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>Yenilenmeye</span>
+            <span id="dealsCountdown" class="font-bold tabular-nums">--:--:--</span>
+          </div>
+        </div>
+        <div id="dealsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+      </div>
+
+      <!-- 3) Son Alınan Kitaplar (aktif + süresi dolan, tek kart) -->
+      <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800">Son Alınan Kitaplar</h2>
+            <p class="text-[11px] text-slate-400">Aktif kiralamalar · en son alınan en üstte · kalan süre canlı</p>
+          </div>
+          <span id="activeCount" class="text-[11px] font-semibold text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full"></span>
+        </div>
+        <ul id="activeRentals" class="space-y-2.5"></ul>
+
+        <div class="mt-5 pt-4 border-t border-dashed border-slate-200">
+          <div class="flex items-center justify-between mb-2.5">
+            <h3 class="text-xs font-semibold text-slate-500">Süresi Dolan Son Kitaplar</h3>
+            <span class="text-[10px] text-slate-400">Son 3 kayıt</span>
+          </div>
+          <ul id="expiredRentals" class="space-y-2"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-books" data-page class="hidden">
+      <div data-page-header></div>
+      <div id="booksContent"></div>
+    </section>
+
+    <section id="page-rentals" data-page class="hidden">
+      <div data-page-header></div>
+      <div class="bg-white rounded-2xl shadow-soft p-6 text-xs text-slate-400 border border-dashed border-brand-200">Kiralananlar sayfası sonraki adımda eklenecek.</div>
+    </section>
+
+    <section id="page-users" data-page class="hidden">
+      <div data-page-header></div>
+      <div id="usersContent"></div>
+    </section>
+
+    <section id="page-price-logs" data-page class="hidden">
+      <div data-page-header></div>
+      <div id="priceLogsContent"></div>
+    </section>
+
+    <section id="page-announcements" data-page class="hidden">
+      <div data-page-header></div>
+      <div id="annContent"></div>
+    </section>
+
+    <section id="page-offers" data-page class="hidden">
+      <div data-page-header></div>
+      <div id="offersContent"></div>
+    </section>
+  </main>
+
+  <!-- ===================== MODAL ===================== -->
+  <div id="modalRoot" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+    <div id="modalBackdrop" class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm opacity-0 transition-opacity duration-200"></div>
+    <div class="absolute inset-0 flex items-end sm:items-center justify-center sm:p-4 pointer-events-none">
+      <div id="modalPanel"
+        class="relative pointer-events-auto w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-soft-lg max-h-[90vh] overflow-y-auto soft-scroll
+               transition duration-200 ease-out opacity-0 translate-y-6 sm:translate-y-2 sm:scale-95"></div>
+    </div>
+  </div>
+
+  <!-- Toast bildirim alanı -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 items-end pointer-events-none"></div>
+
+  <script>
+  /* ==========================================================
+     1) MOCK VERİLER  (son aşamada Firebase Firestore'a taşınacak)
+     ========================================================== */
+  const DAY_MS = 864e5;
+  const HOUR_MS = 36e5;
+  const NOW_MS = Date.now();
+  const isoAt = (ms) => new Date(ms).toISOString();
+
+  /* role: 'admin' (Kontrolcü) | 'member' (Kullanıcı) | 'observer' (Gözlemci) */
+  const users = [
+    { id: 'u1', name: 'Kağan Durak',  role: 'admin',  balance: 500, email: 'kagan.durak@example.com', color: 'from-brand-500 to-brand-700',  joinedAt: '2026-01-05' },
+    { id: 'u2', name: 'Ayşe Durak',   role: 'member', balance: 320, email: 'ayse.durak@example.com',  color: 'from-sky-400 to-cyan-500',      joinedAt: '2026-01-05' },
+    { id: 'u3', name: 'Emre Durak',   role: 'member', balance: 180, email: null,                       color: 'from-indigo-400 to-violet-500', joinedAt: '2026-02-12' },
+    { id: 'u4', name: 'Zeynep Durak', role: 'member', balance: 95,  email: null,                       color: 'from-teal-400 to-emerald-500',  joinedAt: '2026-03-20' }
+  ];
+
+  /* Simüle e-posta havuzu (Firebase Auth hesaplarının yerine geçer) */
+  const emailPool = [
+    'kagan.durak@example.com',
+    'ayse.durak@example.com',
+    'emre.durak@example.com',
+    'zeynep.durak@example.com',
+    'aile.ortak@example.com'
+  ];
+
+  /* Kitaplar (yazarı Kontrolcü Kağan Durak)
+     type: 'seri' | 'ozel' | 'album'  →  'ozel' kitaplar günlük indirim döngüsüne girmez
+     id: sayısal ve artan; günlük indirim oranları bu ID'ye göre belirlenir
+     writtenAt: yazıldığı tarih (liste sıralaması) · releaseDate: çıkış tarihi
+     addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya '' */
+  const books = [
+    { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri',  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2019-03-14', releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
+    { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri',  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2020-01-20', releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
+    { id: 3,  title: 'Gece Yolcusu III: Gar',          type: 'seri',  price: 40, pages: 268, rentalDays: 14, place: 'İstanbul – Haydarpaşa',   writtenAt: '2021-02-08', releaseDate: '2021-08-30', authorId: 'u1', cover: '', addedAt: '2026-09-02T12:00:00', newDiscountUntil: null },
+    { id: 4,  title: 'Karadeniz Yaz Albümü 2019',      type: 'album', price: 35, pages: 64,  rentalDays: 7,  place: 'Trabzon – Uzungöl',       writtenAt: '2019-08-02', releaseDate: '2019-12-15', authorId: 'u1', cover: '', addedAt: '2026-09-03T12:00:00', newDiscountUntil: null },
+    { id: 5,  title: 'Rüzgârın Kızı',                  type: 'seri',  price: 30, pages: 190, rentalDays: 14, place: 'İzmir – Urla',            writtenAt: '2022-05-11', releaseDate: '2022-11-01', authorId: 'u1', cover: '', addedAt: '2026-09-05T12:00:00', newDiscountUntil: null },
+    { id: 6,  title: 'Rüzgârın Oğlu',                  type: 'seri',  price: 22, pages: 204, rentalDays: 14, place: 'İzmir – Urla',            writtenAt: '2023-04-03', releaseDate: '2023-09-15', authorId: 'u1', cover: '', addedAt: '2026-09-06T12:00:00', newDiscountUntil: null },
+    { id: 7,  title: 'Dedemin Bahçesi',                type: 'ozel',  price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     writtenAt: '2018-06-21', releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
+    { id: 8,  title: 'Kapadokya Albümü 2021',          type: 'album', price: 18, pages: 48,  rentalDays: 7,  place: 'Nevşehir – Göreme',       writtenAt: '2021-10-09', releaseDate: '2022-01-05', authorId: 'u1', cover: '', addedAt: '2026-09-10T12:00:00', newDiscountUntil: null },
+    { id: 9,  title: 'Kayıp Harita',                   type: 'seri',  price: 45, pages: 312, rentalDays: 14, place: 'Ankara – Çalışma odası',  writtenAt: '2023-12-01', releaseDate: '2024-04-20', authorId: 'u1', cover: '', addedAt: '2026-09-12T12:00:00', newDiscountUntil: null },
+    { id: 10, title: 'Bayram Sabahları',               type: 'album', price: 20, pages: 56,  rentalDays: 7,  place: 'Ankara – Keçiören',       writtenAt: '2024-04-12', releaseDate: '2024-05-01', authorId: 'u1', cover: '', addedAt: '2026-09-14T12:00:00', newDiscountUntil: null },
+    { id: 11, title: 'Yıldız Tozu',                    type: 'seri',  price: 22, pages: 176, rentalDays: 14, place: 'Bolu – Abant',            writtenAt: '2024-08-19', releaseDate: '2025-01-10', authorId: 'u1', cover: '', addedAt: '2026-09-15T12:00:00', newDiscountUntil: null },
+    { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        writtenAt: '2025-02-14', releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
+    { id: 13, title: 'Sessiz Kütüphane',               type: 'seri',  price: 16, pages: 160, rentalDays: 14, place: 'İstanbul – Kadıköy',      writtenAt: '2025-11-03', releaseDate: '2026-03-01', authorId: 'u1', cover: '', addedAt: '2026-09-20T12:00:00', newDiscountUntil: null },
+    { id: 14, title: 'Kış Masalları',                  type: 'seri',  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2026-10-20', releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → sonraki döngüye kalır
+  ];
+
+  /* Kiralamalar
+     listPrice: kiralama anındaki normal fiyat · price: ödenen (paket kitaplarında payı)
+     discountSource: 'deal' (günün indirimi) | 'new' (yeni kitap) | 'offer' (özel teklif) | null
+     offerId / purchaseId / offerPrice: özel teklifle alınan kitaplar */
+  const rentals = [
+    // Aktif
+    { id: 'r1',  bookId: 6,  userId: 'u2', listPrice: 22, price: 22,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 2 * DAY_MS),    dueAt: isoAt(NOW_MS + 12 * DAY_MS),  returnedAt: null },
+    { id: 'r2',  bookId: 9,  userId: 'u3', listPrice: 45, price: 27,   discount: 40, discountSource: 'deal', rentedAt: isoAt(NOW_MS - 7 * DAY_MS),    dueAt: isoAt(NOW_MS + 7 * DAY_MS),   returnedAt: null },
+    { id: 'r3',  bookId: 4,  userId: 'u1', listPrice: 35, price: 35,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 3 * DAY_MS),    dueAt: isoAt(NOW_MS + 4 * DAY_MS),   returnedAt: null },
+    { id: 'r4',  bookId: 13, userId: 'u4', listPrice: 16, price: 16,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 13.6 * DAY_MS), dueAt: isoAt(NOW_MS + 0.4 * DAY_MS), returnedAt: null },
+    // Süresi dolan
+    { id: 'r5',  bookId: 11, userId: 'u2', listPrice: 22, price: 22,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 20 * DAY_MS),   dueAt: isoAt(NOW_MS - 6 * DAY_MS),   returnedAt: isoAt(NOW_MS - 7 * DAY_MS) },
+    { id: 'r6',  bookId: 2,  userId: 'u4', listPrice: 15, price: 7.5,  discount: 50, discountSource: 'deal', rentedAt: isoAt(NOW_MS - 25 * DAY_MS),   dueAt: isoAt(NOW_MS - 11 * DAY_MS),  returnedAt: isoAt(NOW_MS - 11 * DAY_MS) },
+    { id: 'r7',  bookId: 5,  userId: 'u3', listPrice: 30, price: 30,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 16 * DAY_MS),   dueAt: isoAt(NOW_MS - 2 * DAY_MS),   returnedAt: null },
+    { id: 'r8',  bookId: 7,  userId: 'u1', listPrice: 60, price: 60,   discount: 0,  discountSource: null,   rentedAt: isoAt(NOW_MS - 40 * DAY_MS),   dueAt: isoAt(NOW_MS - 19 * DAY_MS),  returnedAt: isoAt(NOW_MS - 20 * DAY_MS) },
+    { id: 'r12', bookId: 11, userId: 'u4', listPrice: 22, price: 18.7, discount: 15, discountSource: 'new',  rentedAt: isoAt(NOW_MS - 45 * DAY_MS),   dueAt: isoAt(NOW_MS - 31 * DAY_MS),  returnedAt: null },
+    // Özel teklif paketleri (op1: Emre → o1, op2: Ayşe → o3)
+    { id: 'r9',  bookId: 1,  userId: 'u3', listPrice: 25, price: 11.67, discount: 56, discountSource: 'offer', offerId: 'o1', purchaseId: 'op1', offerPrice: 35, rentedAt: isoAt(NOW_MS - 40 * DAY_MS), dueAt: isoAt(NOW_MS - 26 * DAY_MS), returnedAt: null },
+    { id: 'r10', bookId: 2,  userId: 'u3', listPrice: 15, price: 11.67, discount: 56, discountSource: 'offer', offerId: 'o1', purchaseId: 'op1', offerPrice: 35, rentedAt: isoAt(NOW_MS - 40 * DAY_MS), dueAt: isoAt(NOW_MS - 26 * DAY_MS), returnedAt: null },
+    { id: 'r11', bookId: 3,  userId: 'u3', listPrice: 40, price: 11.66, discount: 56, discountSource: 'offer', offerId: 'o1', purchaseId: 'op1', offerPrice: 35, rentedAt: isoAt(NOW_MS - 40 * DAY_MS), dueAt: isoAt(NOW_MS - 26 * DAY_MS), returnedAt: null },
+    { id: 'r13', bookId: 4,  userId: 'u2', listPrice: 35, price: 15,    discount: 38, discountSource: 'offer', offerId: 'o3', purchaseId: 'op2', offerPrice: 45, rentedAt: isoAt(NOW_MS - 60 * DAY_MS), dueAt: isoAt(NOW_MS - 53 * DAY_MS), returnedAt: null },
+    { id: 'r14', bookId: 8,  userId: 'u2', listPrice: 18, price: 15,    discount: 38, discountSource: 'offer', offerId: 'o3', purchaseId: 'op2', offerPrice: 45, rentedAt: isoAt(NOW_MS - 60 * DAY_MS), dueAt: isoAt(NOW_MS - 53 * DAY_MS), returnedAt: null },
+    { id: 'r15', bookId: 10, userId: 'u2', listPrice: 20, price: 15,    discount: 38, discountSource: 'offer', offerId: 'o3', purchaseId: 'op2', offerPrice: 45, rentedAt: isoAt(NOW_MS - 60 * DAY_MS), dueAt: isoAt(NOW_MS - 53 * DAY_MS), returnedAt: null }
+  ];
+
+  /* Özel teklif satın alımları (harcama istatistiğine paket fiyatı olarak yansır) */
+  const offerPurchases = [
+    { id: 'op1', offerId: 'o1', offerTitle: 'Gece Yolcusu Üçlemesi', userId: 'u3', price: 35, normalTotal: 80, bookIds: [1, 2, 3],  purchasedAt: isoAt(NOW_MS - 40 * DAY_MS) },
+    { id: 'op2', offerId: 'o3', offerTitle: 'Albüm Koleksiyonu',      userId: 'u2', price: 45, normalTotal: 73, bookIds: [4, 8, 10], purchasedAt: isoAt(NOW_MS - 60 * DAY_MS) }
+  ];
+
+  /* Fiyat logları: changeBookPrice() her çağrıldığında otomatik eklenir */
+  const priceLogs = [
+    { id: 'p1', bookId: 3,  oldPrice: 35,   newPrice: 40, changedBy: 'u1', changedAt: isoAt(NOW_MS - 22 * DAY_MS) },
+    { id: 'p6', bookId: 3,  oldPrice: 30,   newPrice: 35, changedBy: 'u1', changedAt: isoAt(NOW_MS - 50 * DAY_MS) },
+    { id: 'p2', bookId: 1,  oldPrice: 30,   newPrice: 25, changedBy: 'u1', changedAt: isoAt(NOW_MS - 13 * DAY_MS) },
+    { id: 'p3', bookId: 9,  oldPrice: 42.5, newPrice: 45, changedBy: 'u1', changedAt: isoAt(NOW_MS - DAY_MS - 3 * HOUR_MS) },
+    { id: 'p4', bookId: 6,  oldPrice: 24,   newPrice: 22, changedBy: 'u1', changedAt: isoAt(NOW_MS - DAY_MS - 5 * HOUR_MS) },
+    { id: 'p5', bookId: 13, oldPrice: 18,   newPrice: 16, changedBy: 'u1', changedAt: isoAt(NOW_MS - 2 * HOUR_MS) }
+  ];
+
+  /* Duyurular:
+     type 'news'   → Haberler sekmesi (category: 'Yeni Kitap' | 'Duyuru')
+     type 'update' → Güncellemeler sekmesi (version, releaseDate, year, items)
+     readBy        → okuyan kullanıcılar (bildirim rozeti bundan hesaplanır) */
+  const announcements = [
+    { id: 'a1', type: 'news', category: 'Duyuru', title: 'Kitaplığımız açıldı! 🎉',
+      body: 'Family Bookshop artık yayında! Aile kitaplığımızdaki tüm kitapları bakiyenle kiralayabilir, her sabah 10:00\'da yenilenen Günün İndirimleri\'nden faydalanabilirsin.\nİyi okumalar!',
+      bookId: null, authorId: 'u1', createdAt: '2026-10-01T10:00:00', pinned: true, readBy: ['u1', 'u2', 'u3', 'u4'] },
+    { id: 'a3', type: 'news', category: 'Yeni Kitap', title: 'Yeni kitap: Kış Masalları',
+      body: 'Müjde! Kağan Durak tarafından yazılan "Kış Masalları" isimli yeni Seri kitabımız eklenmiştir! 7 gün boyunca %15 yeni indirim fırsatıyla yayında!',
+      bookId: 14, authorId: 'u1', createdAt: '2026-10-22T15:00:00', pinned: false, readBy: ['u1', 'u2'] },
+    { id: 'a2', type: 'update', version: 'v1.1.0', title: 'Günün İndirimleri ve canlı sayaçlar', releaseDate: '2026-10-18', year: 2026,
+      items: ['Her sabah 10:00\'da yenilenen sıralı indirim döngüsü', 'Aktif kiralamalar için canlı kalan süre çubukları', 'İndirimli kitaplar için tek tıkla kiralama'],
+      authorId: 'u1', createdAt: '2026-10-18T19:30:00', readBy: ['u1'] },
+    { id: 'a4', type: 'update', version: 'v1.0.0', title: 'İlk sürüm yayında', releaseDate: '2026-10-01', year: 2026,
+      items: ['Mavi-beyaz yeni arayüz', 'Kullanıcı değiştirme ve bakiye yönetimi', 'Mobil uyumlu menü'],
+      authorId: 'u1', createdAt: '2026-10-01T09:00:00', readBy: ['u1', 'u2', 'u3', 'u4'] },
+    { id: 'a5', type: 'update', version: 'v0.9.0', title: 'Kapalı beta', releaseDate: '2025-12-20', year: 2025,
+      items: ['Aile içi test sürümü', 'Temel kitap listesi'],
+      authorId: 'u1', createdAt: '2025-12-20T12:00:00', readBy: ['u1', 'u2', 'u3', 'u4'] }
+  ];
+
+  /* Özel Teklifler: 3 kitaplık paketler
+     items[i].cover: vitrin için isteğe bağlı kapak (boşsa kitabın kendi kapağı) */
+  const offers = [
+    { id: 'o1', title: 'Gece Yolcusu Üçlemesi', description: 'Serinin üç kitabı tek pakette! Karanlık Peron\'dan Gar\'a kadar tüm yolculuk tek kiralamayla senin.',
+      price: 35, items: [{ bookId: 1, cover: '' }, { bookId: 2, cover: '' }, { bookId: 3, cover: '' }], validUntil: '2026-11-30', theme: 'blue', createdAt: '2026-10-15T10:00:00' },
+    { id: 'o2', title: 'Rüzgâr & Kapadokya Paketi', description: 'Rüzgâr serisinin iki kitabı ve Kapadokya albümü bir arada.',
+      price: 40, items: [{ bookId: 5, cover: '' }, { bookId: 6, cover: '' }, { bookId: 8, cover: '' }], validUntil: '2026-12-31', theme: 'violet', createdAt: '2026-10-20T10:00:00' },
+    { id: 'o3', title: 'Albüm Koleksiyonu', description: 'Üç aile albümü tek fiyata.',
+      price: 45, items: [{ bookId: 4, cover: '' }, { bookId: 8, cover: '' }, { bookId: 10, cover: '' }], validUntil: '2026-08-31', theme: 'emerald', createdAt: '2026-06-01T10:00:00' }
+  ];
+
+  /* Günün İndirimleri ayarları */
+  const DISCOUNT_SETTINGS = {
+    anchorDate: '2026-10-01', // ilk döngünün başladığı gün (o günün 10:00'ı)
+    resetHour: 10,            // her gün 10:00'da yeni grup
+    groupSize: 3              // günde kaç kitap
+  };
+  const NEW_BOOK_DISCOUNT = { rate: 15, days: 7 }; // yeni eklenen kitap indirimi
+  const DEFAULT_RENTAL_DAYS = 14;
+
+  /* Uygulama durumu */
+  const state = {
+    currentUserId: 'u1',   // Başlangıçta Kontrolcü (Admin) seçili
+    route: 'dashboard',
+    profileOpen: false,
+    mobileMenuOpen: false,
+    modalOpen: false,
+    lastDealDay: null,
+    confirmAction: null,
+    panelTab: 'balance',   // profil panelindeki Kontrolcü sekmesi: 'balance' | 'roles'
+    bookTab: 'all',
+    annTab: 'news',
+    updQuery: '',
+    updYear: 'all',
+    freshAnnIds: new Set(), // bu ziyarette "Yeni" olarak işaretlenecek duyurular
+    bookDraftCover: '',     // kitap formundaki kapak (base64)
+    offerDraftCovers: ['', '', ''],
+    coverBusy: false
+  };
+
+  /* ==========================================================
+     2) SABİTLER & YARDIMCI FONKSİYONLAR
+     ========================================================== */
+  const ICONS = {
+    dashboard: 'M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75',
+    books: 'M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25',
+    rentals: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+    users: 'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z',
+    'price-logs': 'M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941',
+    announcements: 'M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46',
+    offers: 'M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z',
+    wallet: 'M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3',
+    tag: 'M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3zM6 6h.008v.008H6V6z',
+    close: 'M6 18L18 6M6 6l12 12',
+    plus: 'M12 4.5v15m7.5-7.5h-15',
+    pencil: 'M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10',
+    trash: 'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0',
+    check: 'M4.5 12.75l6 6 9-13.5',
+    search: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z',
+    info: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z',
+    arrow: 'M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3',
+    back: 'M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18',
+    chevron: 'M8.25 4.5l7.5 7.5-7.5 7.5',
+    news: 'M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z',
+    sparkles: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z',
+    pin: 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0z M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z',
+    calendar: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
+    pages: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
+    chart: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z',
+    link: 'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244',
+    lock: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z',
+    photo: 'M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21zm10.5-11.25h.008v.008h-.008V9.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z'
+  };
+
+  const ROUTES = {
+    'dashboard':     { label: 'Ana Sayfa',      desc: 'Kitaplığın genel görünümü ve özet istatistikler.' },
+    'books':         { label: 'Kitaplar',       desc: 'Kağan Durak\'ın tüm eserleri · yazıldığı tarihe göre en yeniden eskiye.' },
+    'rentals':       { label: 'Kiralananlar',   desc: 'Aktif ve geçmiş kiralama kayıtları.' },
+    'users':         { label: 'Kullanıcılar',   desc: 'Kitaplar için en çok bakiye harcayanlar liderlik tablosu.' },
+    'price-logs':    { label: 'Fiyat Logu',     desc: 'Kitap fiyatlarındaki tüm değişimlerin tarihe göre geçmişi.' },
+    'announcements': { label: 'Duyurular',      desc: 'Haberler ve sürüm güncellemeleri.' },
+    'offers':        { label: 'Özel Teklifler', desc: '3 kitaplık özel paketler · tek kiralamayla üç kitap birden.' }
+  };
+  const DEFAULT_ROUTE = 'dashboard';
+
+  const BOOK_TYPES = {
+    seri:  { label: 'Seri',  grad: 'from-sky-400 to-brand-600',      chip: 'bg-brand-50 text-brand-600',   dot: 'bg-brand-400' },
+    ozel:  { label: 'Özel',  grad: 'from-rose-400 to-orange-400',    chip: 'bg-rose-50 text-rose-500',     dot: 'bg-rose-400' },
+    album: { label: 'Albüm', grad: 'from-violet-400 to-indigo-600',  chip: 'bg-violet-50 text-violet-600', dot: 'bg-violet-400' }
+  };
+  const typeLabel = (t) => BOOK_TYPES[t]?.label || 'Kitap';
+
+  const ROLES = {
+    admin:    { label: 'Kontrolcü', chip: 'bg-amber-50 text-amber-700',  desc: 'Tüm yönetim yetkileri' },
+    member:   { label: 'Kullanıcı', chip: 'bg-brand-50 text-brand-600',  desc: 'Kiralama yapabilir' },
+    observer: { label: 'Gözlemci',  chip: 'bg-slate-100 text-slate-600', desc: 'Sadece görüntüler' }
+  };
+
+  const OFFER_THEMES = {
+    blue:    { label: 'Mavi',    grad: 'from-brand-500 to-brand-700' },
+    violet:  { label: 'Mor',     grad: 'from-violet-500 to-indigo-600' },
+    rose:    { label: 'Pembe',   grad: 'from-rose-400 to-pink-600' },
+    amber:   { label: 'Turuncu', grad: 'from-amber-400 to-orange-500' },
+    emerald: { label: 'Yeşil',   grad: 'from-emerald-400 to-teal-600' }
+  };
+
+  const MEDALS = ['🥇', '🥈', '🥉'];
+
+  /* Ortak form / buton sınıfları */
+  const INPUT_CLS = 'w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2.5 text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-300 transition';
+  const BTN_PRIMARY = 'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 hover:shadow-soft-lg transition disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed disabled:shadow-none';
+  const BTN_SOFT = 'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-brand-700 bg-white border border-brand-100 hover:border-brand-300 hover:shadow-soft transition';
+  const BTN_ICON = 'w-8 h-8 rounded-lg flex items-center justify-center transition';
+
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  const formatMoney = (v) =>
+    new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+
+  const formatDate = (iso, withTime = false) =>
+    new Date(iso).toLocaleDateString('tr-TR', withTime
+      ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+      : { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const formatLongDate = (iso) =>
+    new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const formatTime = (iso) =>
+    new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+  /* 'YYYY-MM-DD' (yerel) — tarih inputları ve gruplama için */
+  const localDateKey = (d = new Date()) => {
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  };
+  /* 'YYYY-MM-DD' → yerel gece yarısı Date */
+  const dateFromKey = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
+  const isDateKey = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+
+  function relativeDay(iso) {
+    const diff = Math.round((dateFromKey(localDateKey()) - dateFromKey(localDateKey(iso))) / DAY_MS);
+    if (diff === 0) return 'Bugün';
+    if (diff === 1) return 'Dün';
+    if (diff > 1 && diff < 7) return `${diff} gün önce`;
+    return formatDate(iso);
+  }
+
+  /* "3 gün önce yazıldı" / "4 yıl 7 ay önce yazıldı" */
+  function writtenAgo(dateKey) {
+    const from = dateFromKey(dateKey);
+    const now = new Date();
+    if (from > now) return 'Yakında';
+    let y = now.getFullYear() - from.getFullYear();
+    let m = now.getMonth() - from.getMonth();
+    let d = now.getDate() - from.getDate();
+    if (d < 0) { m--; d += new Date(now.getFullYear(), now.getMonth(), 0).getDate(); }
+    if (m < 0) { y--; m += 12; }
+    const parts = [];
+    if (y) parts.push(`${y} yıl`);
+    if (m) parts.push(`${m} ay`);
+    if (!y && d) parts.push(`${d} gün`);
+    return parts.length ? `${parts.slice(0, 2).join(' ')} önce yazıldı` : 'Bugün yazıldı';
+  }
+
+  const escapeHTML = (str) => String(str ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  const initials = (name) => String(name).trim().split(/\s+/).map((p) => p[0] || '').slice(0, 2).join('').toUpperCase() || '?';
+
+  const icon = (key, cls = 'w-4 h-4') =>
+    `<svg class="${cls}" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${ICONS[key]}"/></svg>`;
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const sum = (arr, fn) => round2(arr.reduce((s, x) => s + fn(x), 0));
+
+  const getUser = (id) => users.find((u) => u.id === id);
+  const getBook = (id) => books.find((b) => b.id === Number(id));
+  const getRental = (id) => rentals.find((r) => r.id === id);
+  const getAnn = (id) => announcements.find((a) => a.id === id);
+  const getOffer = (id) => offers.find((o) => o.id === id);
+  const currentUser = () => getUser(state.currentUserId);
+  const isAdmin = () => currentUser()?.role === 'admin';
+  const canRent = (user = currentUser()) => user && user.role !== 'observer';
+  const canViewStats = (userId) => isAdmin() || userId === state.currentUserId;
+  const authorName = (book) => getUser(book?.authorId)?.name || 'Kağan Durak';
+  const uid = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  function toast(message, type = 'info') {
+    const styles = {
+      success: 'bg-white border-emerald-200 text-emerald-700',
+      error:   'bg-white border-rose-200 text-rose-600',
+      info:    'bg-white border-brand-200 text-brand-700'
+    };
+    const el = document.createElement('div');
+    el.className = `pointer-events-auto px-4 py-2.5 rounded-xl border shadow-soft-lg text-xs font-medium transition duration-300 opacity-0 translate-y-2 ${styles[type]}`;
+    el.textContent = message;
+    $('#toastContainer').appendChild(el);
+    requestAnimationFrame(() => el.classList.remove('opacity-0', 'translate-y-2'));
+    setTimeout(() => {
+      el.classList.add('opacity-0', 'translate-y-2');
+      setTimeout(() => el.remove(), 300);
+    }, 2800);
+  }
+
+  /* Kitap kapağı: base64 görsel varsa onu, yoksa türüne göre degrade kutu */
+  const COVER_SIZES = {
+    xs: 'w-8 h-11 text-[9px] rounded-md',
+    sm: 'w-10 h-14 text-[10px] rounded-lg',
+    md: 'w-14 h-20 text-xs rounded-xl',
+    lg: 'w-24 h-36 text-base rounded-2xl',
+    fill: 'w-full h-full text-lg rounded-xl'
+  };
+  function coverHTML(book, size = 'md', overrideCover = '') {
+    const b = book || { title: '?', type: 'seri' };
+    const src = overrideCover || b.cover;
+    if (src) {
+      return `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="${COVER_SIZES[size]} object-cover shadow-soft shrink-0 bg-slate-100" />`;
+    }
+    const grad = BOOK_TYPES[b.type]?.grad || 'from-brand-400 to-brand-600';
+    const letters = initials(String(b.title).replace(/[^\p{L}\p{N}\s]/gu, '') || b.title);
+    return `
+      <div class="${COVER_SIZES[size]} shrink-0 bg-gradient-to-br ${grad} text-white font-bold shadow-soft flex items-center justify-center relative overflow-hidden">
+        <span class="absolute left-1.5 top-0 bottom-0 w-px bg-white/30"></span>
+        <span class="absolute -right-3 -bottom-3 w-10 h-10 rounded-full bg-white/10"></span>
+        <span class="drop-shadow-sm">${escapeHTML(letters)}</span>
+      </div>`;
+  }
+
+  function avatarHTML(user, cls = 'w-5 h-5 text-[9px]') {
+    return `<span class="${cls} rounded-full bg-gradient-to-br ${user.color} text-white flex items-center justify-center font-semibold shrink-0">${initials(user.name)}</span>`;
+  }
+
+  const typeChip = (t) => `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${BOOK_TYPES[t]?.chip || ''}">${typeLabel(t)}</span>`;
+  const roleChip = (r) => `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLES[r]?.chip || ''}">${ROLES[r]?.label || r}</span>`;
+
+  const emptyState = (text, extra = '') =>
+    `<div class="${extra} text-center text-xs text-slate-400 py-10 px-4 bg-white/60 border border-dashed border-brand-200 rounded-2xl">${text}</div>`;
+
+  const setPageActions = (page, html) => {
+    const slot = document.querySelector(`#page-${page} [data-page-actions]`);
+    if (slot) slot.innerHTML = html;
+  };
+
+  /* Yerel görsel dosyasını okuyup küçültür ve base64 (JPEG) döndürür.
+     Küçültme, Firestore'un 1 MB belge sınırı için önemlidir. */
+  function readImageFile(file, maxW = 360, maxH = 540) {
+    return new Promise((resolve, reject) => {
+      if (!file || !/^image\//.test(file.type)) return reject(new Error('Lütfen bir görsel dosyası seçin.'));
+      if (file.size > 10 * 1024 * 1024) return reject(new Error('Görsel en fazla 10 MB olabilir.'));
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Dosya okunamadı.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Görsel açılamadı.'));
+        img.onload = () => {
+          const scale = Math.min(1, maxW / img.width, maxH / img.height);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(reader.result);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ==========================================================
+     3) KİRALAMA YARDIMCILARI
+     ========================================================== */
+  const isActiveRental  = (r, now = Date.now()) => !r.returnedAt && new Date(r.dueAt).getTime() > now;
+  const isExpiredRental = (r, now = Date.now()) => new Date(r.dueAt).getTime() <= now;
+  const activeRentalOf  = (book, now = Date.now()) => rentals.find((r) => r.bookId === book.id && isActiveRental(r, now));
+  const isBookRented    = (book, now = Date.now()) => !!activeRentalOf(book, now);
+
+  function rentalProgress(r, now = Date.now()) {
+    const start = new Date(r.rentedAt).getTime();
+    const end = new Date(r.dueAt).getTime();
+    const remainingMs = Math.max(0, end - now);
+    const ratio = end > start ? Math.min(1, remainingMs / (end - start)) : 0;
+    return { remainingMs, ratio };
+  }
+
+  function formatRemaining(ms) {
+    if (ms <= 0) return 'Süre doldu';
+    const d = Math.floor(ms / DAY_MS);
+    const h = Math.floor((ms % DAY_MS) / HOUR_MS);
+    const m = Math.floor((ms % HOUR_MS) / 6e4);
+    const s = Math.floor((ms % 6e4) / 1e3);
+    if (d > 0) return `${d} gün ${h} sa kaldı`;
+    if (h > 0) return `${h} sa ${m} dk kaldı`;
+    return `${m} dk ${s} sn kaldı`;
+  }
+
+  /* Kalan oran → yeşil (120°) ile kırmızı (0°) arası renk */
+  const progressColor = (ratio) => `hsl(${Math.round(ratio * 120)}, 72%, 46%)`;
+
+  function applyProgress(rentalId, now = Date.now()) {
+    const r = getRental(rentalId);
+    const bar = document.querySelector(`[data-rental-bar="${rentalId}"]`);
+    const label = document.querySelector(`[data-rental-left="${rentalId}"]`);
+    if (!r || !bar) return 0;
+    const { remainingMs, ratio } = rentalProgress(r, now);
+    bar.style.width = `${Math.max(ratio * 100, 2)}%`;
+    bar.style.backgroundColor = progressColor(ratio);
+    if (label) {
+      label.textContent = formatRemaining(remainingMs);
+      label.style.color = progressColor(ratio);
+    }
+    return remainingMs;
+  }
+
+  /* ==========================================================
+     4) GÜNÜN İNDİRİMLERİ — SIRALI DÖNGÜ MOTORU
+     ----------------------------------------------------------
+     • Bir "indirim günü" saat 10:00'da başlar, ertesi gün 09:59'da biter.
+     • Her döngünün başında, o an mevcut olan "Özel" olmayan kitapların ID
+       sıralı anlık görüntüsü (snapshot) alınır. Döngü süresince eklenen
+       kitaplar bu listeye girmez → sıra bozulmaz, sonraki döngüye kalır.
+     • Gün N'de snapshot'tan [N*3, N*3+3) aralığı gösterilir; son gün
+       kalanlar (1 veya 2 kitap) listelenir, ertesi gün döngü baştan başlar.
+     • Firebase aşamasında snapshot Firestore'a kaydedilecek.
+     ========================================================== */
+  const RATE_TIERS = [
+    { max: 5,        rate: 50 },
+    { max: 10,       rate: 40 },
+    { max: 15,       rate: 30 },
+    { max: 20,       rate: 25 },
+    { max: Infinity, rate: 20 }
+  ];
+  const getDiscountRate = (bookId) => RATE_TIERS.find((t) => bookId <= t.max).rate;
+  const isDiscountEligible = (book) => book.type !== 'ozel';
+
+  /* Tarihi "indirim günü numarası"na çevirir (10:00 öncesi bir önceki güne sayılır) */
+  function discountDayNumber(date = new Date()) {
+    const shifted = new Date(date.getTime() - DISCOUNT_SETTINGS.resetHour * HOUR_MS);
+    return Math.round(Date.UTC(shifted.getFullYear(), shifted.getMonth(), shifted.getDate()) / DAY_MS);
+  }
+
+  /* Gün numarasının yerel saatle 10:00 anı */
+  function discountDayStart(dayNum) {
+    const u = new Date(dayNum * DAY_MS);
+    return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), DISCOUNT_SETTINGS.resetHour, 0, 0, 0);
+  }
+
+  function anchorDayNumber() {
+    const [y, m, d] = DISCOUNT_SETTINGS.anchorDate.split('-').map(Number);
+    return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
+  }
+
+  function cycleSnapshot(cycleStartDay) {
+    const startTime = discountDayStart(cycleStartDay).getTime();
+    return books
+      .filter((b) => isDiscountEligible(b) && new Date(b.addedAt).getTime() <= startTime)
+      .sort((a, b) => a.id - b.id)
+      .map((b) => b.id);
+  }
+
+  function getDailyDeals(now = new Date()) {
+    const size = DISCOUNT_SETTINGS.groupSize;
+    const today = discountDayNumber(now);
+    let cycleStart = anchorDayNumber();
+    let cycleNo = 1;
+    let snapshot = [];
+    let totalDays = 0;
+    let guard = 0;
+
+    if (today < cycleStart) return { ids: [], cycleNo: 0, dayIndex: 0, totalDays: 0, snapshotSize: 0 };
+
+    while (guard++ < 100000) {
+      snapshot = cycleSnapshot(cycleStart);
+      totalDays = Math.ceil(snapshot.length / size);
+      if (totalDays === 0) {            // o gün hiç uygun kitap yoksa ertesi güne kaydır
+        if (cycleStart >= today) break;
+        cycleStart++;
+        continue;
+      }
+      if (today - cycleStart < totalDays) break;
+      cycleStart += totalDays;          // döngü bitti → yeni döngü, yeni snapshot
+      cycleNo++;
+    }
+
+    const dayIndex = Math.max(0, today - cycleStart);
+    const ids = snapshot
+      .slice(dayIndex * size, dayIndex * size + size)
+      .filter((id) => getBook(id));     // silinmiş kitapları atla
+
+    return {
+      ids, cycleNo, dayIndex, totalDays,
+      snapshotSize: snapshot.length,
+      fromPos: dayIndex * size + 1,
+      toPos: Math.min(dayIndex * size + size, snapshot.length)
+    };
+  }
+
+  const nextDealReset = (now = new Date()) => discountDayStart(discountDayNumber(now) + 1);
+
+  /* Kitaba o an uygulanacak en yüksek indirim (günün indirimi veya yeni kitap indirimi) */
+  function getEffectiveDiscount(book, now = new Date()) {
+    let rate = 0, source = null;
+    if (getDailyDeals(now).ids.includes(book.id)) { rate = getDiscountRate(book.id); source = 'deal'; }
+    if (book.newDiscountUntil && new Date(book.newDiscountUntil) > now && NEW_BOOK_DISCOUNT.rate > rate) {
+      rate = NEW_BOOK_DISCOUNT.rate; source = 'new';
+    }
+    return { rate, source };
+  }
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif' }[s] || 'İndirim');
+
+  function formatCountdown(ms) {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(Math.floor(t / 3600))}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}`;
+  }
+
+  /* ==========================================================
+     5) VERİ İŞLEMLERİ (Firebase aşamasında Firestore çağrılarına dönüşecek)
+     ========================================================== */
+
+  /* Yeni kitap ekler + "Haberler"e otomatik duyuru basar */
+  function addBook(data) {
+    const now = Date.now();
+    const id = books.reduce((m, b) => Math.max(m, b.id), 0) + 1;
+    const book = {
+      id, authorId: 'u1', ...data,
+      addedAt: isoAt(now),
+      newDiscountUntil: isoAt(now + NEW_BOOK_DISCOUNT.days * DAY_MS)
+    };
+    books.push(book);
+
+    announcements.push({
+      id: uid('a'),
+      type: 'news',
+      category: 'Yeni Kitap',
+      title: `Yeni kitap: ${book.title}`,
+      body: `Müjde! ${authorName(book)} tarafından yazılan "${book.title}" isimli yeni ${typeLabel(book.type)} kitabımız eklenmiştir! ${NEW_BOOK_DISCOUNT.days} gün boyunca %${NEW_BOOK_DISCOUNT.rate} yeni indirim fırsatıyla yayında!`,
+      bookId: id,
+      authorId: state.currentUserId,
+      createdAt: isoAt(now),
+      pinned: false,
+      readBy: []
+    });
+    updateBadges();
+    return book;
+  }
+
+  /* Fiyatı değiştirir + Fiyat Loguna otomatik kayıt düşer */
+  function changeBookPrice(bookId, newPrice) {
+    const book = getBook(bookId);
+    if (!book) return { ok: false, reason: 'Kitap bulunamadı.' };
+    newPrice = round2(newPrice);
+    if (!(newPrice > 0)) return { ok: false, reason: 'Geçerli bir fiyat girin.' };
+    if (newPrice === book.price) return { ok: false, reason: 'Yeni fiyat mevcut fiyatla aynı.' };
+
+    const oldPrice = book.price;
+    book.price = newPrice;
+    priceLogs.push({
+      id: uid('p'), bookId: book.id, oldPrice, newPrice,
+      changedBy: state.currentUserId, changedAt: new Date().toISOString()
+    });
+    return { ok: true, book, oldPrice, newPrice };
+  }
+
+  /* Okunmamış duyuru sayısı (kullanıcıya göre) */
+  const unreadCount = (userId = state.currentUserId) =>
+    announcements.filter((a) => !a.readBy.includes(userId)).length;
+
+  function markAnnouncementsRead() {
+    const id = state.currentUserId;
+    announcements.forEach((a) => {
+      if (!a.readBy.includes(id)) {
+        state.freshAnnIds.add(a.id);
+        a.readBy.push(id);
+      }
+    });
+    updateBadges();
+  }
+
+  /* Kullanıcı istatistikleri (liderlik tablosu + detay modalı) */
+  function userStats(userId) {
+    const rs = rentals.filter((r) => r.userId === userId);
+    const singles = rs.filter((r) => !r.offerId);
+    const purchases = offerPurchases.filter((p) => p.userId === userId)
+      .sort((a, b) => new Date(b.purchasedAt) - new Date(a.purchasedAt));
+    const discounted = singles.filter((r) => r.discount > 0)
+      .sort((a, b) => new Date(b.rentedAt) - new Date(a.rentedAt));
+    const saveOf = (r) => Math.max(0, (r.listPrice ?? r.price) - r.price);
+    const savingDeal  = sum(discounted.filter((r) => r.discountSource === 'deal'), saveOf);
+    const savingNew   = sum(discounted.filter((r) => r.discountSource === 'new'), saveOf);
+    const savingOffer = sum(purchases, (p) => Math.max(0, p.normalTotal - p.price));
+    return {
+      count: rs.length,                                              // paket = +3 kitap
+      spent: round2(sum(singles, (r) => r.price) + sum(purchases, (p) => p.price)), // paket = +paket fiyatı
+      purchases, discounted, saveOf,
+      savings: { deal: savingDeal, new: savingNew, offer: savingOffer, total: round2(savingDeal + savingNew + savingOffer) }
+    };
+  }
+
+  function computeLeaderboard() {
+    return users
+      .map((u) => ({ user: u, ...userStats(u.id) }))
+      .sort((a, b) => b.spent - a.spent || b.count - a.count || a.user.name.localeCompare(b.user.name, 'tr'));
+  }
+
+  /* ==========================================================
+     6) MENÜ, ROZETLER & SAYFA BAŞLIKLARI
+     ========================================================== */
+  const BADGE_CLS = 'min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-none flex items-center justify-center ring-2 ring-white shadow-sm transition duration-300 opacity-0 scale-50';
+
+  function renderMenus() {
+    const entries = Object.entries(ROUTES);
+
+    $('#desktopMenu').innerHTML = entries.map(([key, r]) => `
+      <li>
+        <a href="#${key}" data-nav="${key}"
+           class="nav-link relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-slate-500 hover:text-brand-600 transition">
+          ${icon(key, 'w-3.5 h-3.5')}<span>${r.label}</span>
+          ${key === 'announcements' ? `<span data-badge="announcements" class="absolute -top-1.5 -right-1 ${BADGE_CLS}"></span>` : ''}
+        </a>
+      </li>`).join('');
+
+    $('#mobileMenuList').innerHTML = entries.map(([key, r]) => `
+      <li>
+        <a href="#${key}" data-nav="${key}"
+           class="nav-link flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-600 bg-brand-50/60 hover:bg-brand-100 transition">
+          ${icon(key)}<span>${r.label}</span>
+          ${key === 'announcements' ? `<span data-badge="announcements" class="ml-auto ${BADGE_CLS}"></span>` : ''}
+        </a>
+      </li>`).join('');
+
+    // Sayfa başlıkları (+ sağda sayfa aksiyonları için yuva)
+    $$('[data-page]').forEach((section) => {
+      const key = section.id.replace('page-', '');
+      const r = ROUTES[key];
+      section.querySelector('[data-page-header]').innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-10 h-10 rounded-xl bg-white shadow-soft text-brand-600 flex items-center justify-center shrink-0">${icon(key, 'w-5 h-5')}</span>
+            <div class="min-w-0">
+              <h1 class="text-base font-bold text-slate-800">${r.label}</h1>
+              <p class="text-xs text-slate-400" data-page-desc>${r.desc}</p>
+            </div>
+          </div>
+          <div data-page-actions class="flex flex-wrap gap-2"></div>
+        </div>`;
+    });
+  }
+
+  function updateBadges() {
+    const count = unreadCount();
+    $$('[data-badge="announcements"]').forEach((el) => {
+      const wasHidden = el.classList.contains('opacity-0');
+      if (count > 0) {
+        el.textContent = count > 9 ? '9+' : count;
+        el.classList.remove('opacity-0', 'scale-50');
+        if (wasHidden) { el.classList.remove('badge-pop'); void el.offsetWidth; el.classList.add('badge-pop'); }
+      } else {
+        el.classList.add('opacity-0', 'scale-50');
+      }
+    });
+    const dot = $('#menuDot');
+    if (dot) {
+      dot.classList.toggle('opacity-0', count === 0);
+      dot.classList.toggle('scale-50', count === 0);
+    }
+  }
+
+  /* ==========================================================
+     7) SPA YÖNLENDİRME (hash + hidden)
+     ========================================================== */
+  function router() {
+    let route = location.hash.replace('#', '');
+    if (!ROUTES[route]) {
+      route = DEFAULT_ROUTE;
+      history.replaceState(null, '', '#' + route);
+    }
+    const changed = state.route !== route;
+    state.route = route;
+    if (route === 'announcements') state.freshAnnIds = new Set();
+
+    $$('[data-page]').forEach((section) => {
+      const active = section.id === 'page-' + route;
+      section.classList.toggle('hidden', !active);
+      if (active) {
+        section.classList.remove('page-enter');
+        void section.offsetWidth;            // animasyonu yeniden tetikle
+        section.classList.add('page-enter');
+      }
+    });
+
+    $$('.nav-link').forEach((link) => {
+      const active = link.dataset.nav === route;
+      link.classList.toggle('bg-white', active);
+      link.classList.toggle('text-brand-600', active);
+      link.classList.toggle('shadow-soft', active);
+      link.classList.toggle('text-slate-500', !active && !!link.closest('#desktopMenu'));
+      if (link.closest('#mobileMenuList')) {
+        link.classList.toggle('ring-1', active);
+        link.classList.toggle('ring-brand-200', active);
+      }
+    });
+
+    document.title = `${ROUTES[route].label} · Family Bookshop`;
+    toggleMobileMenu(false);
+    toggleProfile(false);
+    closeModal();
+    renderCurrentPage();
+    if (changed) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const PAGE_RENDERERS = {
+    'dashboard':     () => renderDashboard(),
+    'books':         () => renderBooks(),
+    'users':         () => renderUsers(),
+    'price-logs':    () => renderPriceLogs(),
+    'announcements': () => renderAnnouncements(),
+    'offers':        () => renderOffers()
+    // 'rentals' sonraki adımda eklenecek
+  };
+
+  function renderCurrentPage() {
+    PAGE_RENDERERS[state.route]?.();
+    updateBadges();
+  }
+
+  /* ==========================================================
+     8) ANA SAYFA (DASHBOARD)
+     ========================================================== */
+  function renderDashboard() {
+    const now = new Date();
+    const u = currentUser();
+    $('#page-dashboard [data-page-desc]').textContent = `Merhaba ${u.name.split(' ')[0]} 👋 Kitaplığın genel görünümü ve günün fırsatları.`;
+    renderStats(now);
+    renderDeals(now);
+    renderActiveRentals(now);
+    renderExpiredRentals(now);
+    state.lastDealDay = discountDayNumber(now);
+  }
+
+  /* --- 8.1 İstatistik kartları --- */
+  function renderStats(now) {
+    const nowMs = now.getTime();
+    const countType = (t) => books.filter((b) => b.type === t).length;
+    const active = rentals.filter((r) => isActiveRental(r, nowMs));
+    const myActive = active.filter((r) => r.userId === state.currentUserId).length;
+    const totalBalance = sum(users, (u) => u.balance);
+    const deals = getDailyDeals(now);
+    const maxRate = deals.ids.length ? Math.max(...deals.ids.map(getDiscountRate)) : 0;
+
+    const cards = [
+      { label: 'Toplam Kitap',   value: books.length,              sub: `${countType('seri')} seri · ${countType('album')} albüm · ${countType('ozel')} özel`, icon: 'books',   tone: 'bg-brand-50 text-brand-600' },
+      { label: 'Aktif Kiralık',  value: active.length,             sub: `Sende ${myActive} · ${books.length - active.length} kitap müsait`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
+      { label: 'Toplam Bakiye',  value: formatMoney(totalBalance), sub: `Senin: ${formatMoney(currentUser().balance)}`,                                                 icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
+      { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}'e varan` : '—', sub: `${deals.ids.length} kitapta fırsat`,                              icon: 'tag',     tone: 'bg-rose-50 text-rose-500' }
+    ];
+
+    $('#dashStats').innerHTML = cards.map((c) => `
+      <div class="bg-white rounded-2xl shadow-soft p-4 flex items-start justify-between gap-3 hover:shadow-soft-lg transition">
+        <div class="min-w-0">
+          <p class="text-[11px] font-medium text-slate-400">${c.label}</p>
+          <p class="text-lg sm:text-xl font-bold text-slate-800 mt-1 truncate">${c.value}</p>
+          <p class="text-[11px] text-slate-400 mt-0.5 truncate">${c.sub}</p>
+        </div>
+        <span class="w-9 h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
+      </div>`).join('');
+  }
+
+  /* --- 8.2 Günün indirimleri --- */
+  function renderDeals(now) {
+    const deals = getDailyDeals(now);
+
+    $('#dealsMeta').textContent = deals.snapshotSize
+      ? `Döngü ${deals.cycleNo} · Gün ${deals.dayIndex + 1}/${deals.totalDays} · Sıra ${deals.fromPos}–${deals.toPos} / ${deals.snapshotSize}`
+      : 'Henüz indirime uygun kitap yok';
+    updateCountdown(now);
+
+    if (!deals.ids.length) {
+      $('#dealsGrid').innerHTML = emptyState('Bugün için indirimli kitap bulunmuyor.', 'sm:col-span-3');
+      return;
+    }
+
+    $('#dealsGrid').innerHTML = deals.ids.map((id) => {
+      const b = getBook(id);
+      const rate = getDiscountRate(b.id);
+      const newPrice = round2(b.price * (1 - rate / 100));
+      const rented = isBookRented(b, now.getTime());
+      return `
+        <button type="button" data-open-deal="${b.id}"
+          class="deal-shine group text-left bg-gradient-to-br from-white to-brand-50/70 rounded-2xl border border-brand-100 p-4
+                 hover:shadow-soft-lg hover:-translate-y-0.5 hover:border-brand-200 transition duration-200 focus:outline-none focus:ring-2 focus:ring-brand-200">
+          <div class="flex gap-3">
+            ${coverHTML(b, 'md')}
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-brand-500">#${b.id} · ${typeLabel(b.type)}</p>
+              <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
+              <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
+              ${rented
+                ? '<span class="inline-block mt-1.5 text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Kiralı</span>'
+                : '<span class="inline-block mt-1.5 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Müsait</span>'}
+            </div>
+          </div>
+          <div class="flex items-end justify-between mt-3 pt-3 border-t border-dashed border-brand-100">
+            <div class="flex items-baseline gap-1">
+              <span class="text-4xl font-black leading-none tracking-tight bg-gradient-to-br from-rose-500 to-orange-400 bg-clip-text text-transparent">%${rate}</span>
+              <span class="text-[10px] font-extrabold text-rose-400 tracking-wider">İNDİRİM</span>
+            </div>
+            <div class="text-right">
+              <p class="text-[11px] text-slate-400 line-through">${formatMoney(b.price)}</p>
+              <p class="text-sm font-bold text-emerald-600">${formatMoney(newPrice)}</p>
+            </div>
+          </div>
+        </button>`;
+    }).join('');
+  }
+
+  function updateCountdown(now = new Date()) {
+    const el = $('#dealsCountdown');
+    if (el) el.textContent = formatCountdown(nextDealReset(now).getTime() - now.getTime());
+  }
+
+  /* Kiralama satırındaki fiyat alanı (paket kitaplarında özel ifade) */
+  function rentalPriceHTML(r) {
+    if (r.offerId) return `<p class="text-[11px] font-semibold text-violet-600 whitespace-nowrap">(Özel teklifle ${formatMoney(r.offerPrice)})</p>`;
+    return `<p class="text-xs font-semibold text-brand-600">${formatMoney(r.price)}</p>
+            ${r.discount ? `<p class="text-[10px] font-bold text-rose-500">%${r.discount} indirimli</p>` : ''}`;
+  }
+
+  /* --- 8.3 Son alınan kitaplar (aktif) --- */
+  function renderActiveRentals(now) {
+    const nowMs = now.getTime();
+    const list = rentals
+      .filter((r) => isActiveRental(r, nowMs))
+      .sort((a, b) => new Date(b.rentedAt) - new Date(a.rentedAt));
+
+    $('#activeCount').textContent = `${list.length} aktif`;
+
+    if (!list.length) {
+      $('#activeRentals').innerHTML = `<li>${emptyState('Şu anda aktif kiralama yok.')}</li>`;
+      return;
+    }
+
+    $('#activeRentals').innerHTML = list.map((r) => {
+      const b = getBook(r.bookId);
+      const usr = getUser(r.userId);
+      if (!b || !usr) return '';
+      const mine = r.userId === state.currentUserId;
+      return `
+        <li class="p-3 sm:p-4 rounded-xl border ${mine ? 'border-brand-200 bg-brand-50/40' : 'border-slate-100'} hover:border-brand-200 transition">
+          <div class="flex gap-3">
+            <button type="button" data-open-book="${b.id}" class="shrink-0">${coverHTML(b, 'sm')}</button>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <button type="button" data-open-book="${b.id}" class="block max-w-full text-left text-xs font-semibold text-slate-800 truncate hover:text-brand-600">${escapeHTML(b.title)}</button>
+                  <p class="text-[11px] text-slate-400 truncate">${typeLabel(b.type)}${r.offerId ? ' · 🎁 Paket' : ''}</p>
+                </div>
+                <div class="text-right shrink-0">${rentalPriceHTML(r)}</div>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-400">
+                <span class="flex items-center gap-1.5">${avatarHTML(usr)}<span class="text-slate-600 font-medium">${escapeHTML(usr.name)}</span>${mine ? '<span class="text-[9px] font-bold text-brand-600 bg-white px-1.5 py-px rounded-full shadow-soft">SEN</span>' : ''}</span>
+                <span>Kiralandı: ${formatDate(r.rentedAt, true)}</span>
+                <span>Bitiş: ${formatDate(r.dueAt, true)}</span>
+              </div>
+              <div class="mt-2.5 flex items-center gap-3">
+                <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div data-rental-bar="${r.id}" class="h-full rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
+                </div>
+                <span data-rental-left="${r.id}" class="text-[11px] font-semibold shrink-0 tabular-nums"></span>
+              </div>
+            </div>
+          </div>
+        </li>`;
+    }).join('');
+
+    // Çubukları bir sonraki karede doldur (soft animasyon)
+    requestAnimationFrame(() => list.forEach((r) => applyProgress(r.id, nowMs)));
+  }
+
+  /* --- 8.4 Süresi dolan son 3 kitap (aynı kartın alt satırları) --- */
+  function renderExpiredRentals(now) {
+    const nowMs = now.getTime();
+    const list = rentals
+      .filter((r) => isExpiredRental(r, nowMs))
+      .sort((a, b) => new Date(b.dueAt) - new Date(a.dueAt))
+      .slice(0, 3);
+
+    if (!list.length) {
+      $('#expiredRentals').innerHTML = `<li class="text-[11px] text-slate-400 py-2">Süresi dolan kiralama yok.</li>`;
+      return;
+    }
+
+    $('#expiredRentals').innerHTML = list.map((r) => {
+      const b = getBook(r.bookId);
+      const usr = getUser(r.userId);
+      if (!b || !usr) return '';
+      return `
+        <li class="flex items-center gap-3 p-2.5 sm:px-3 rounded-xl bg-slate-50/70 border border-slate-100">
+          <div class="opacity-60">${coverHTML(b, 'xs')}</div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-500 truncate">${escapeHTML(b.title)}</p>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-slate-400">
+              <span class="flex items-center gap-1.5">${avatarHTML(usr, 'w-4 h-4 text-[8px]')}${escapeHTML(usr.name)}</span>
+              <span>Bitiş: ${formatDate(r.dueAt, true)}</span>
+              ${r.offerId ? `<span class="text-violet-500">(Özel teklifle ${formatMoney(r.offerPrice)})</span>` : ''}
+            </div>
+          </div>
+          <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>Süresi Doldu
+          </span>
+        </li>`;
+    }).join('');
+  }
+
+  /* ==========================================================
+     9) KİTAPLAR SAYFASI
+     ========================================================== */
+  function renderBooks() {
+    setPageActions('books', isAdmin()
+      ? `<button type="button" data-quick="addBook" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Kitap Ekle</button>`
+      : '');
+
+    const now = Date.now();
+    const tabs = [
+      { key: 'all',   label: 'Tümü' },
+      { key: 'seri',  label: 'Seri' },
+      { key: 'ozel',  label: 'Özel' },
+      { key: 'album', label: 'Albüm' }
+    ];
+    const countOf = (k) => (k === 'all' ? books.length : books.filter((b) => b.type === k).length);
+    const list = books
+      .filter((b) => state.bookTab === 'all' || b.type === state.bookTab)
+      .sort((a, b) => b.writtenAt.localeCompare(a.writtenAt) || b.id - a.id);
+    const availableCount = list.filter((b) => !isBookRented(b, now)).length;
+
+    const tabBar = `
+      <div class="flex gap-1 p-1 bg-white rounded-2xl shadow-soft mb-5 overflow-x-auto soft-scroll w-full sm:w-auto sm:inline-flex">
+        ${tabs.map((t) => {
+          const active = state.bookTab === t.key;
+          return `
+            <button type="button" data-book-tab="${t.key}"
+              class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${active ? 'bg-gradient-to-r from-brand-500 to-brand-700 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600 hover:bg-brand-50/60'}">
+              ${t.key !== 'all' ? `<span class="w-1.5 h-1.5 rounded-full ${active ? 'bg-white' : BOOK_TYPES[t.key].dot}"></span>` : ''}
+              ${t.label}
+              <span class="text-[10px] px-1.5 py-px rounded-full ${active ? 'bg-white/25' : 'bg-brand-50 text-brand-600'}">${countOf(t.key)}</span>
+            </button>`;
+        }).join('')}
+      </div>`;
+
+    if (!list.length) {
+      $('#booksContent').innerHTML = tabBar + emptyState('Bu kategoride henüz kitap yok.');
+      return;
+    }
+
+    const rows = list.map((b) => {
+      const rented = isBookRented(b, now);
+      return `
+        <li>
+          <button type="button" data-open-book="${b.id}"
+            class="w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 hover:bg-brand-50/40 focus:bg-brand-50/60 focus:outline-none transition">
+            ${coverHTML(b, 'sm')}
+            <div class="flex-1 min-w-0">
+              <p class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</p>
+              <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">${icon('pencil', 'w-3 h-3')}${writtenAgo(b.writtenAt)}</p>
+            </div>
+            <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full ${rented ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">
+              <span class="w-1.5 h-1.5 rounded-full ${rented ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
+              <span class="hidden sm:inline">Durumu:</span> ${rented ? 'Kiralı' : 'Müsait'}
+            </span>
+            <span class="hidden sm:block text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
+          </button>
+        </li>`;
+    }).join('');
+
+    $('#booksContent').innerHTML = tabBar + `
+      <div class="bg-white rounded-2xl shadow-soft overflow-hidden">
+        <div class="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+          <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${availableCount} müsait</span></span>
+          <span class="hidden sm:inline">Sıralama: Yazıldığı tarih (yeni → eski)</span>
+        </div>
+        <ul class="divide-y divide-slate-100">${rows}</ul>
+      </div>`;
+  }
+
+  /* Kitap detay modalı (iki sütun + fiyat geçmişi zaman çizelgesi) */
+  function openBookModal(bookId, opts = {}) {
+    const b = getBook(bookId);
+    if (!b) return;
+    const u = currentUser();
+    const now = new Date();
+    const { rate, source } = getEffectiveDiscount(b, now);
+    const price = round2(b.price * (1 - rate / 100));
+    const active = activeRentalOf(b, now.getTime());
+    const holder = active ? getUser(active.userId) : null;
+    const check = bookRentCheck(b, u, price);
+    const admin = isAdmin();
+    const backOfferId = opts.backOfferId || '';
+    const logs = priceLogs.filter((l) => l.bookId === b.id).sort((x, y) => new Date(y.changedAt) - new Date(x.changedAt));
+
+    const info = (label, value, iconKey) => `
+      <div class="flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl bg-slate-50/80">
+        <span class="hidden sm:flex w-8 h-8 rounded-lg bg-white text-brand-500 shadow-soft items-center justify-center shrink-0">${icon(iconKey)}</span>
+        <div class="min-w-0">
+          <p class="text-[10px] text-slate-400">${label}</p>
+          <p class="text-xs font-semibold text-slate-700 truncate">${value}</p>
+        </div>
+      </div>`;
+
+    const timeline = logs.length
+      ? `<ol class="relative border-l-2 border-brand-100 ml-1.5 space-y-2.5">
+          ${logs.map((l) => {
+            const diff = round2(l.newPrice - l.oldPrice);
+            const up = diff > 0;
+            return `
+              <li class="relative pl-5">
+                <span class="absolute -left-[7px] top-3 w-3 h-3 rounded-full bg-white border-2 ${up ? 'border-rose-400' : 'border-emerald-400'}"></span>
+                <div class="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50/80">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[10px] text-slate-400">${formatLongDate(l.changedAt)} · ${formatTime(l.changedAt)}</p>
+                    <p class="text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
+                      <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
+                      <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
+                      <b class="text-slate-800">${formatMoney(l.newPrice)}</b>
+                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '+' : '−'}${formatMoney(Math.abs(diff))}</span>
+                    </p>
+                  </div>
+                  ${admin ? `<button type="button" data-delete-log="${l.id}" data-book-id="${b.id}" data-back-offer="${backOfferId}" title="Bu kaydı sil"
+                      class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
+                </div>
+              </li>`;
+          }).join('')}
+        </ol>`
+      : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitabın fiyatı henüz değişmedi.</p>';
+
+    openModal(`
+      <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-50 via-white to-white">
+        <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
+        <div class="absolute top-3 right-3 flex gap-1.5">
+          ${backOfferId ? `<button type="button" data-open-offer="${backOfferId}" class="h-8 px-3 rounded-full bg-white shadow-soft text-[11px] font-semibold text-brand-600 hover:bg-brand-50 flex items-center gap-1 transition">${icon('back', 'w-3.5 h-3.5')}Pakete dön</button>` : ''}
+          <button type="button" data-modal-close aria-label="Kapat" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close')}</button>
+        </div>
+        <div class="flex gap-4 sm:gap-5 ${backOfferId ? 'pt-6 sm:pt-0' : ''}">
+          ${coverHTML(b, 'lg')}
+          <div class="min-w-0 flex-1 pt-1 pr-2 sm:pr-24">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${typeChip(b.type)}
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${active ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">${active ? 'Kiralı' : 'Müsait'}</span>
+            </div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
+            <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-1">${icon('pencil', 'w-3 h-3')}${writtenAgo(b.writtenAt)}</p>
+            <div class="mt-3 flex items-end gap-2 flex-wrap">
+              ${rate ? `<span class="text-xs text-slate-400 line-through">${formatMoney(b.price)}</span>` : ''}
+              <span class="text-xl font-black ${rate ? 'text-emerald-600' : 'text-slate-800'} leading-none">${formatMoney(price)}</span>
+              ${rate ? `<span class="text-[10px] font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 px-2 py-1 rounded-lg">%${rate} · ${discountSourceLabel(source)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-5 sm:p-6 pt-4 space-y-5">
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="space-y-2.5">
+            ${info('Türü', typeLabel(b.type), 'tag')}
+            ${info('Fiyatı', formatMoney(b.price), 'wallet')}
+            ${info('Sayfa Sayısı', `${b.pages} sayfa`, 'pages')}
+            ${info('Kira Süresi', `${b.rentalDays} gün`, 'rentals')}
+          </div>
+          <div class="space-y-2.5">
+            ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'), 'pin')}
+            ${info('Çıkış Tarihi', isDateKey(b.releaseDate) ? formatLongDate(dateFromKey(b.releaseDate)) : '—', 'calendar')}
+            ${info('Çıkış Yılı', isDateKey(b.releaseDate) ? b.releaseDate.slice(0, 4) : '—', 'calendar')}
+            ${info('Yazar', escapeHTML(authorName(b)), 'pencil')}
+          </div>
+        </div>
+
+        ${active && holder ? `
+          <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-[11px] text-amber-700">
+            ${avatarHTML(holder, 'w-6 h-6 text-[10px]')}
+            <span class="flex-1 min-w-0"><b>${escapeHTML(holder.name)}</b> kiraladı · ${formatRemaining(new Date(active.dueAt) - now)}</span>
+          </div>` : ''}
+
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold text-slate-700">Fiyat Değişim Geçmişi</h4>
+            <span class="text-[10px] text-slate-400">${logs.length} kayıt${admin && logs.length ? ' · silmek için 🗑' : ''}</span>
+          </div>
+          ${timeline}
+        </div>
+
+        <div class="pt-1 space-y-3">
+          ${canRent(u) ? `
+            <div class="flex items-center justify-between rounded-xl border border-brand-100 px-3 py-2.5 text-xs">
+              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
+              <span class="font-semibold text-slate-700">
+                ${formatMoney(u.balance)}
+                ${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - price))}</span>` : ''}
+              </span>
+            </div>` : ''}
+          ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${check.reason}</p>`}
+          <div class="grid grid-cols-2 gap-2.5">
+            ${admin
+              ? `<button type="button" data-edit-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>`
+              : `<button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>`}
+            <button type="button" data-rent-book="${b.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">
+              ${formatMoney(price)} · ${b.rentalDays} gün Kirala
+            </button>
+          </div>
+        </div>
+      </div>`, 'lg');
+  }
+
+  function bookRentCheck(book, user, price) {
+    if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
+    if (isBookRented(book)) return { ok: false, reason: 'Bu kitap şu an kirada.' };
+    if (user.balance < price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(price - user.balance)} eksik.` };
+    return { ok: true };
+  }
+
+  function rentBook(bookId) {
+    const b = getBook(bookId);
+    const u = currentUser();
+    if (!b || !u) return;
+
+    const { rate, source } = getEffectiveDiscount(b);
+    const price = round2(b.price * (1 - rate / 100));
+    const check = bookRentCheck(b, u, price);
+    if (!check.ok) return toast(check.reason, 'error');
+
+    const now = Date.now();
+    u.balance = round2(u.balance - price);
+    rentals.push({
+      id: uid('r'), bookId: b.id, userId: u.id,
+      listPrice: b.price, price, discount: rate, discountSource: rate ? source : null,
+      rentedAt: isoAt(now), dueAt: isoAt(now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS), returnedAt: null
+    });
+
+    closeModal();
+    renderProfile();
+    renderCurrentPage();
+    toast(`"${b.title}" kiralandı · ${formatMoney(price)}`, 'success');
+  }
+
+  function deletePriceLog(logId, bookId, backOfferId) {
+    if (!requireAdmin()) return;
+    const i = priceLogs.findIndex((l) => l.id === logId);
+    if (i === -1) return;
+    priceLogs.splice(i, 1);
+    toast('Fiyat geçmişi kaydı silindi.', 'info');
+    openBookModal(bookId, { backOfferId });
+    if (state.route === 'price-logs') renderPriceLogs();
+  }
+
+  /* ==========================================================
+     10) KULLANICILAR — LİDERLİK TABLOSU
+     ========================================================== */
+  const RANK_TONES = ['bg-amber-100 text-amber-700', 'bg-slate-100 text-slate-600', 'bg-orange-100 text-orange-700'];
+  const rankTone = (i) => RANK_TONES[i] || 'bg-brand-50 text-brand-600';
+
+  function renderUsers() {
+    setPageActions('users', '');
+    const board = computeLeaderboard();
+    const maxSpent = Math.max(1, ...board.map((x) => x.spent));
+    const totalSpent = sum(board, (x) => x.spent);
+    const totalCount = board.reduce((s, x) => s + x.count, 0);
+    const totalBalance = sum(users, (u) => u.balance);
+    const medal = (i, row) => (i < 3 && row.spent > 0 ? MEDALS[i] : '');
+    const meTag = (u) => u.id === state.currentUserId
+      ? '<span class="text-[9px] font-bold text-brand-600 bg-brand-50 px-1.5 py-px rounded-full">SEN</span>' : '';
+    const lockTag = (u) => canViewStats(u.id)
+      ? `<span class="text-brand-300 group-hover:text-brand-500 transition">${icon('chart', 'w-3.5 h-3.5')}</span>`
+      : `<span class="text-slate-300" title="Yalnızca kendi istatistiklerini görebilirsin">${icon('lock', 'w-3.5 h-3.5')}</span>`;
+
+    /* Özet kartlar */
+    const summary = [
+      { label: 'Toplam Harcama',  value: formatMoney(totalSpent),   icon: 'tag',    tone: 'bg-rose-50 text-rose-500' },
+      { label: 'Toplam Kiralama', value: `${totalCount} kitap`,     icon: 'books',  tone: 'bg-brand-50 text-brand-600' },
+      { label: 'Aile Bakiyesi',   value: formatMoney(totalBalance), icon: 'wallet', tone: 'bg-emerald-50 text-emerald-600' }
+    ].map((c) => `
+      <div class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-center gap-3">
+        <span class="w-9 h-9 rounded-xl ${c.tone} hidden sm:flex items-center justify-center shrink-0">${icon(c.icon)}</span>
+        <div class="min-w-0">
+          <p class="text-[10px] sm:text-[11px] text-slate-400 font-medium">${c.label}</p>
+          <p class="text-xs sm:text-sm font-bold text-slate-800 truncate">${c.value}</p>
+        </div>
+      </div>`).join('');
+
+    /* Podyum (2 - 1 - 3) */
+    const podiumOrder = [1, 0, 2].filter((i) => board[i]);
+    const stepCls = { 0: 'h-16 from-amber-300 to-amber-400', 1: 'h-11 from-slate-200 to-slate-300', 2: 'h-8 from-orange-200 to-orange-300' };
+    const podium = podiumOrder.map((i) => {
+      const row = board[i];
+      return `
+        <div class="flex flex-col items-center min-w-0">
+          <button type="button" data-user-stats="${row.user.id}"
+            class="group w-full bg-white rounded-2xl shadow-soft p-3 sm:p-4 text-center flex flex-col items-center hover:shadow-soft-lg hover:-translate-y-0.5 transition ${i === 0 ? 'ring-2 ring-amber-200' : ''}">
+            <span class="text-2xl sm:text-3xl leading-none mb-2">${MEDALS[i]}</span>
+            ${avatarHTML(row.user, i === 0 ? 'w-12 h-12 sm:w-14 sm:h-14 text-sm' : 'w-10 h-10 sm:w-12 sm:h-12 text-xs')}
+            <p class="text-[11px] sm:text-xs font-semibold text-slate-800 mt-2 truncate max-w-full">${escapeHTML(row.user.name)}</p>
+            <p class="text-xs sm:text-sm font-bold text-brand-600">${formatMoney(row.spent)}</p>
+            <p class="text-[10px] text-slate-400">${row.count} kitap</p>
+          </button>
+          <div class="w-4/5 mt-2 rounded-t-xl bg-gradient-to-b ${stepCls[i]} flex items-start justify-center pt-1 text-white text-sm font-black">${i + 1}</div>
+        </div>`;
+    }).join('');
+
+    /* Masaüstü tablo */
+    const tableRows = board.map((row, i) => {
+      const u = row.user;
+      const mine = u.id === state.currentUserId;
+      const pct = Math.round((row.spent / maxSpent) * 100);
+      return `
+        <tr data-user-stats="${u.id}" class="group cursor-pointer ${mine ? 'bg-brand-50/50' : ''} hover:bg-brand-50/40 transition">
+          <td class="pl-5 pr-2 py-3.5"><span class="w-7 h-7 rounded-full ${rankTone(i)} text-[11px] font-bold flex items-center justify-center">${i + 1}</span></td>
+          <td class="px-2 py-3.5">
+            <div class="flex items-center gap-3">
+              ${avatarHTML(u, 'w-9 h-9 text-xs')}
+              <div class="min-w-0">
+                <p class="text-xs font-semibold text-slate-800 flex items-center gap-1.5 group-hover:text-brand-600 transition">${escapeHTML(u.name)} ${medal(i, row) ? `<span class="text-base leading-none">${medal(i, row)}</span>` : ''} ${meTag(u)} ${lockTag(u)}</p>
+                <p class="mt-0.5">${roleChip(u.role)}</p>
+              </div>
+            </div>
+          </td>
+          <td class="px-2 py-3.5 text-center">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-semibold">${icon('books', 'w-3 h-3')}${row.count}</span>
+          </td>
+          <td class="px-2 py-3.5 text-right">
+            <p class="text-xs font-bold text-slate-800">${formatMoney(row.spent)}</p>
+            <div class="ml-auto mt-1.5 w-24 h-1 bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600" style="width:${pct}%"></div>
+            </div>
+          </td>
+          <td class="pl-2 pr-5 py-3.5 text-right text-xs font-semibold text-emerald-600">${formatMoney(u.balance)}</td>
+        </tr>`;
+    }).join('');
+
+    /* Mobil kartlar */
+    const mobileRows = board.map((row, i) => {
+      const u = row.user;
+      const mine = u.id === state.currentUserId;
+      return `
+        <li>
+          <button type="button" data-user-stats="${u.id}" class="group w-full text-left bg-white rounded-2xl shadow-soft p-3.5 ${mine ? 'ring-1 ring-brand-200' : ''} active:scale-[.99] transition">
+            <div class="flex items-center gap-3">
+              <span class="w-7 h-7 rounded-full ${rankTone(i)} text-[11px] font-bold flex items-center justify-center shrink-0">${i + 1}</span>
+              ${avatarHTML(u, 'w-10 h-10 text-xs')}
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">${escapeHTML(u.name)} ${medal(i, row) ? `<span class="text-base leading-none">${medal(i, row)}</span>` : ''} ${meTag(u)}</p>
+                <p class="mt-0.5">${roleChip(u.role)}</p>
+              </div>
+              ${lockTag(u)}
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3">
+              <div class="rounded-xl bg-brand-50/70 px-2.5 py-2"><p class="text-[10px] text-slate-400">Kiralanan</p><p class="text-xs font-bold text-brand-700">${row.count} kitap</p></div>
+              <div class="rounded-xl bg-slate-50 px-2.5 py-2"><p class="text-[10px] text-slate-400">Harcama</p><p class="text-xs font-bold text-slate-800">${formatMoney(row.spent)}</p></div>
+              <div class="rounded-xl bg-emerald-50/70 px-2.5 py-2"><p class="text-[10px] text-slate-400">Bakiye</p><p class="text-xs font-bold text-emerald-600">${formatMoney(u.balance)}</p></div>
+            </div>
+          </button>
+        </li>`;
+    }).join('');
+
+    $('#usersContent').innerHTML = `
+      <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-6">${summary}</div>
+
+      ${board.length >= 3 ? `<div class="grid grid-cols-3 gap-2 sm:gap-6 items-end max-w-2xl mx-auto mb-6">${podium}</div>` : ''}
+
+      <div class="hidden md:block bg-white rounded-2xl shadow-soft overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800">Liderlik Tablosu</h2>
+            <p class="text-[11px] text-slate-400">Kitaplar için en çok bakiye harcayanlar · detaylı istatistik için satıra tıkla</p>
+          </div>
+          <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-2.5 py-1 rounded-full">Sıralama: Toplam Harcama ↓</span>
+        </div>
+        <table class="w-full">
+          <thead class="bg-brand-50/50 text-[10px] uppercase tracking-wider text-slate-400">
+            <tr>
+              <th class="pl-5 pr-2 py-3 text-left font-semibold w-16">Sıra</th>
+              <th class="px-2 py-3 text-left font-semibold">Kullanıcı</th>
+              <th class="px-2 py-3 text-center font-semibold">Kiralanan Kitap</th>
+              <th class="px-2 py-3 text-right font-semibold">Toplam Harcama</th>
+              <th class="pl-2 pr-5 py-3 text-right font-semibold">Güncel Bakiye</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">${tableRows}</tbody>
+        </table>
+      </div>
+
+      <div class="md:hidden">
+        <h2 class="text-sm font-bold text-slate-800 mb-1 px-1">Liderlik Tablosu</h2>
+        <p class="text-[11px] text-slate-400 mb-3 px-1">Detaylı istatistik için karta dokun</p>
+        <ul class="space-y-2.5">${mobileRows}</ul>
+      </div>`;
+  }
+
+  /* Detaylı Aile Üyesi İstatistikleri modalı */
+  function openUserStatsModal(userId) {
+    const u = getUser(userId);
+    if (!u) return;
+    if (!canViewStats(userId)) return toast('Yalnızca kendi istatistiklerini görüntüleyebilirsin.', 'error');
+
+    const s = userStats(userId);
+    const board = computeLeaderboard();
+    const rank = board.findIndex((x) => x.user.id === userId);
+    const self = userId === state.currentUserId;
+
+    const tiles = [
+      { label: 'Kiralanan Kitap', value: `${s.count}`,             tone: 'text-brand-700', bg: 'bg-brand-50/70' },
+      { label: 'Toplam Harcama',  value: formatMoney(s.spent),     tone: 'text-slate-800', bg: 'bg-slate-50' },
+      { label: 'Güncel Bakiye',   value: formatMoney(u.balance),   tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
+      { label: 'Sıralama',        value: `#${rank + 1} ${rank < 3 && s.spent > 0 ? MEDALS[rank] : ''}`, tone: 'text-amber-600', bg: 'bg-amber-50/70' }
+    ].map((t) => `
+      <div class="rounded-2xl ${t.bg} px-3 py-3">
+        <p class="text-[10px] text-slate-400 font-medium">${t.label}</p>
+        <p class="text-sm sm:text-base font-bold ${t.tone} truncate">${t.value}</p>
+      </div>`).join('');
+
+    const purchasesHTML = s.purchases.length
+      ? s.purchases.map((p) => {
+          const pBooks = p.bookIds.map(getBook).filter(Boolean);
+          return `
+            <li class="flex items-center gap-3 p-3 rounded-xl bg-violet-50/40 border border-violet-100">
+              <div class="flex -space-x-4 shrink-0">${pBooks.map((b) => `<div class="ring-2 ring-white rounded-md">${coverHTML(b, 'xs')}</div>`).join('')}</div>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-semibold text-slate-800 truncate">${escapeHTML(p.offerTitle)}</p>
+                <p class="text-[10px] text-slate-400 truncate">${pBooks.map((b) => escapeHTML(b.title)).join(' · ')}</p>
+                <p class="text-[10px] text-slate-400">${formatDate(p.purchasedAt)}</p>
+              </div>
+              <div class="text-right shrink-0">
+                <p class="text-[10px] text-slate-400 line-through">${formatMoney(p.normalTotal)}</p>
+                <p class="text-xs font-bold text-violet-600">${formatMoney(p.price)}</p>
+                <p class="text-[10px] font-semibold text-emerald-600">+${formatMoney(Math.max(0, p.normalTotal - p.price))}</p>
+              </div>
+            </li>`;
+        }).join('')
+      : '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz özel teklif kiralanmadı.</li>';
+
+    const discountedHTML = s.discounted.length
+      ? s.discounted.map((r) => {
+          const b = getBook(r.bookId);
+          return `
+            <li class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50/80">
+              ${coverHTML(b, 'xs')}
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
+                <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-sky-50 text-sky-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>
+                  <span class="text-[10px] text-slate-400">${formatDate(r.rentedAt)}</span>
+                </p>
+              </div>
+              <div class="text-right shrink-0">
+                <p class="text-[10px] text-slate-400 line-through">${formatMoney(r.listPrice ?? r.price)}</p>
+                <p class="text-xs font-bold text-slate-800">${formatMoney(r.price)}</p>
+                <p class="text-[10px] font-semibold text-emerald-600">+${formatMoney(s.saveOf(r))}</p>
+              </div>
+            </li>`;
+        }).join('')
+      : '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz indirimli kitap kiralanmadı.</li>';
+
+    openModal(`
+      <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
+        <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
+        <span class="absolute right-20 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+        <p class="relative text-[11px] font-semibold text-brand-100">Detaylı Aile Üyesi İstatistikleri 📊</p>
+        <div class="relative flex items-center gap-3.5 mt-3">
+          ${avatarHTML(u, 'w-14 h-14 text-base ring-4 ring-white/25')}
+          <div class="min-w-0">
+            <h3 class="text-lg font-bold truncate">${escapeHTML(u.name)}</h3>
+            <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/20">${ROLES[u.role]?.label}</span>
+              <span class="text-[11px] text-brand-100 truncate">${u.email ? '🔗 ' + escapeHTML(u.email) : 'Bağlı hesap yok'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-5 sm:p-6 space-y-5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">${tiles}</div>
+
+        <div class="rounded-2xl p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
+          <p class="text-[11px] font-semibold text-emerald-700">İndirimlerden Toplam ${self ? 'Kazancınız' : 'Kazancı'}</p>
+          <p class="text-2xl font-black text-emerald-600 mt-0.5">${formatMoney(s.savings.total)}</p>
+          <div class="flex flex-wrap gap-1.5 mt-2.5">
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Günün İndirimi: ${formatMoney(s.savings.deal)}</span>
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-sky-600">Yeni Kitap: ${formatMoney(s.savings.new)}</span>
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-violet-600">Özel Teklif: ${formatMoney(s.savings.offer)}</span>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <h4 class="text-xs font-bold text-slate-700">🎁 Satın Aldığı Özel Teklifler</h4>
+            <span class="text-[10px] text-slate-400">${s.purchases.length} paket</span>
+          </div>
+          <ul class="space-y-2">${purchasesHTML}</ul>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <h4 class="text-xs font-bold text-slate-700">🏷️ İndirimli Aldığı Kitaplar</h4>
+            <span class="text-[10px] text-slate-400">${s.discounted.length} kitap</span>
+          </div>
+          <ul class="space-y-2">${discountedHTML}</ul>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="button" data-modal-close class="${BTN_SOFT}">Kapat</button>
+        </div>
+      </div>`, 'lg');
+  }
+
+  /* ==========================================================
+     11) FİYAT DEĞİŞİMLERİ LOGU
+     ========================================================== */
+  function renderPriceLogs() {
+    setPageActions('price-logs', isAdmin()
+      ? `<button type="button" data-quick="changePrice" class="${BTN_PRIMARY}">${icon('pencil', 'w-3.5 h-3.5')}Fiyat Güncelle</button>`
+      : '');
+
+    const logs = [...priceLogs].sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt));
+    const ups = logs.filter((l) => l.newPrice > l.oldPrice).length;
+    const downs = logs.length - ups;
+
+    const summary = `
+      <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+        ${[
+          { label: 'Toplam Değişim', value: logs.length, tone: 'text-slate-800' },
+          { label: 'Fiyat Artışı',   value: ups,         tone: 'text-rose-500' },
+          { label: 'Fiyat Düşüşü',   value: downs,       tone: 'text-emerald-600' }
+        ].map((c) => `
+          <div class="bg-white rounded-2xl shadow-soft p-3 sm:p-4">
+            <p class="text-[10px] sm:text-[11px] text-slate-400 font-medium">${c.label}</p>
+            <p class="text-lg font-bold ${c.tone}">${c.value}</p>
+          </div>`).join('')}
+      </div>`;
+
+    if (!logs.length) {
+      $('#priceLogsContent').innerHTML = summary + emptyState('Henüz fiyat değişikliği yapılmadı.');
+      return;
+    }
+
+    // Tarihe göre grupla (yerel gün)
+    const groups = new Map();
+    logs.forEach((l) => {
+      const key = localDateKey(l.changedAt);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(l);
+    });
+
+    const groupsHTML = [...groups.entries()].map(([key, items]) => {
+      const rel = relativeDay(dateFromKey(key));
+      const relChip = (rel === 'Bugün' || rel === 'Dün')
+        ? `<span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">${rel}</span>` : '';
+      const rows = items.map((l) => {
+        const b = getBook(l.bookId);
+        const by = getUser(l.changedBy);
+        const diff = round2(l.newPrice - l.oldPrice);
+        const up = diff > 0;
+        const diffChip = `<span class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold tabular-nums ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '+' : '−'}${formatMoney(Math.abs(diff))}</span>`;
+        const priceFlow = `
+          <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
+          <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
+          <span class="font-semibold text-slate-800">${formatMoney(l.newPrice)}</span>`;
+        return `
+          <li>
+            <button type="button" ${b ? `data-open-book="${b.id}"` : 'disabled'} class="w-full text-left flex items-center gap-3 px-3 sm:px-4 py-3 hover:bg-slate-50/70 transition">
+              ${coverHTML(b, 'sm')}
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-semibold text-slate-800 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
+                <p class="text-[11px] text-slate-400 truncate">${b ? `#${b.id} · ${typeLabel(b.type)}` : ''}${by ? ` · ${escapeHTML(by.name)}` : ''}</p>
+                <p class="sm:hidden flex items-center gap-1.5 text-[11px] mt-1">${priceFlow}</p>
+              </div>
+              <div class="hidden sm:flex items-center gap-2 text-xs shrink-0">${priceFlow}</div>
+              <div class="shrink-0 text-right flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3">
+                ${diffChip}
+                <span class="text-[11px] font-medium text-slate-400 tabular-nums sm:w-10">${formatTime(l.changedAt)}</span>
+              </div>
+            </button>
+          </li>`;
+      }).join('');
+
+      return `
+        <div>
+          <div class="flex items-center gap-2.5 mb-2.5 px-1">
+            <span class="text-xs font-bold text-slate-700">${formatLongDate(dateFromKey(key))}</span>
+            ${relChip}
+            <span class="flex-1 h-px bg-brand-100"></span>
+            <span class="text-[10px] text-slate-400">${items.length} değişim</span>
+          </div>
+          <ul class="bg-white rounded-2xl shadow-soft divide-y divide-slate-100 overflow-hidden">${rows}</ul>
+        </div>`;
+    }).join('');
+
+    $('#priceLogsContent').innerHTML = summary + `<div class="space-y-6">${groupsHTML}</div>`;
+  }
+
+  /* ==========================================================
+     12) DUYURULAR (Haberler + Güncellemeler)
+     ========================================================== */
+  const versionParts = (v) => (String(v).match(/\d+/g) || []).map(Number);
+  const compareVersions = (a, b) => {
+    const pa = versionParts(a), pb = versionParts(b);
+    for (let i = 0; i < 3; i++) { const d = (pb[i] || 0) - (pa[i] || 0); if (d) return d; }
+    return 0;
+  };
+  const normalizeVersion = (v) => {
+    const m = String(v).trim().match(/^v?(\d+)\.(\d+)(?:\.(\d+))?$/i);
+    return m ? `v${m[1]}.${m[2]}.${m[3] || 0}` : null;
+  };
+
+  const sortedNews = () => announcements
+    .filter((a) => a.type === 'news')
+    .sort((a, b) => (b.pinned - a.pinned) || (new Date(b.createdAt) - new Date(a.createdAt)));
+
+  const sortedUpdates = () => announcements
+    .filter((a) => a.type === 'update')
+    .sort((a, b) => (new Date(b.releaseDate) - new Date(a.releaseDate)) || compareVersions(a.version, b.version));
+
+  function renderAnnouncements() {
+    markAnnouncementsRead();   // sayfa açıldığı an rozet sıfırlanır
+
+    const admin = isAdmin();
+    setPageActions('announcements', admin
+      ? (state.annTab === 'news'
+          ? `<button type="button" data-quick="addBook" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Kitap Ekle</button>`
+          : `<button type="button" data-quick="addUpdate" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Yeni Sürüm Notu</button>`)
+      : '');
+
+    const newsCount = announcements.filter((a) => a.type === 'news').length;
+    const updCount = announcements.filter((a) => a.type === 'update').length;
+    const tabBtn = (key, label, count, iconKey) => {
+      const active = state.annTab === key;
+      return `
+        <button type="button" data-ann-tab="${key}"
+          class="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition ${active ? 'bg-gradient-to-r from-brand-500 to-brand-700 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600'}">
+          ${icon(iconKey, 'w-3.5 h-3.5')}${label}
+          <span class="text-[10px] px-1.5 py-px rounded-full ${active ? 'bg-white/25' : 'bg-brand-50 text-brand-600'}">${count}</span>
+        </button>`;
+    };
+
+    $('#annContent').innerHTML = `
+      <div class="inline-flex p-1 bg-white rounded-full shadow-soft mb-5">
+        ${tabBtn('news', 'Haberler', newsCount, 'news')}
+        ${tabBtn('update', 'Güncellemeler', updCount, 'sparkles')}
+      </div>
+      <div id="annBody" class="page-enter"></div>`;
+
+    if (state.annTab === 'news') renderNewsTab();
+    else renderUpdatesTab();
+  }
+
+  const freshChip = (id) => state.freshAnnIds.has(id)
+    ? '<span class="text-[9px] font-bold text-white bg-rose-500 px-1.5 py-px rounded-full">YENİ</span>' : '';
+
+  function renderNewsTab() {
+    const list = sortedNews();
+    if (!list.length) { $('#annBody').innerHTML = emptyState('Henüz haber yok.'); return; }
+
+    $('#annBody').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${list.map((a) => {
+      const book = a.bookId ? getBook(a.bookId) : null;
+      const author = getUser(a.authorId);
+      const isBook = a.category === 'Yeni Kitap';
+      return `
+        <button type="button" data-open-ann="${a.id}"
+          class="text-left bg-white rounded-2xl shadow-soft p-4 sm:p-5 flex gap-4 border border-transparent hover:border-brand-100 hover:shadow-soft-lg hover:-translate-y-0.5 transition duration-200 focus:outline-none focus:ring-2 focus:ring-brand-200">
+          ${book ? coverHTML(book, 'md') : `<span class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 flex items-center justify-center shrink-0">${icon('announcements', 'w-6 h-6')}</span>`}
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${isBook ? 'bg-emerald-50 text-emerald-600' : 'bg-brand-50 text-brand-600'}">${escapeHTML(a.category)}</span>
+              ${a.pinned ? '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">📌 Sabit</span>' : ''}
+              ${freshChip(a.id)}
+            </div>
+            <p class="text-sm font-semibold text-slate-800 mt-1.5 line-clamp-2">${escapeHTML(a.title)}</p>
+            <p class="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">${escapeHTML(a.body)}</p>
+            <div class="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-400">
+              ${author ? avatarHTML(author, 'w-4 h-4 text-[8px]') + escapeHTML(author.name) + ' ·' : ''}
+              <span>${relativeDay(a.createdAt)}</span>
+            </div>
+          </div>
+        </button>`;
+    }).join('')}</div>`;
+  }
+
+  function renderUpdatesTab() {
+    const years = [...new Set(announcements.filter((a) => a.type === 'update').map((a) => a.year))].sort((a, b) => b - a);
+    if (state.updYear !== 'all' && !years.includes(Number(state.updYear))) state.updYear = 'all';
+
+    $('#annBody').innerHTML = `
+      <div class="bg-white rounded-2xl shadow-soft p-3 flex flex-col sm:flex-row gap-2.5 mb-5">
+        <label class="relative flex-1">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300">${icon('search', 'w-4 h-4')}</span>
+          <input id="updQuery" type="text" value="${escapeHTML(state.updQuery)}" placeholder="Sürüme göre ara (örn. 1.1 veya v1.0.0)"
+            class="${INPUT_CLS} pl-9" />
+        </label>
+        <select id="updYearFilter" class="${INPUT_CLS} sm:w-40">
+          <option value="all">Tüm yıllar</option>
+          ${years.map((y) => `<option value="${y}" ${String(state.updYear) === String(y) ? 'selected' : ''}>${y}</option>`).join('')}
+        </select>
+      </div>
+      <div id="updList"></div>`;
+    renderUpdateList();
+  }
+
+  function renderUpdateList() {
+    const q = state.updQuery.trim().toLowerCase().replace(/^v/, '');
+    const list = sortedUpdates().filter((a) =>
+      (state.updYear === 'all' || String(a.year) === String(state.updYear)) &&
+      (!q || a.version.toLowerCase().replace(/^v/, '').startsWith(q)));
+
+    if (!list.length) { $('#updList').innerHTML = emptyState('Filtreye uyan sürüm notu bulunamadı.'); return; }
+
+    const admin = isAdmin();
+    $('#updList').innerHTML = `
+      <p class="text-[11px] text-slate-400 mb-3 px-1">${list.length} sürüm notu</p>
+      <ol class="relative border-l-2 border-brand-100 ml-2 sm:ml-3 space-y-4">
+        ${list.map((a, idx) => `
+          <li class="relative pl-5 sm:pl-6">
+            <span class="absolute -left-[9px] top-5 w-4 h-4 rounded-full bg-white border-2 ${idx === 0 ? 'border-brand-500' : 'border-brand-200'}"></span>
+            <div data-open-ann="${a.id}" role="button" tabindex="0"
+              class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 cursor-pointer border border-transparent hover:border-brand-100 hover:shadow-soft-lg transition focus:outline-none focus:ring-2 focus:ring-brand-200">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-bold text-white bg-gradient-to-r from-brand-500 to-brand-700 px-2.5 py-1 rounded-lg">${escapeHTML(a.version)}</span>
+                  ${idx === 0 && state.updYear === 'all' && !q ? '<span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Güncel</span>' : ''}
+                  <span class="text-[11px] text-slate-400">${formatLongDate(dateFromKey(a.releaseDate))}</span>
+                  ${freshChip(a.id)}
+                </div>
+                ${admin ? `
+                  <div class="flex gap-1 shrink-0">
+                    <button type="button" data-edit-update="${a.id}" title="Düzenle" class="${BTN_ICON} text-slate-400 hover:text-brand-600 hover:bg-brand-50">${icon('pencil', 'w-3.5 h-3.5')}</button>
+                    <button type="button" data-delete-update="${a.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>
+                  </div>` : ''}
+              </div>
+              ${a.title ? `<p class="text-sm font-semibold text-slate-800 mt-2">${escapeHTML(a.title)}</p>` : ''}
+              <ul class="mt-2 space-y-1">
+                ${a.items.slice(0, 3).map((it) => `
+                  <li class="flex items-start gap-2 text-xs text-slate-500">
+                    <span class="mt-0.5 text-emerald-500 shrink-0">${icon('check', 'w-3.5 h-3.5')}</span><span>${escapeHTML(it)}</span>
+                  </li>`).join('')}
+              </ul>
+              ${a.items.length > 3 ? `<p class="text-[11px] font-medium text-brand-600 mt-2">+${a.items.length - 3} yenilik daha</p>` : ''}
+            </div>
+          </li>`).join('')}
+      </ol>`;
+  }
+
+  /* Geniş okuma modalı */
+  function openAnnouncementModal(id) {
+    const a = getAnn(id);
+    if (!a) return;
+    const author = getUser(a.authorId);
+
+    if (a.type === 'news') {
+      const book = a.bookId ? getBook(a.bookId) : null;
+      let bookBox = '';
+      if (book) {
+        const now = new Date();
+        const eff = getEffectiveDiscount(book, now);
+        const price = round2(book.price * (1 - eff.rate / 100));
+        const leftMs = book.newDiscountUntil ? new Date(book.newDiscountUntil) - now : 0;
+        bookBox = `
+          <div class="mt-6 flex gap-4 p-4 rounded-2xl bg-gradient-to-br from-brand-50 to-white border border-brand-100">
+            ${coverHTML(book, 'md')}
+            <div class="min-w-0 flex-1">
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-brand-500">#${book.id} · ${typeLabel(book.type)}</p>
+              <p class="text-sm font-bold text-slate-800">${escapeHTML(book.title)}</p>
+              <p class="text-xs text-slate-400">${escapeHTML(authorName(book))}</p>
+              <div class="flex items-center gap-2 mt-2 flex-wrap">
+                ${eff.rate ? `<span class="text-[11px] text-slate-400 line-through">${formatMoney(book.price)}</span>` : ''}
+                <span class="text-sm font-bold ${eff.rate ? 'text-emerald-600' : 'text-slate-800'}">${formatMoney(price)}</span>
+                ${eff.rate ? `<span class="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">%${eff.rate} ${discountSourceLabel(eff.source)}</span>` : ''}
+              </div>
+              ${eff.source === 'new' && leftMs > 0 ? `<p class="text-[11px] text-slate-400 mt-1">Yeni kitap indirimi için ${formatRemaining(leftMs)}</p>` : ''}
+              <button type="button" data-open-book="${book.id}" class="mt-2.5 ${BTN_SOFT} !py-1.5">Kitabı İncele ${icon('arrow', 'w-3.5 h-3.5')}</button>
+            </div>
+          </div>`;
+      }
+
+      openModal(`
+        <div class="relative p-6 sm:p-8 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
+          <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
+          <span class="absolute right-16 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
+          <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+          <span class="relative inline-block text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white/20">${escapeHTML(a.category)}</span>
+          <h3 class="relative text-lg sm:text-xl font-bold mt-3 pr-8 leading-snug">${escapeHTML(a.title)}</h3>
+          <div class="relative flex items-center gap-2 mt-3 text-[11px] text-brand-100">
+            ${author ? avatarHTML(author, 'w-5 h-5 text-[9px] ring-2 ring-white/40') + `<span class="text-white font-medium">${escapeHTML(author.name)}</span> ·` : ''}
+            <span>${formatLongDate(a.createdAt)}, ${formatTime(a.createdAt)}</span>
+          </div>
+        </div>
+        <div class="p-6 sm:p-8">
+          <div class="space-y-3 text-sm text-slate-600 leading-relaxed">
+            ${a.body.split('\n').filter(Boolean).map((p) => `<p>${escapeHTML(p)}</p>`).join('')}
+          </div>
+          ${bookBox}
+          <div class="mt-6 flex justify-end">
+            <button type="button" data-modal-close class="${BTN_SOFT}">Kapat</button>
+          </div>
+        </div>`, 'lg');
+      return;
+    }
+
+    // Güncelleme (sürüm notu)
+    openModal(`
+      <div class="relative p-6 sm:p-8 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
+        <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+        <p class="relative text-[11px] text-brand-100 font-medium">Sürüm Notu</p>
+        <p class="relative text-3xl sm:text-4xl font-black tracking-tight mt-1">${escapeHTML(a.version)}</p>
+        ${a.title ? `<p class="relative text-sm font-semibold mt-2 pr-8">${escapeHTML(a.title)}</p>` : ''}
+        <div class="relative flex flex-wrap gap-2 mt-4">
+          <span class="text-[11px] px-2.5 py-1 rounded-full bg-white/20">📅 ${formatLongDate(dateFromKey(a.releaseDate))}</span>
+          <span class="text-[11px] px-2.5 py-1 rounded-full bg-white/20">Yayın yılı: ${a.year}</span>
+        </div>
+      </div>
+      <div class="p-6 sm:p-8">
+        <p class="text-xs font-semibold text-slate-500 mb-3">Yenilikler (${a.items.length})</p>
+        <ol class="space-y-2.5">
+          ${a.items.map((it, i) => `
+            <li class="flex items-start gap-3 p-3 rounded-xl bg-slate-50/70">
+              <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 text-[11px] font-bold flex items-center justify-center shrink-0">${i + 1}</span>
+              <span class="text-sm text-slate-600 leading-relaxed">${escapeHTML(it)}</span>
+            </li>`).join('')}
+        </ol>
+        <div class="mt-6 flex flex-wrap justify-end gap-2">
+          ${isAdmin() ? `
+            <button type="button" data-delete-update="${a.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}Sil</button>
+            <button type="button" data-edit-update="${a.id}" class="${BTN_SOFT}">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>` : ''}
+          <button type="button" data-modal-close class="${BTN_PRIMARY}">Kapat</button>
+        </div>
+      </div>`, 'lg');
+  }
+
+  /* ==========================================================
+     13) ÖZEL TEKLİFLER — 3 KİTAPLI VİTRİN
+     ========================================================== */
+  const offerEnd = (o) => { const d = dateFromKey(o.validUntil); d.setHours(23, 59, 59, 999); return d; };
+  const isOfferActive = (o, now = new Date()) => offerEnd(o) >= now;
+  const offerBooks = (o) => o.items.map((it) => getBook(it.bookId)).filter(Boolean);
+  const offerNormalTotal = (o) => sum(offerBooks(o), (b) => b.price);
+  const offerRate = (o) => { const n = offerNormalTotal(o); return n > 0 ? Math.max(0, Math.round((1 - o.price / n) * 100)) : 0; };
+  const offerPurchaseCount = (o) => offerPurchases.filter((p) => p.offerId === o.id).length;
+
+  /* 3 kapak yan yana, hafif üst üste — 3D derinlikli vitrin */
+  function showcaseHTML(o, size = 'md') {
+    const dims = size === 'lg' ? 'w-28 h-40 sm:w-32 sm:h-48' : 'w-24 h-36';
+    const covers = o.items.slice(0, 3).map((it, i) => {
+      const b = getBook(it.bookId);
+      return `<div class="sc sc-${i} rounded-xl overflow-hidden shadow-2xl ring-2 ring-white/70">${coverHTML(b, 'fill', it.cover)}</div>`;
+    }).join('');
+    return `
+      <div class="showcase relative flex items-center justify-center">
+        <div class="sc-stage relative ${dims}">${covers}</div>
+        <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 w-56 h-5 rounded-full bg-black/25 blur-md"></div>
+      </div>`;
+  }
+
+  function offerRentCheck(o, user) {
+    if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
+    if (!isOfferActive(o)) return { ok: false, reason: 'Bu teklifin süresi doldu.' };
+    const bs = offerBooks(o);
+    if (bs.length < 3) return { ok: false, reason: 'Paketteki kitaplardan biri artık kitaplıkta yok.' };
+    const rented = bs.find((b) => isBookRented(b));
+    if (rented) return { ok: false, reason: `"${rented.title}" şu an kirada.` };
+    if (user.balance < o.price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(o.price - user.balance)} eksik.` };
+    return { ok: true };
+  }
+
+  function renderOffers() {
+    const admin = isAdmin();
+    setPageActions('offers', admin
+      ? `<button type="button" data-quick="addOffer" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Teklif Ekle</button>`
+      : '');
+
+    const now = new Date();
+    const u = currentUser();
+    const list = [...offers].sort((a, b) =>
+      (isOfferActive(b, now) - isOfferActive(a, now)) || (offerEnd(a) - offerEnd(b)));
+
+    const notice = `
+      <div class="flex items-start gap-2.5 bg-white/70 border border-brand-100 rounded-2xl px-4 py-3 mb-5 text-xs text-slate-500">
+        <span class="text-brand-500 shrink-0 mt-px">${icon('info')}</span>
+        <span>${admin
+          ? 'Kontrolcü olarak 3 kitaplık paketler ekleyip silebilirsin. Bir üye teklifi kiraladığında paketteki 3 kitabın hepsi birden kiralık olur.'
+          : 'Bir teklifi kiraladığında paketteki 3 kitabın hepsi birden senin olur; bakiyenden sadece paket fiyatı düşer.'}</span>
+      </div>`;
+
+    if (!list.length) {
+      $('#offersContent').innerHTML = notice + emptyState('Şu an aktif bir özel teklif bulunmuyor.');
+      return;
+    }
+
+    $('#offersContent').innerHTML = notice + `
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        ${list.map((o) => {
+          const active = isOfferActive(o, now);
+          const theme = OFFER_THEMES[o.theme] || OFFER_THEMES.blue;
+          const daysLeft = Math.ceil((offerEnd(o) - now) / DAY_MS);
+          const check = offerRentCheck(o, u);
+          const bs = offerBooks(o);
+          return `
+            <article class="showcase-host bg-white rounded-3xl shadow-soft overflow-hidden flex flex-col transition duration-300 ${active ? 'hover:shadow-soft-lg hover:-translate-y-1' : 'opacity-60 grayscale-[40%]'}">
+              <div data-open-offer="${o.id}" class="relative h-64 bg-gradient-to-br ${theme.grad} cursor-pointer overflow-hidden">
+                <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
+                <span class="absolute -left-8 -bottom-12 w-32 h-32 rounded-full bg-white/10"></span>
+                <span class="absolute top-3 left-3 z-10 text-[11px] font-extrabold text-white bg-white/25 backdrop-blur px-2.5 py-1 rounded-full">%${offerRate(o)} İNDİRİM</span>
+                <span class="absolute top-3 right-3 z-10 text-[10px] font-semibold text-white bg-black/15 backdrop-blur px-2 py-1 rounded-full">${active ? '🎁 3 kitap' : 'Süresi doldu'}</span>
+                <div class="absolute inset-0 flex items-center justify-center pb-6">${showcaseHTML(o)}</div>
+                <div class="absolute bottom-3 right-3 z-10 text-right bg-white/90 backdrop-blur rounded-2xl px-3.5 py-2 shadow-soft">
+                  <p class="text-[10px] text-slate-400 line-through leading-none">${formatMoney(offerNormalTotal(o))}</p>
+                  <p class="text-2xl font-black text-slate-800 leading-tight">${formatMoney(o.price)}</p>
+                </div>
+              </div>
+              <div class="p-4 flex-1 flex flex-col">
+                <div class="flex items-start justify-between gap-2">
+                  <h3 class="text-sm font-bold text-slate-800 leading-snug">${escapeHTML(o.title)}</h3>
+                  ${admin ? `
+                    <div class="flex gap-1 shrink-0 -mt-1 -mr-1">
+                      <button type="button" data-edit-offer="${o.id}" title="Düzenle" class="${BTN_ICON} text-slate-400 hover:text-brand-600 hover:bg-brand-50">${icon('pencil', 'w-3.5 h-3.5')}</button>
+                      <button type="button" data-delete-offer="${o.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>
+                    </div>` : ''}
+                </div>
+                <p class="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">${escapeHTML(o.description)}</p>
+                <div class="flex flex-wrap gap-1 mt-2.5">${bs.map((b) => `<span class="text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full truncate max-w-[10rem]">${escapeHTML(b.title)}</span>`).join('')}</div>
+                <div class="mt-auto pt-4 space-y-2">
+                  ${active
+                    ? `<p class="flex items-center gap-1 text-[10px] font-semibold ${daysLeft <= 3 ? 'text-rose-500' : 'text-brand-600'}">${icon('rentals', 'w-3 h-3')}Son gün ${formatDate(o.validUntil + 'T12:00:00')} · ${daysLeft <= 1 ? 'bugün bitiyor' : daysLeft + ' gün kaldı'}</p>`
+                    : '<p class="text-[10px] font-semibold text-slate-400">Bu teklifin süresi doldu</p>'}
+                  <div class="grid grid-cols-2 gap-2">
+                    <button type="button" data-open-offer="${o.id}" class="${BTN_SOFT}">Detay</button>
+                    <button type="button" data-rent-offer="${o.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY}">Teklifi Kirala</button>
+                  </div>
+                  ${!check.ok && active ? `<p class="text-[10px] text-rose-400 text-center">${escapeHTML(check.reason)}</p>` : ''}
+                </div>
+              </div>
+            </article>`;
+        }).join('')}
+      </div>`;
+  }
+
+  /* Teklif detay modalı (vitrin + paketteki 3 kitap) */
+  function openOfferDetail(offerId) {
+    const o = getOffer(offerId);
+    if (!o) return;
+    const u = currentUser();
+    const now = new Date();
+    const active = isOfferActive(o, now);
+    const theme = OFFER_THEMES[o.theme] || OFFER_THEMES.blue;
+    const check = offerRentCheck(o, u);
+    const normal = offerNormalTotal(o);
+
+    const bookRows = o.items.map((it) => {
+      const b = getBook(it.bookId);
+      if (!b) return '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Silinmiş kitap</li>';
+      const rented = isBookRented(b, now.getTime());
+      return `
+        <li>
+          <button type="button" data-open-book="${b.id}" data-back-offer="${o.id}"
+            class="w-full text-left flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 hover:border-brand-200 hover:bg-brand-50/40 transition">
+            ${coverHTML(b, 'sm', it.cover)}
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</p>
+              <p class="flex items-center gap-1.5 mt-0.5">${typeChip(b.type)}<span class="text-[10px] text-slate-400">${b.rentalDays} gün</span></p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="text-[11px] text-slate-400">${formatMoney(b.price)}</p>
+              <p class="text-[10px] font-semibold ${rented ? 'text-amber-600' : 'text-emerald-600'}">${rented ? 'Kiralı' : 'Müsait'}</p>
+            </div>
+            <span class="text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
+          </button>
+        </li>`;
+    }).join('');
+
+    openModal(`
+      <div class="showcase-host relative h-72 bg-gradient-to-br ${theme.grad} overflow-hidden">
+        <span class="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/10"></span>
+        <span class="absolute -left-10 -bottom-14 w-40 h-40 rounded-full bg-white/10"></span>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition">${icon('close')}</button>
+        <span class="absolute top-4 left-4 z-10 text-xs font-extrabold text-white bg-white/25 backdrop-blur px-3 py-1.5 rounded-full">%${offerRate(o)} İNDİRİM</span>
+        <div class="absolute inset-0 flex items-center justify-center pb-4">${showcaseHTML(o, 'lg')}</div>
+      </div>
+      <div class="p-5 sm:p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug">${escapeHTML(o.title)}</h3>
+            <p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(o.description)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-[11px] text-slate-400 line-through">${formatMoney(normal)}</p>
+            <p class="text-2xl font-black text-slate-800 leading-none">${formatMoney(o.price)}</p>
+            <p class="text-[10px] font-bold text-emerald-600 mt-1">${formatMoney(Math.max(0, normal - o.price))} kazanç</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full ${active ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-500'}">${active ? `Son gün: ${formatDate(o.validUntil + 'T12:00:00')}` : 'Süresi doldu'}</span>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-600">${offerPurchaseCount(o)} kez kiralandı</span>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-500">Tek kiralamada 3 kitap</span>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 mb-2.5">Paketteki Kitaplar</h4>
+          <ul class="space-y-2">${bookRows}</ul>
+        </div>
+
+        <div class="space-y-3">
+          ${canRent(u) ? `
+            <div class="flex items-center justify-between rounded-xl border border-brand-100 px-3 py-2.5 text-xs">
+              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
+              <span class="font-semibold text-slate-700">${formatMoney(u.balance)}${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - o.price))}</span>` : ''}</span>
+            </div>` : ''}
+          ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${escapeHTML(check.reason)}</p>`}
+          <div class="grid ${isAdmin() ? 'grid-cols-3' : 'grid-cols-2'} gap-2.5">
+            ${isAdmin() ? `<button type="button" data-delete-offer="${o.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100">${icon('trash', 'w-3.5 h-3.5')}Sil</button>` : ''}
+            <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>
+            <button type="button" data-rent-offer="${o.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">Teklifi Kirala</button>
+          </div>
+        </div>
+      </div>`, 'lg');
+  }
+
+  /* Teklifi kirala: 1 işlemde 3 kitap kiralanır, bakiyeden paket fiyatı düşer */
+  function rentOffer(offerId) {
+    const o = getOffer(offerId);
+    const u = currentUser();
+    if (!o || !u) return;
+    const check = offerRentCheck(o, u);
+    if (!check.ok) return toast(check.reason, 'error');
+
+    const now = Date.now();
+    const bs = offerBooks(o);
+    const normal = offerNormalTotal(o);
+    const rate = offerRate(o);
+    const purchaseId = uid('op');
+
+    // Paket fiyatını kitaplara normal fiyat oranında paylaştır (kuruş farkı son kitaba)
+    let allocated = 0;
+    const shares = bs.map((b, i) => {
+      if (i === bs.length - 1) return round2(o.price - allocated);
+      const share = round2(o.price * (b.price / normal));
+      allocated = round2(allocated + share);
+      return share;
+    });
+
+    u.balance = round2(u.balance - o.price);
+    offerPurchases.push({
+      id: purchaseId, offerId: o.id, offerTitle: o.title, userId: u.id,
+      price: o.price, normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now)
+    });
+    bs.forEach((b, i) => rentals.push({
+      id: uid('r'), bookId: b.id, userId: u.id,
+      listPrice: b.price, price: shares[i], discount: rate, discountSource: 'offer',
+      offerId: o.id, purchaseId, offerPrice: o.price,
+      rentedAt: isoAt(now), dueAt: isoAt(now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS), returnedAt: null
+    }));
+
+    closeModal();
+    renderProfile();
+    renderCurrentPage();
+    toast(`🎁 "${o.title}" kiralandı · 3 kitap · ${formatMoney(o.price)}`, 'success');
+  }
+
+  /* ==========================================================
+     14) MODAL ALTYAPISI
+     ========================================================== */
+  function openModal(html, size = 'md') {
+    const root = $('#modalRoot');
+    const panel = $('#modalPanel');
+    panel.classList.remove('sm:max-w-md', 'sm:max-w-2xl');
+    panel.classList.add(size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-md');
+    panel.innerHTML = html;
+    panel.scrollTop = 0;
+    root.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    state.modalOpen = true;
+    toggleProfile(false);
+    requestAnimationFrame(() => {
+      $('#modalBackdrop').classList.remove('opacity-0');
+      panel.classList.remove('opacity-0', 'translate-y-6', 'sm:translate-y-2', 'sm:scale-95');
+      panel.querySelector('[autofocus]')?.focus();
+    });
+  }
+
+  function closeModal() {
+    if (!state.modalOpen) return;
+    state.modalOpen = false;
+    state.confirmAction = null;
+    $('#modalBackdrop').classList.add('opacity-0');
+    $('#modalPanel').classList.add('opacity-0', 'translate-y-6', 'sm:translate-y-2', 'sm:scale-95');
+    document.body.style.overflow = '';
+    setTimeout(() => { if (!state.modalOpen) $('#modalRoot').classList.add('hidden'); }, 200);
+  }
+
+  const closeBtn = () =>
+    `<button type="button" data-modal-close aria-label="Kapat" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition shrink-0">${icon('close')}</button>`;
+
+  const modalHeader = (title, subtitle, iconKey, tone = 'bg-brand-50 text-brand-600') => `
+    <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
+    <div class="flex items-start gap-3 p-5 pb-4 border-b border-slate-100">
+      <span class="w-10 h-10 rounded-xl ${tone} flex items-center justify-center shrink-0">${icon(iconKey, 'w-5 h-5')}</span>
+      <div class="min-w-0 flex-1">
+        <h3 class="text-sm font-bold text-slate-800">${title}</h3>
+        <p class="text-[11px] text-slate-400">${subtitle}</p>
+      </div>
+      ${closeBtn()}
+    </div>`;
+
+  const field = (label, control, hint = '') => `
+    <label class="block">
+      <span class="block text-[11px] font-medium text-slate-500 mb-1">${label}</span>
+      ${control}
+      ${hint ? `<span class="block text-[10px] text-slate-400 mt-1">${hint}</span>` : ''}
+    </label>`;
+
+  const formFooter = (submitLabel) => `
+    <div class="grid grid-cols-2 gap-2.5 pt-2">
+      <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Vazgeç</button>
+      <button type="submit" class="${BTN_PRIMARY} !py-2.5">${submitLabel}</button>
+    </div>`;
+
+  /* Onay modalı (silme vb.) */
+  function openConfirm({ title, message, confirmLabel = 'Sil', onConfirm }) {
+    openModal(`
+      <div class="p-6 text-center">
+        <span class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">${icon('trash', 'w-6 h-6')}</span>
+        <h3 class="text-sm font-bold text-slate-800 mt-3">${title}</h3>
+        <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">${message}</p>
+        <div class="grid grid-cols-2 gap-2.5 mt-5">
+          <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Vazgeç</button>
+          <button type="button" data-confirm-yes class="py-2.5 rounded-xl text-xs font-semibold bg-rose-500 text-white hover:bg-rose-600 transition">${confirmLabel}</button>
+        </div>
+      </div>`);
+    state.confirmAction = onConfirm;
+  }
+
+  const requireAdmin = () => {
+    if (isAdmin()) return true;
+    toast('Bu işlem yalnızca Kontrolcü tarafından yapılabilir.', 'error');
+    return false;
+  };
+
+  /* ==========================================================
+     15) KONTROLCÜ FORMLARI
+     ========================================================== */
+
+  /* --- Kitap ekle / düzenle (kapak: FileReader → base64) --- */
+  function openBookFormModal(editId) {
+    if (!requireAdmin()) return;
+    const b = editId ? getBook(editId) : null;
+    state.bookDraftCover = b ? b.cover : '';
+    const today = localDateKey();
+    const typeOptions = Object.entries(BOOK_TYPES)
+      .map(([k, t]) => `<option value="${k}" ${(b ? b.type : 'seri') === k ? 'selected' : ''}>${t.label}${k === 'ozel' ? ' (indirime girmez)' : ''}</option>`).join('');
+
+    openModal(`
+      ${modalHeader(b ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle',
+        b ? 'Fiyat değişirse Fiyat Loguna otomatik kaydedilir.' : `Eklenince Haberler'e otomatik duyuru düşer · ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim.`, 'books')}
+      <form data-form="saveBook" data-edit-id="${b ? b.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="flex gap-4 items-center p-3 rounded-2xl bg-brand-50/50 border border-brand-100">
+          <div id="bookCoverPreview">${coverHTML({ title: b ? b.title : 'Yeni Kitap', type: b ? b.type : 'seri', cover: state.bookDraftCover }, 'md')}</div>
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <p class="text-[11px] font-semibold text-slate-600">Kapak Fotoğrafı</p>
+            <div class="flex flex-wrap gap-1.5">
+              <label class="${BTN_SOFT} !py-1.5 cursor-pointer">${icon('photo', 'w-3.5 h-3.5')}Dosya Seç
+                <input type="file" accept="image/*" data-cover-input="book" class="sr-only" />
+              </label>
+              <button type="button" id="removeBookCover" data-remove-cover="book" class="${BTN_SOFT} !py-1.5 !text-rose-500 !border-rose-100 ${state.bookDraftCover ? '' : 'hidden'}">Kaldır</button>
+            </div>
+            <p class="text-[10px] text-slate-400">Seçilmezse türüne göre şık bir degrade kapak atanır.</p>
+          </div>
+        </div>
+        ${field('Kitap Adı', `<input name="title" id="bf-title" required maxlength="80" ${b ? '' : 'autofocus'} value="${b ? escapeHTML(b.title) : ''}" class="${INPUT_CLS}" placeholder="Örn. Gece Yolcusu IV" />`)}
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Türü', `<select name="type" id="bf-type" class="${INPUT_CLS}">${typeOptions}</select>`)}
+          ${field('Kiralama Fiyatı (₺)', `<input name="price" type="number" min="0.01" step="0.01" required value="${b ? b.price : ''}" class="${INPUT_CLS}" placeholder="25" />`)}
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Sayfa Sayısı', `<input name="pages" type="number" min="1" step="1" required value="${b ? b.pages : ''}" class="${INPUT_CLS}" placeholder="200" />`)}
+          ${field('Kira Süresi (gün)', `<input name="rentalDays" type="number" min="1" max="90" step="1" required value="${b ? b.rentalDays : DEFAULT_RENTAL_DAYS}" class="${INPUT_CLS}" />`)}
+        </div>
+        ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${b ? escapeHTML(b.place) : ''}" class="${INPUT_CLS}" placeholder="Örn. Ankara – Çankaya" />`)}
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Yazıldığı Tarih', `<input name="writtenAt" type="date" required max="${today}" value="${b ? b.writtenAt : today}" class="${INPUT_CLS}" />`)}
+          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" required value="${b ? b.releaseDate : today}" class="${INPUT_CLS}" />`, 'Çıkış yılı bu tarihten alınır')}
+        </div>
+        <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : getUser('u1').name)}</b></p>
+        ${formFooter(b ? 'Değişiklikleri Kaydet' : `${icon('plus', 'w-3.5 h-3.5')}Kitabı Ekle`)}
+      </form>`);
+  }
+
+  function updateBookFormPreview() {
+    const box = $('#bookCoverPreview');
+    if (!box) return;
+    box.innerHTML = coverHTML({
+      title: $('#bf-title')?.value || 'Yeni Kitap',
+      type: $('#bf-type')?.value || 'seri',
+      cover: state.bookDraftCover
+    }, 'md');
+    $('#removeBookCover')?.classList.toggle('hidden', !state.bookDraftCover);
+  }
+
+  function handleSaveBook(fd, editId) {
+    if (!requireAdmin()) return;
+    if (state.coverBusy) return toast('Kapak hâlâ yükleniyor, bir saniye…', 'info');
+    const title = fd.title.trim();
+    const type = BOOK_TYPES[fd.type] ? fd.type : 'seri';
+    const price = round2(parseFloat(fd.price));
+    const pages = parseInt(fd.pages, 10);
+    const rentalDays = parseInt(fd.rentalDays, 10);
+    if (!title) return toast('Kitap adı zorunlu.', 'error');
+    if (!(price > 0)) return toast('Geçerli bir fiyat girin.', 'error');
+    if (!(pages > 0)) return toast('Geçerli bir sayfa sayısı girin.', 'error');
+    if (!(rentalDays > 0)) return toast('Geçerli bir kira süresi girin.', 'error');
+    if (!isDateKey(fd.writtenAt) || !isDateKey(fd.releaseDate)) return toast('Tarihleri kontrol edin.', 'error');
+
+    const data = { title, type, pages, rentalDays, place: fd.place.trim(), writtenAt: fd.writtenAt, releaseDate: fd.releaseDate, cover: state.bookDraftCover || '' };
+
+    if (editId) {
+      const b = getBook(editId);
+      if (!b) return;
+      let priceMsg = '';
+      if (price !== b.price) {
+        const res = changeBookPrice(b.id, price);
+        if (res.ok) priceMsg = ' · fiyat loga işlendi';
+      }
+      Object.assign(b, data);
+      closeModal();
+      renderCurrentPage();
+      toast(`"${b.title}" güncellendi${priceMsg}.`, 'success');
+      return;
+    }
+
+    const book = addBook({ ...data, price });
+    state.bookTab = 'all';
+    closeModal();
+    renderCurrentPage();
+    toast(`"${book.title}" eklendi · Duyurular'a haber düştü 📣`, 'success');
+  }
+
+  /* --- Hızlı fiyat güncelleme (Fiyat Logu sayfası) --- */
+  function openChangePriceModal(preselectId) {
+    if (!requireAdmin()) return;
+    const sorted = [...books].sort((a, b) => a.id - b.id);
+    const sel = getBook(preselectId) || sorted[0];
+    if (!sel) return toast('Önce kitap eklemelisin.', 'error');
+    openModal(`
+      ${modalHeader('Fiyat Güncelle', 'Değişiklik Fiyat Logu sayfasına otomatik kaydedilir.', 'price-logs')}
+      <form data-form="changePrice" class="p-5 space-y-3.5" autocomplete="off">
+        ${field('Kitap', `<select name="bookId" id="cpBook" class="${INPUT_CLS}">
+          ${sorted.map((b) => `<option value="${b.id}" ${b.id === sel.id ? 'selected' : ''}>#${b.id} · ${escapeHTML(b.title)}</option>`).join('')}
+        </select>`)}
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <span class="block text-[11px] font-medium text-slate-500 mb-1">Mevcut Fiyat</span>
+            <p id="cpCurrent" class="text-sm font-bold text-slate-700 bg-slate-50 rounded-xl px-3 py-2">${formatMoney(sel.price)}</p>
+          </div>
+          ${field('Yeni Fiyat (₺)', `<input name="newPrice" type="number" min="0.01" step="0.01" required autofocus class="${INPUT_CLS}" placeholder="0,00" />`)}
+        </div>
+        ${formFooter('Fiyatı Kaydet')}
+      </form>`);
+  }
+
+  function handleChangePrice(fd) {
+    if (!requireAdmin()) return;
+    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice));
+    if (!res.ok) return toast(res.reason, 'error');
+    const diff = round2(res.newPrice - res.oldPrice);
+    closeModal();
+    renderCurrentPage();
+    toast(`"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${diff > 0 ? '+' : '−'}${formatMoney(Math.abs(diff))})`, 'success');
+  }
+
+  /* --- Sürüm notu ekle / düzenle / sil --- */
+  function openUpdateModal(editId) {
+    if (!requireAdmin()) return;
+    const a = editId ? getAnn(editId) : null;
+    const today = localDateKey();
+    openModal(`
+      ${modalHeader(a ? 'Sürüm Notunu Düzenle' : 'Yeni Sürüm Notu', 'Güncellemeler sekmesinde yayınlanır.', 'sparkles')}
+      <form data-form="saveUpdate" data-edit-id="${a ? a.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Sürüm', `<input name="version" required autofocus value="${a ? escapeHTML(a.version) : ''}" class="${INPUT_CLS}" placeholder="v1.5.0" />`, 'Biçim: v1.5.0')}
+          ${field('Başlık (isteğe bağlı)', `<input name="title" maxlength="80" value="${a ? escapeHTML(a.title) : ''}" class="${INPUT_CLS}" placeholder="Kısa özet" />`)}
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Yayın Tarihi', `<input name="releaseDate" id="updDateInput" type="date" required value="${a ? a.releaseDate : today}" class="${INPUT_CLS}" />`)}
+          ${field('Yayın Yılı', `<input name="year" id="updYearInput" type="number" min="2000" max="2100" required value="${a ? a.year : today.slice(0, 4)}" class="${INPUT_CLS}" />`, 'Tarihe göre otomatik dolar')}
+        </div>
+        ${field('Yenilikler', `<textarea name="items" rows="5" required class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Her satıra bir yenilik yazın">${a ? escapeHTML(a.items.join('\n')) : ''}</textarea>`, 'Her satır ayrı bir madde olarak listelenir.')}
+        ${formFooter(a ? 'Değişiklikleri Kaydet' : 'Yayınla')}
+      </form>`);
+  }
+
+  function handleSaveUpdate(fd, editId) {
+    if (!requireAdmin()) return;
+    const version = normalizeVersion(fd.version);
+    if (!version) return toast('Sürüm biçimi geçersiz. Örnek: v1.5.0', 'error');
+    if (announcements.some((a) => a.type === 'update' && a.version === version && a.id !== editId))
+      return toast(`${version} zaten mevcut.`, 'error');
+    const items = fd.items.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!items.length) return toast('En az bir yenilik girin.', 'error');
+    if (!isDateKey(fd.releaseDate)) return toast('Geçerli bir tarih seçin.', 'error');
+    const year = parseInt(fd.year, 10) || Number(fd.releaseDate.slice(0, 4));
+
+    const data = { version, title: fd.title.trim(), releaseDate: fd.releaseDate, year, items };
+    if (editId) {
+      Object.assign(getAnn(editId), data);
+      toast(`${version} güncellendi.`, 'success');
+    } else {
+      announcements.push({ id: uid('a'), type: 'update', ...data, authorId: state.currentUserId, createdAt: new Date().toISOString(), readBy: [] });
+      toast(`${version} yayınlandı.`, 'success');
+    }
+    state.annTab = 'update';
+    closeModal();
+    if (state.route !== 'announcements') location.hash = '#announcements';
+    else renderCurrentPage();
+  }
+
+  function deleteUpdate(id) {
+    if (!requireAdmin()) return;
+    const a = getAnn(id);
+    if (!a) return;
+    openConfirm({
+      title: `${escapeHTML(a.version)} silinsin mi?`,
+      message: 'Bu sürüm notu kalıcı olarak silinecek.',
+      onConfirm: () => {
+        const i = announcements.indexOf(a);
+        if (i > -1) announcements.splice(i, 1);
+        closeModal();
+        renderCurrentPage();
+        toast(`${a.version} silindi.`, 'info');
+      }
+    });
+  }
+
+  /* --- Özel teklif ekle / düzenle / sil (3 kitap + 3 kapak) --- */
+  function openOfferFormModal(editId) {
+    if (!requireAdmin()) return;
+    const o = editId ? getOffer(editId) : null;
+    state.offerDraftCovers = o ? [0, 1, 2].map((i) => o.items[i]?.cover || '') : ['', '', ''];
+    const defaultEnd = localDateKey(new Date(Date.now() + 14 * DAY_MS));
+    const sorted = [...books].sort((a, b) => a.id - b.id);
+
+    const slot = (i) => {
+      const selId = o?.items[i]?.bookId || '';
+      return `
+        <div class="rounded-2xl border border-brand-100 bg-brand-50/30 p-2.5 flex flex-col items-center gap-2 min-w-0">
+          <span class="text-[10px] font-bold text-brand-500">${i + 1}. Kitap</span>
+          <div id="offerSlotPreview-${i}">${slotPreviewHTML(i, selId)}</div>
+          <select name="book${i}" data-offer-slot="${i}" required class="${INPUT_CLS} !px-2 !py-1.5 !text-[11px]">
+            <option value="">Kitap seç…</option>
+            ${sorted.map((b) => `<option value="${b.id}" ${String(b.id) === String(selId) ? 'selected' : ''}>${escapeHTML(b.title)}</option>`).join('')}
+          </select>
+          <div class="flex items-center gap-2">
+            <label class="text-[10px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer flex items-center gap-1">${icon('photo', 'w-3 h-3')}Kapak
+              <input type="file" accept="image/*" data-cover-input="offer-${i}" class="sr-only" />
+            </label>
+            <button type="button" data-remove-cover="offer-${i}" id="offerSlotRemove-${i}" class="text-[10px] font-semibold text-rose-400 hover:text-rose-500 ${state.offerDraftCovers[i] ? '' : 'hidden'}">Kaldır</button>
+          </div>
+        </div>`;
+    };
+
+    openModal(`
+      ${modalHeader(o ? 'Teklifi Düzenle' : 'Yeni Özel Teklif', '3 kitap seç, kapakları dosyadan yükle, paket fiyatını belirle.', 'offers')}
+      <form data-form="saveOffer" data-edit-id="${o ? o.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="grid grid-cols-3 gap-2">${slot(0)}${slot(1)}${slot(2)}</div>
+        <p class="text-[10px] text-slate-400 -mt-1">Kapak seçilmezse kitabın kendi kapağı (veya degrade kutusu) vitrinde gösterilir.</p>
+        ${field('Teklif Başlığı', `<input name="title" required maxlength="80" value="${o ? escapeHTML(o.title) : ''}" class="${INPUT_CLS}" placeholder="Örn. 3 Seri Kitap Alana Albüm Hediye" />`)}
+        ${field('Açıklama', `<textarea name="description" rows="3" required maxlength="400" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Teklifin detayları">${o ? escapeHTML(o.description) : ''}</textarea>`)}
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Paket Fiyatı (₺)', `<input name="price" id="of-price" type="number" min="0.01" step="0.01" required value="${o ? o.price : ''}" class="${INPUT_CLS}" placeholder="35" />`)}
+          ${field('Son Geçerlilik', `<input name="validUntil" type="date" required value="${o ? o.validUntil : defaultEnd}" class="${INPUT_CLS}" />`)}
+        </div>
+        <div id="offerCalc" class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2"></div>
+        ${field('Vitrin Rengi', `<select name="theme" class="${INPUT_CLS}">${Object.entries(OFFER_THEMES).map(([k, t]) => `<option value="${k}" ${(o ? o.theme : 'blue') === k ? 'selected' : ''}>${t.label}</option>`).join('')}</select>`)}
+        ${formFooter(o ? 'Değişiklikleri Kaydet' : 'Teklifi Yayınla')}
+      </form>`);
+    updateOfferCalc();
+  }
+
+  function slotPreviewHTML(i, bookId) {
+    const b = getBook(bookId);
+    const cover = state.offerDraftCovers[i];
+    if (!b && !cover) {
+      return `<div class="w-14 h-20 rounded-xl border-2 border-dashed border-brand-200 flex items-center justify-center text-brand-300">${icon('photo', 'w-5 h-5')}</div>`;
+    }
+    return coverHTML(b || { title: 'Kapak', type: 'seri' }, 'md', cover);
+  }
+
+  function updateOfferSlotPreview(i) {
+    const sel = document.querySelector(`[data-offer-slot="${i}"]`);
+    const box = $(`#offerSlotPreview-${i}`);
+    if (box) box.innerHTML = slotPreviewHTML(i, sel?.value);
+    $(`#offerSlotRemove-${i}`)?.classList.toggle('hidden', !state.offerDraftCovers[i]);
+  }
+
+  function updateOfferCalc() {
+    const box = $('#offerCalc');
+    if (!box) return;
+    const ids = [0, 1, 2].map((i) => document.querySelector(`[data-offer-slot="${i}"]`)?.value).filter(Boolean);
+    const normal = sum(ids.map(getBook).filter(Boolean), (b) => b.price);
+    const price = parseFloat($('#of-price')?.value);
+    if (!ids.length) { box.textContent = 'Kitapları seçince normal toplam ve indirim oranı burada görünecek.'; return; }
+    const rate = normal > 0 && price > 0 ? Math.round((1 - price / normal) * 100) : null;
+    box.innerHTML = `Normal toplam: <b class="text-slate-700">${formatMoney(normal)}</b>${rate !== null
+      ? ` · İndirim oranı: <b class="${rate > 0 ? 'text-emerald-600' : 'text-rose-500'}">%${rate}</b>` : ''}`;
+  }
+
+  function handleSaveOffer(fd, editId) {
+    if (!requireAdmin()) return;
+    if (state.coverBusy) return toast('Kapak hâlâ yükleniyor, bir saniye…', 'info');
+    const ids = [fd.book0, fd.book1, fd.book2].map(Number);
+    if (ids.some((id) => !getBook(id))) return toast('Lütfen 3 kitabı da seçin.', 'error');
+    if (new Set(ids).size !== 3) return toast('Aynı kitap pakete iki kez eklenemez.', 'error');
+    const title = fd.title.trim(), description = fd.description.trim();
+    if (!title || !description) return toast('Başlık ve açıklama zorunlu.', 'error');
+    const price = round2(parseFloat(fd.price));
+    if (!(price > 0)) return toast('Geçerli bir paket fiyatı girin.', 'error');
+    if (!isDateKey(fd.validUntil)) return toast('Geçerli bir tarih seçin.', 'error');
+
+    const data = {
+      title, description, price, validUntil: fd.validUntil,
+      theme: OFFER_THEMES[fd.theme] ? fd.theme : 'blue',
+      items: ids.map((bookId, i) => ({ bookId, cover: state.offerDraftCovers[i] || '' }))
+    };
+    if (editId) {
+      Object.assign(getOffer(editId), data);
+      toast('Teklif güncellendi.', 'success');
+    } else {
+      offers.push({ id: uid('o'), ...data, createdAt: new Date().toISOString() });
+      toast('Teklif yayınlandı 🎉', 'success');
+    }
+    closeModal();
+    if (state.route !== 'offers') location.hash = '#offers';
+    else renderCurrentPage();
+  }
+
+  function deleteOffer(id) {
+    if (!requireAdmin()) return;
+    const o = getOffer(id);
+    if (!o) return;
+    openConfirm({
+      title: 'Teklif silinsin mi?',
+      message: `"${escapeHTML(o.title)}" vitrinden kaldırılacak. Daha önce yapılan kiralamalar ve istatistikler korunur.`,
+      onConfirm: () => {
+        offers.splice(offers.indexOf(o), 1);
+        closeModal();
+        renderCurrentPage();
+        toast('Teklif silindi.', 'info');
+      }
+    });
+  }
+
+  /* --- Kapak dosyası seçimi / kaldırma --- */
+  async function handleCoverInput(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const target = input.dataset.coverInput;
+    state.coverBusy = true;
+    try {
+      const data = await readImageFile(file);
+      if (target === 'book') { state.bookDraftCover = data; updateBookFormPreview(); }
+      else { const i = Number(target.split('-')[1]); state.offerDraftCovers[i] = data; updateOfferSlotPreview(i); }
+    } catch (err) {
+      toast(err.message || 'Görsel yüklenemedi.', 'error');
+    } finally {
+      state.coverBusy = false;
+      input.value = '';
+    }
+  }
+
+  function removeDraftCover(target) {
+    if (target === 'book') { state.bookDraftCover = ''; updateBookFormPreview(); return; }
+    const i = Number(target.split('-')[1]);
+    state.offerDraftCovers[i] = '';
+    updateOfferSlotPreview(i);
+  }
+
+  function runQuick(action) {
+    if (action === 'addBook') return openBookFormModal();
+    if (action === 'changePrice') return openChangePriceModal();
+    if (action === 'addUpdate') return openUpdateModal();
+    if (action === 'addOffer') return openOfferFormModal();
+  }
+
+  /* ==========================================================
+     16) ROL & HESAP BAĞLAMA
+     ========================================================== */
+  function setRole(userId, role) {
+    const u = getUser(userId);
+    if (!u || !ROLES[role]) return;
+    if (!isAdmin()) { toast('Rol değiştirme yalnızca Kontrolcü yetkisindedir.', 'error'); return renderProfile(); }
+    if (u.role === role) return;
+    if (u.role === 'admin' && role !== 'admin' && users.filter((x) => x.role === 'admin').length === 1) {
+      toast('Sistemde en az bir Kontrolcü kalmalı.', 'error');
+      return renderProfile();
+    }
+    u.role = role;
+    renderProfile();
+    renderCurrentPage();
+    toast(`${u.name} artık ${ROLES[role].label}.`, 'success');
+  }
+
+  const emailOwner = (email) => users.find((u) => u.email === email);
+
+  function openLinkModal(userId) {
+    if (!requireAdmin()) return;
+    const u = getUser(userId);
+    if (!u) return;
+    openModal(`
+      ${modalHeader('Kullanıcı Bağla 🔗', `${escapeHTML(u.name)} için e-posta hesabı eşleştir`, 'link')}
+      <div class="p-5 space-y-4">
+        <div class="flex items-center gap-3 p-3 rounded-xl ${u.email ? 'bg-emerald-50/70 border border-emerald-100' : 'bg-slate-50'}">
+          ${avatarHTML(u, 'w-9 h-9 text-xs')}
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-800">${escapeHTML(u.name)}</p>
+            <p class="text-[11px] ${u.email ? 'text-emerald-600' : 'text-slate-400'} truncate">${u.email ? '🔗 ' + escapeHTML(u.email) : 'Henüz bağlı hesap yok'}</p>
+          </div>
+          ${u.email ? `<button type="button" data-unlink-user="${u.id}" class="${BTN_SOFT} !py-1.5 !text-rose-500 !border-rose-100">Bağlantıyı Kaldır</button>` : ''}
+        </div>
+
+        <div>
+          <p class="text-[11px] font-semibold text-slate-500 mb-2">E-posta Havuzu</p>
+          <ul class="space-y-1.5">
+            ${emailPool.map((mail) => {
+              const owner = emailOwner(mail);
+              const mine = owner?.id === u.id;
+              return `
+                <li class="flex items-center gap-2.5 px-3 py-2 rounded-xl border ${mine ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-100'}">
+                  <span class="text-slate-300">${icon('link', 'w-3.5 h-3.5')}</span>
+                  <span class="flex-1 min-w-0 text-xs text-slate-700 truncate">${escapeHTML(mail)}</span>
+                  ${mine
+                    ? '<span class="text-[10px] font-semibold text-emerald-600">Bağlı ✓</span>'
+                    : owner
+                      ? `<span class="text-[10px] font-medium text-slate-400 truncate">${escapeHTML(owner.name)}'a bağlı</span>`
+                      : `<button type="button" data-link-email="${escapeHTML(mail)}" data-user="${u.id}" class="text-[11px] font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-lg transition">Bağla</button>`}
+                </li>`;
+            }).join('')}
+          </ul>
+        </div>
+
+        <form data-form="addEmail" data-user-id="${u.id}" class="flex gap-2" autocomplete="off">
+          <input name="email" type="email" required placeholder="yeni.hesap@example.com" class="${INPUT_CLS} flex-1" />
+          <button type="submit" class="${BTN_PRIMARY} shrink-0">Ekle & Bağla</button>
+        </form>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Firebase aşamasında bu e-postalar Firebase Authentication hesaplarıyla eşleştirilecek; giriş yapan kişi otomatik olarak bağlı olduğu aile üyesi profiliyle açılacak.</p>
+      </div>`);
+  }
+
+  function linkEmail(userId, email) {
+    if (!requireAdmin()) return;
+    const u = getUser(userId);
+    const owner = emailOwner(email);
+    if (!u) return;
+    if (owner && owner.id !== u.id) return toast(`${email} zaten ${owner.name} hesabına bağlı.`, 'error');
+    u.email = email;
+    toast(`${u.name} → ${email} bağlandı.`, 'success');
+    renderProfile();
+    openLinkModal(userId);
+  }
+
+  function unlinkEmail(userId) {
+    if (!requireAdmin()) return;
+    const u = getUser(userId);
+    if (!u || !u.email) return;
+    const old = u.email;
+    u.email = null;
+    toast(`${u.name} hesabından ${old} ayrıldı.`, 'info');
+    renderProfile();
+    openLinkModal(userId);
+  }
+
+  function handleAddEmail(fd, userId) {
+    if (!requireAdmin()) return;
+    const email = String(fd.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return toast('Geçerli bir e-posta girin.', 'error');
+    if (!emailPool.includes(email)) emailPool.push(email);
+    linkEmail(userId, email);
+  }
+
+  /* ==========================================================
+     17) PROFİL MENÜSÜ, BAKİYE & ROL PANELİ
+     ========================================================== */
+  function renderProfile() {
+    const u = currentUser();
+
+    // Navbar
+    const nav = $('#navAvatar');
+    nav.className = `w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold bg-gradient-to-br ${u.color}`;
+    nav.textContent = initials(u.name);
+    $('#navName').textContent = u.name;
+    $('#navBalance').textContent = formatMoney(u.balance);
+
+    // Panel başlığı
+    const pa = $('#panelAvatar');
+    pa.className = `w-11 h-11 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold bg-gradient-to-br ${u.color}`;
+    pa.textContent = initials(u.name);
+    $('#panelName').textContent = u.name;
+    $('#panelRole').textContent = (u.role === 'admin' ? '★ ' : '') + ROLES[u.role].label + (u.email ? ` · ${u.email}` : '');
+    $('#panelBalance').textContent = formatMoney(u.balance);
+    $('#panelStatsBtn').dataset.userStats = u.id;
+
+    // Kullanıcı listesi
+    $('#userSwitchList').innerHTML = users.map((usr) => {
+      const active = usr.id === u.id;
+      const unread = unreadCount(usr.id);
+      return `
+        <li>
+          <button type="button" data-switch-user="${usr.id}"
+            class="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl transition ${active ? 'bg-brand-50 ring-1 ring-brand-200' : 'hover:bg-slate-50'}">
+            ${avatarHTML(usr, 'w-8 h-8 text-[11px]')}
+            <span class="text-left min-w-0">
+              <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(usr.name)}</span>
+              <span class="block text-[10px] text-slate-400">${ROLES[usr.role].label} · ${formatMoney(usr.balance)}</span>
+            </span>
+            ${active
+              ? '<span class="ml-auto text-[10px] font-semibold text-brand-600 bg-white px-2 py-0.5 rounded-full shadow-soft">Aktif</span>'
+              : unread ? `<span class="ml-auto text-[10px] font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">${unread} yeni</span>` : ''}
+          </button>
+        </li>`;
+    }).join('');
+
+    renderAdminPanel();
+  }
+
+  function renderAdminPanel() {
+    const box = $('#adminPanel');
+
+    if (!isAdmin()) {
+      box.innerHTML = `
+        <p class="text-[11px] text-slate-400 flex items-center gap-2 px-1">
+          <span class="text-brand-300">${icon('lock')}</span>
+          Bakiye ve rol yönetimi yalnızca Kontrolcü tarafından yapılabilir.
+        </p>`;
+      return;
+    }
+
+    const tab = (key, label) => `
+      <button type="button" data-panel-tab="${key}"
+        class="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${state.panelTab === key ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600'}">${label}</button>`;
+
+    const prevTarget = $('#bmUser')?.value;
+    let body;
+
+    if (state.panelTab === 'roles') {
+      body = `
+        <p class="px-1 mb-2 text-[11px] font-semibold text-slate-600">Kullanıcı Rol & Yetki Yönetimi ⚙️</p>
+        <ul class="space-y-2">
+          ${users.map((u) => `
+            <li class="bg-white rounded-xl border border-brand-100 p-2.5">
+              <div class="flex items-center gap-2.5">
+                ${avatarHTML(u, 'w-7 h-7 text-[10px]')}
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</p>
+                  <p class="text-[10px] truncate ${u.email ? 'text-emerald-600' : 'text-slate-400'}">${u.email ? '🔗 ' + escapeHTML(u.email) : 'Bağlı hesap yok'}</p>
+                </div>
+              </div>
+              <div class="flex gap-1.5 mt-2">
+                <select data-role-user="${u.id}" aria-label="${escapeHTML(u.name)} rolü"
+                  class="flex-1 min-w-0 text-[11px] rounded-lg border border-brand-100 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200">
+                  ${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${r.label}</option>`).join('')}
+                </select>
+                <button type="button" data-link-user="${u.id}"
+                  class="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition">Kullanıcı Bağla 🔗</button>
+              </div>
+            </li>`).join('')}
+        </ul>
+        <div class="mt-2.5 px-1 space-y-0.5 text-[10px] text-slate-400">
+          ${Object.values(ROLES).map((r) => `<p><b class="text-slate-500">${r.label}:</b> ${r.desc}</p>`).join('')}
+        </div>`;
+    } else {
+      body = `
+        <div class="space-y-2">
+          <select id="bmUser" class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200">
+            ${users.map((u) => `<option value="${u.id}">${escapeHTML(u.name)} — ${formatMoney(u.balance)}</option>`).join('')}
+          </select>
+          <input id="bmAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Tutar (₺)"
+            class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" data-balance-action="add" class="py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition">+ Ekle</button>
+            <button type="button" data-balance-action="subtract" class="py-2 rounded-xl text-xs font-semibold bg-rose-50 text-rose-500 hover:bg-rose-100 transition">− Azalt</button>
+            <button type="button" data-balance-action="set" class="py-2 rounded-xl text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition">Eşitle</button>
+          </div>
+        </div>`;
+    }
+
+    box.innerHTML = `
+      <div class="flex gap-1 p-1 bg-white rounded-xl border border-brand-100 mb-3">
+        ${tab('balance', '💰 Bakiye Yönetimi')}
+        ${tab('roles', '⚙️ Rol & Yetki')}
+      </div>
+      ${body}`;
+    if (prevTarget && $('#bmUser')) $('#bmUser').value = prevTarget;
+  }
+
+  function handleBalanceAction(action) {
+    if (!isAdmin()) return toast('Bu işlem için yetkiniz yok.', 'error');
+
+    const target = getUser($('#bmUser').value);
+    const amount = parseFloat($('#bmAmount').value);
+
+    if (!target) return toast('Kullanıcı bulunamadı.', 'error');
+    if (isNaN(amount) || amount < 0) return toast('Lütfen geçerli bir tutar girin.', 'error');
+
+    let newBalance = target.balance;
+    if (action === 'add')      newBalance = target.balance + amount;
+    if (action === 'subtract') newBalance = target.balance - amount;
+    if (action === 'set')      newBalance = amount;
+
+    if (newBalance < 0) return toast('Bakiye sıfırın altına düşemez.', 'error');
+
+    target.balance = round2(newBalance);
+    renderProfile();
+    renderCurrentPage();
+    $('#bmAmount').value = '';
+
+    const labels = { add: 'eklendi', subtract: 'düşüldü', set: 'eşitlendi' };
+    toast(`${target.name}: bakiye ${labels[action]} → ${formatMoney(target.balance)}`, 'success');
+  }
+
+  function switchUser(id) {
+    if (id === state.currentUserId) return;
+    state.currentUserId = id;
+    if (state.route === 'announcements') state.freshAnnIds = new Set();
+    closeModal();
+    renderCurrentPage();   // önce sayfa (duyurular okundu işaretlenir)
+    renderProfile();
+    toast(`${currentUser().name} olarak giriş yapıldı.`, 'info');
+  }
+
+  /* ==========================================================
+     18) AÇ/KAPA KONTROLLERİ
+     ========================================================== */
+  function toggleProfile(force) {
+    state.profileOpen = typeof force === 'boolean' ? force : !state.profileOpen;
+    const p = $('#profilePanel');
+    p.classList.toggle('opacity-0', !state.profileOpen);
+    p.classList.toggle('scale-95', !state.profileOpen);
+    p.classList.toggle('-translate-y-1', !state.profileOpen);
+    p.classList.toggle('pointer-events-none', !state.profileOpen);
+    $('#profileChevron').classList.toggle('rotate-180', state.profileOpen);
+    $('#profileBtn').setAttribute('aria-expanded', state.profileOpen);
+    if (state.profileOpen) { toggleMobileMenu(false); renderProfile(); }
+  }
+
+  function toggleMobileMenu(force) {
+    state.mobileMenuOpen = typeof force === 'boolean' ? force : !state.mobileMenuOpen;
+    const m = $('#mobileMenu');
+    m.style.maxHeight = state.mobileMenuOpen ? m.scrollHeight + 'px' : '0px';
+    $('#iconMenuOpen').classList.toggle('hidden', state.mobileMenuOpen);
+    $('#iconMenuClose').classList.toggle('hidden', !state.mobileMenuOpen);
+    if (state.mobileMenuOpen && state.profileOpen) toggleProfile(false);
+  }
+
+  /* ==========================================================
+     19) CANLI SAYAÇ (her saniye)
+     ========================================================== */
+  function tick() {
+    if (state.route !== 'dashboard' || document.hidden) return;
+    const now = new Date();
+
+    // 10:00 geçildiyse yeni indirim grubuna geç
+    if (discountDayNumber(now) !== state.lastDealDay) return renderDashboard();
+
+    updateCountdown(now);
+
+    let somethingExpired = false;
+    $$('[data-rental-bar]').forEach((el) => {
+      if (applyProgress(el.dataset.rentalBar, now.getTime()) <= 0) somethingExpired = true;
+    });
+    // Süresi biten kiralama "Süresi Dolan" satırlarına taşınsın
+    if (somethingExpired) renderDashboard();
+  }
+
+  /* ==========================================================
+     20) OLAY DİNLEYİCİLERİ & BAŞLATMA
+     ========================================================== */
+  function bindEvents() {
+    $('#profileBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleProfile(); });
+    $('#mobileMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleMobileMenu(); });
+
+    // Profil paneli (event delegation)
+    $('#profilePanel').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const t = e.target;
+      let m;
+      if ((m = t.closest('[data-switch-user]')))     return switchUser(m.dataset.switchUser);
+      if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction);
+      if ((m = t.closest('[data-panel-tab]')))       { state.panelTab = m.dataset.panelTab; return renderAdminPanel(); }
+      if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
+      if ((m = t.closest('[data-link-user]')))       return openLinkModal(m.dataset.linkUser);
+    });
+
+    // Sayfa geneli tıklamalar (tek merkezden event delegation)
+    document.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!t.closest('#profileWrapper')) toggleProfile(false);
+      if (!t.closest('header')) toggleMobileMenu(false);
+
+      const el = (sel) => t.closest(sel);
+      let m;
+      if ((m = el('[data-modal-close]')))      return closeModal();
+      if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
+      if ((m = el('[data-delete-log]')))       return deletePriceLog(m.dataset.deleteLog, m.dataset.bookId, m.dataset.backOffer);
+      if ((m = el('[data-remove-cover]')))     return removeDraftCover(m.dataset.removeCover);
+      if ((m = el('[data-rent-book]')))        return m.disabled ? null : rentBook(m.dataset.rentBook);
+      if ((m = el('[data-rent-offer]')))       return m.disabled ? null : rentOffer(m.dataset.rentOffer);
+      if ((m = el('[data-quick]')))            return runQuick(m.dataset.quick);
+      if ((m = el('[data-edit-book]')))        return openBookFormModal(m.dataset.editBook);
+      if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
+      if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
+      if ((m = el('[data-ann-tab]')))          { state.annTab = m.dataset.annTab; return renderCurrentPage(); }
+      if ((m = el('[data-edit-update]')))      return openUpdateModal(m.dataset.editUpdate);
+      if ((m = el('[data-delete-update]')))    return deleteUpdate(m.dataset.deleteUpdate);
+      if ((m = el('[data-open-ann]')))         return openAnnouncementModal(m.dataset.openAnn);
+      if ((m = el('[data-edit-offer]')))       return openOfferFormModal(m.dataset.editOffer);
+      if ((m = el('[data-delete-offer]')))     return deleteOffer(m.dataset.deleteOffer);
+      if ((m = el('[data-open-book]')))        return openBookModal(m.dataset.openBook, { backOfferId: m.dataset.backOffer || '' });
+      if ((m = el('[data-open-offer]')))       return openOfferDetail(m.dataset.openOffer);
+      if ((m = el('[data-user-stats]')))       return openUserStatsModal(m.dataset.userStats);
+      if ((m = el('[data-link-email]')))       return linkEmail(m.dataset.user, m.dataset.linkEmail);
+      if ((m = el('[data-unlink-user]')))      return unlinkEmail(m.dataset.unlinkUser);
+    });
+
+    // Modal backdrop
+    $('#modalBackdrop').addEventListener('click', closeModal);
+
+    // Form gönderimleri
+    $('#modalPanel').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const fd = Object.fromEntries(new FormData(form).entries());
+      const editId = form.dataset.editId || null;
+      switch (form.dataset.form) {
+        case 'saveBook':    return handleSaveBook(fd, editId);
+        case 'changePrice': return handleChangePrice(fd);
+        case 'saveUpdate':  return handleSaveUpdate(fd, editId);
+        case 'saveOffer':   return handleSaveOffer(fd, editId);
+        case 'addEmail':    return handleAddEmail(fd, form.dataset.userId);
+      }
+    });
+
+    // Canlı form alanları ve filtreler
+    document.addEventListener('input', (e) => {
+      const t = e.target;
+      if (t.id === 'updQuery') { state.updQuery = t.value; renderUpdateList(); }
+      if (t.id === 'bf-title') updateBookFormPreview();
+      if (t.id === 'of-price') updateOfferCalc();
+    });
+    document.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.matches('[data-cover-input]')) return handleCoverInput(t);
+      if (t.matches('[data-role-user]')) return setRole(t.dataset.roleUser, t.value);
+      if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
+      if (t.id === 'bf-type') return updateBookFormPreview();
+      if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
+      if (t.id === 'cpBook') { const b = getBook(t.value); if (b) $('#cpCurrent').textContent = formatMoney(b.price); }
+      if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
+    });
+
+    // Klavye: ESC kapatır, Enter/Space div-butonları açar
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeModal(); toggleProfile(false); toggleMobileMenu(false); }
+      const card = e.target.closest?.('div[data-open-ann]');
+      if (card && (e.key === 'Enter' || e.key === ' ') && e.target === card) {
+        e.preventDefault();
+        openAnnouncementModal(card.dataset.openAnn);
+      }
+    });
+
+    // Ekran büyüdüğünde mobil menüyü kapat
+    window.addEventListener('resize', () => { if (window.innerWidth >= 1024) toggleMobileMenu(false); });
+
+    window.addEventListener('hashchange', router);
+  }
+
+  function init() {
+    renderMenus();
+    renderProfile();
+    bindEvents();
+    router();
+    updateBadges();
+    setInterval(tick, 1000);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
