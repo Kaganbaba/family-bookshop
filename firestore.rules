@@ -1,7 +1,8 @@
 rules_version = '2';
 
 // Family Bookshop — Firestore güvenlik kuralları
-// • Okuma: yalnızca giriş yapmış kullanıcılar.
+// • Erişim: yalnızca allowedEmails() listesindeki, e-postası doğrulanmış hesaplar.
+// • Okuma: yalnızca giriş yapmış (izinli) kullanıcılar.
 // • Yönetim (kitap/tür/teklif/duyuru/fiyat logu, bakiye ve rol): yalnızca Kontrolcü.
 // • Kiralama: kullanıcı yalnızca kendi adına; bakiyesi tam ödediği tutar kadar düşer,
 //   kitap boşta olmalı (books/{id}.lockUntil). Bakiye artırmak yalnızca Kontrolcüye açık.
@@ -9,7 +10,21 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---------- Yardımcılar ----------
-    function signedIn() { return request.auth != null; }
+    // Siteye yalnızca bu hesaplar girebilir (index.html → ALLOWED_EMAILS ile aynı olmalı)
+    function allowedEmails() {
+      return [
+        'tolga.kagan2017@gmail.com',
+        'duraksenay81@gmail.com',
+        'tolga.durak2020@gmail.com',
+        'durakceylin167@gmail.com'
+      ];
+    }
+    // "Giriş yapmış" = doğrulanmış e-posta + izinli listede. Diğer herkes hiçbir şeye erişemez.
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in allowedEmails();
+    }
     function uid() { return request.auth.uid; }
     function path(c, id) { return /databases/$(database)/documents/$(c)/$(id); }
 
@@ -41,8 +56,15 @@ service cloud.firestore {
         && (request.resource.data.role == 'member' || (isOwner() && request.resource.data.role == 'admin'));
 
       // Kontrolcü her şeyi; kullanıcı yalnızca kiralama ödemesi (bakiye düşüşü + lastTx)
-      allow update: if isAdmin() || (userId == uid() && isPayment());
+      // veya Profilim'den kendi adını değiştirme
+      allow update: if isAdmin() || (userId == uid() && (isPayment() || isRename()));
       allow delete: if isAdmin();
+
+      function isRename() {
+        let name = request.resource.data.name;
+        return changedKeys().hasOnly(['name'])
+          && name is string && name.size() >= 2 && name.size() <= 60;
+      }
 
       // lastTxType hangi koleksiyona bakılacağını söyler (gereksiz erişim çağrısı yapılmaz)
       function isPayment() {

@@ -162,6 +162,19 @@
           </div>
         </div>
 
+        <!-- E-posta doğrulama (şifreyle kayıt olanlar) -->
+        <div id="authVerify" class="hidden bg-white rounded-2xl shadow-soft p-5 text-center space-y-3">
+          <span class="w-11 h-11 mx-auto rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-lg">✉️</span>
+          <p class="text-xs font-semibold text-slate-700">E-postanı doğrula</p>
+          <p class="text-[11px] text-slate-500 leading-relaxed"><b id="authVerifyEmail" class="text-slate-700"></b> adresine bir doğrulama bağlantısı gönderdik. Bağlantıya tıkladıktan sonra aşağıdaki butona bas.</p>
+          <p id="authVerifyMsg" class="hidden text-[11px] font-medium rounded-xl px-3 py-2"></p>
+          <button type="button" id="authVerifyDone" class="w-full py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-brand-500 to-brand-700 hover:shadow-soft-lg transition">Doğruladım, devam et</button>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" id="authVerifyResend" class="py-2 rounded-xl text-[11px] font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition">Tekrar gönder</button>
+            <button type="button" id="authVerifySignOut" class="py-2 rounded-xl text-[11px] font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Çıkış Yap</button>
+          </div>
+        </div>
+
         <!-- Giriş formu -->
         <div id="authCard" class="hidden bg-white rounded-2xl shadow-soft-lg p-5 sm:p-6">
           <button type="button" id="googleSignIn"
@@ -238,33 +251,41 @@
                    origin-top-right transition duration-200 ease-out
                    opacity-0 scale-95 -translate-y-1 pointer-events-none">
 
-            <!-- Aktif kullanıcı başlığı -->
-            <div class="p-4 bg-gradient-to-br from-brand-500 to-brand-700 text-white">
-              <div class="flex items-center gap-3">
-                <span id="panelAvatar" class="w-11 h-11 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold"></span>
-                <div class="min-w-0">
+            <!-- Kimlik kartı -->
+            <div class="relative p-4 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
+              <span class="absolute -right-8 -top-10 w-32 h-32 rounded-full bg-white/10"></span>
+              <div class="relative flex items-center gap-3">
+                <span id="panelAvatar" class="w-12 h-12 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold shrink-0"></span>
+                <div class="min-w-0 flex-1">
                   <p id="panelName" class="font-semibold text-sm truncate"></p>
                   <p id="panelRole" class="text-[11px] text-brand-100"></p>
-                </div>
-                <div class="ml-auto text-right">
-                  <p class="text-[10px] uppercase tracking-wider text-brand-100">Bakiye</p>
-                  <p id="panelBalance" class="font-bold text-sm"></p>
+                  <p id="panelEmail" class="text-[10px] text-brand-100/90 truncate"></p>
                 </div>
               </div>
-              <button id="panelStatsBtn" type="button" data-user-stats=""
-                class="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-[11px] font-semibold transition">
-                📊 İstatistiklerim
+              <!-- Hızlı özet: bakiye · aktif kiralama · harcama -->
+              <div id="panelQuick" class="relative grid grid-cols-3 gap-2 mt-3.5"></div>
+              <div class="relative grid grid-cols-2 gap-2 mt-3">
+                <button type="button" data-open-profile
+                  class="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-[11px] font-semibold shadow-soft transition">
+                  👤 Profilim
+                </button>
+                <button id="panelStatsBtn" type="button" data-user-stats=""
+                  class="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-[11px] font-semibold transition">
+                  📊 İstatistiklerim
+                </button>
+              </div>
+            </div>
+
+            <!-- Kullanıcı: aktif kiralamalar · Kontrolcü: Bakiye + Rol & Yetki -->
+            <div id="adminPanel" class="p-3"></div>
+
+            <!-- Çıkış -->
+            <div class="p-3 pt-0">
+              <button type="button" data-sign-out
+                class="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-semibold text-rose-500 bg-rose-50/60 border border-rose-100 hover:bg-rose-50 transition">
+                Çıkış Yap
               </button>
             </div>
-
-            <!-- Hesap (Firebase Auth) -->
-            <div class="p-3">
-              <p class="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Hesap</p>
-              <div id="accountBox"></div>
-            </div>
-
-            <!-- Kontrolcü paneli: Bakiye + Rol & Yetki -->
-            <div id="adminPanel" class="border-t border-brand-50 p-3 bg-brand-50/40"></div>
           </div>
         </div>
 
@@ -403,6 +424,15 @@
     appId: '1:220079451000:web:93f2334c704e4e9152768d'
   };
   const OWNER_EMAIL = 'tolga.kagan2017@gmail.com';
+  /* Siteye girebilen hesaplar (küçük harf). firestore.rules → allowedEmails() ile aynı olmalı;
+     asıl koruma kurallardadır, buradaki liste yalnızca anlaşılır bir "izin yok" ekranı içindir. */
+  const ALLOWED_EMAILS = [
+    'tolga.kagan2017@gmail.com',
+    'duraksenay81@gmail.com',
+    'tolga.durak2020@gmail.com',
+    'durakceylin167@gmail.com'
+  ];
+  const isAllowedEmail = (email) => ALLOWED_EMAILS.includes(String(email || '').trim().toLowerCase());
 
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
@@ -3596,40 +3626,66 @@
     $('#navName').textContent = u.name;
     $('#navBalance').textContent = formatMoney(u.balance);
 
-    // Panel başlığı
+    // Kimlik kartı
     const pa = $('#panelAvatar');
-    pa.className = `w-11 h-11 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold bg-gradient-to-br ${u.color}`;
+    pa.className = `w-12 h-12 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold shrink-0 bg-gradient-to-br ${u.color}`;
     pa.textContent = initials(u.name);
     $('#panelName').textContent = u.name;
-    $('#panelRole').textContent = (u.role === 'admin' ? '★ ' : '') + ROLES[u.role].label + (u.email ? ` · ${u.email}` : '');
-    $('#panelBalance').textContent = formatMoney(u.balance);
+    $('#panelRole').textContent = (u.role === 'admin' ? '★ ' : '') + ROLES[u.role].label;
+    $('#panelEmail').textContent = u.email || state.authUser?.email || '';
     $('#panelStatsBtn').dataset.userStats = u.id;
 
-    // Hesap (giriş yöntemi + çıkış)
-    const providers = (state.authUser?.providerData || []).map((p) => p.providerId);
-    const via = providers.includes('google.com') ? 'Google hesabı' : 'E-posta / şifre';
-    $('#accountBox').innerHTML = `
-      <div class="flex items-center gap-3 px-2.5 py-2 rounded-xl bg-slate-50/80">
-        <span class="w-8 h-8 rounded-full bg-white shadow-soft flex items-center justify-center text-brand-500 shrink-0">${icon('lock', 'w-4 h-4')}</span>
-        <span class="min-w-0 flex-1">
-          <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.email || state.authUser?.email || '')}</span>
-          <span class="block text-[10px] text-slate-400">${via} ile giriş yapıldı</span>
-        </span>
-        <button type="button" data-sign-out class="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 transition">Çıkış Yap</button>
-      </div>`;
+    // Hızlı özet
+    const s = userStats(u.id);
+    const activeCount = rentals.filter((r) => r.userId === u.id && isActiveRental(r)).length;
+    $('#panelQuick').innerHTML = [
+      { label: 'Bakiye', value: formatMoney(u.balance) },
+      { label: 'Aktif Kiralık', value: `${activeCount} kitap` },
+      { label: 'Harcama', value: formatMoney(s.spent) }
+    ].map((c) => `
+      <div class="rounded-xl bg-white/15 px-2.5 py-2 min-w-0">
+        <p class="text-[9px] uppercase tracking-wider text-brand-100">${c.label}</p>
+        <p class="text-xs font-bold truncate">${c.value}</p>
+      </div>`).join('');
 
     renderAdminPanel();
+  }
+
+  /* Kullanıcı (Kontrolcü olmayan) için panel: aktif kiralamalar + bilgi */
+  function memberPanelHTML(u) {
+    const nowMs = Date.now();
+    const active = rentals.filter((r) => r.userId === u.id && isActiveRental(r, nowMs))
+      .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+    const rows = active.slice(0, 4).map((r) => {
+      const b = getBook(r.bookId);
+      const { remainingMs, ratio } = rentalProgress(r, nowMs);
+      return `
+        <li class="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50/80">
+          ${coverHTML(b, 'xs')}
+          <div class="flex-1 min-w-0">
+            <p class="text-[11px] font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
+            <p class="text-[10px] font-semibold" style="color:${progressColor(ratio)}">${formatRemaining(remainingMs)}</p>
+          </div>
+        </li>`;
+    }).join('');
+    return `
+      <div class="flex items-center justify-between mb-2 px-1">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Aktif Kiralamaların</p>
+        ${active.length ? `<a href="#rentals" class="text-[10px] font-semibold text-brand-600 hover:text-brand-700">Tümü →</a>` : ''}
+      </div>
+      ${active.length
+        ? `<ul class="space-y-1.5">${rows}</ul>${active.length > 4 ? `<p class="text-[10px] text-slate-400 mt-1.5 px-1">+${active.length - 4} kiralama daha</p>` : ''}`
+        : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Şu an kiraladığın kitap yok. Günün İndirimleri\'ne göz at! 📚</p>'}
+      <p class="text-[10px] text-slate-400 flex items-center gap-1.5 px-1 mt-2.5">
+        <span class="text-brand-300">${icon('lock', 'w-3 h-3')}</span>Bakiye yükleme ve yönetim işlemleri Kontrolcüye aittir.
+      </p>`;
   }
 
   function renderAdminPanel() {
     const box = $('#adminPanel');
 
     if (!isAdmin()) {
-      box.innerHTML = `
-        <p class="text-[11px] text-slate-400 flex items-center gap-2 px-1">
-          <span class="text-brand-300">${icon('lock')}</span>
-          Bakiye ve rol yönetimi yalnızca Kontrolcü tarafından yapılabilir.
-        </p>`;
+      box.innerHTML = memberPanelHTML(currentUser());
       return;
     }
 
@@ -3663,6 +3719,14 @@
               </div>
             </li>`).join('')}
         </ul>
+        ${(() => {
+          const waiting = ALLOWED_EMAILS.filter((e) => !users.some((u) => (u.email || '').toLowerCase() === e));
+          return waiting.length ? `
+            <p class="px-1 mt-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">İzinli · henüz giriş yapmadı</p>
+            <ul class="space-y-1">
+              ${waiting.map((e) => `<li class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-dashed border-brand-100 text-[11px] text-slate-500 truncate">⏳ ${escapeHTML(e)}</li>`).join('')}
+            </ul>` : '';
+        })()}
         <div class="mt-2.5 px-1 space-y-0.5 text-[10px] text-slate-400">
           ${Object.values(ROLES).map((r) => `<p><b class="text-slate-500">${r.label}:</b> ${r.desc}</p>`).join('')}
         </div>`;
@@ -3695,11 +3759,14 @@
 
     box.innerHTML = `
       ${seedCard}
-      <div class="flex gap-1 p-1 bg-white rounded-xl border border-brand-100 mb-3">
-        ${tab('balance', '💰 Bakiye Yönetimi')}
-        ${tab('roles', '⚙️ Rol & Yetki')}
-      </div>
-      ${body}`;
+      <div class="rounded-2xl bg-brand-50/50 border border-brand-100 p-3">
+        <p class="flex items-center gap-1.5 px-1 mb-2.5 text-[11px] font-bold text-slate-700">🛡️ Kontrolcü Paneli</p>
+        <div class="flex gap-1 p-1 bg-white rounded-xl border border-brand-100 mb-3">
+          ${tab('balance', '💰 Bakiye Yönetimi')}
+          ${tab('roles', '⚙️ Rol & Yetki')}
+        </div>
+        ${body}
+      </div>`;
     if (prevTarget && $('#bmUser')) $('#bmUser').value = prevTarget;
     if (prevAmount && $('#bmAmount')) $('#bmAmount').value = prevAmount;
   }
@@ -3725,6 +3792,188 @@
     const labels = { add: 'eklendi', subtract: 'düşüldü', set: 'eşitlendi' };
     await run(col('users').doc(target.id).update({ balance: newBalance }),
       `${target.name}: bakiye ${labels[action]} → ${formatMoney(newBalance)}`);
+  }
+
+  /* ==========================================================
+     17.0) PROFİLİM · ad, giriş yöntemleri, şifre belirle / değiştir / sıfırla
+     ========================================================== */
+  const authProviders = () => (auth.currentUser?.providerData || []).map((p) => p.providerId);
+  function googleProvider() {
+    const p = new firebase.auth.GoogleAuthProvider();
+    p.setCustomParameters({ prompt: 'select_account' });
+    return p;
+  }
+
+  /* Hassas işlemler (şifre, hesap bağlama) yakın zamanda giriş ister: gerekirse yeniden doğrular */
+  async function withRecentLogin(fn) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e.code !== 'auth/requires-recent-login' || !authProviders().includes('google.com')) throw e;
+      await auth.currentUser.reauthenticateWithPopup(googleProvider());
+      return fn();
+    }
+  }
+
+  function openProfileModal() {
+    const u = currentUser();
+    if (!u) return;
+    toggleProfile(false);
+    const prov = authProviders();
+    const hasGoogle = prov.includes('google.com');
+    const hasPassword = prov.includes('password');
+    const s = userStats(u.id);
+    const activeCount = rentals.filter((r) => r.userId === u.id && isActiveRental(r)).length;
+
+    const method = (on, emoji, title, desc, action = '') => `
+      <li class="flex items-center gap-3 p-3 rounded-xl border ${on ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-100 bg-white'}">
+        <span class="w-9 h-9 rounded-xl bg-white shadow-soft flex items-center justify-center shrink-0 text-base">${emoji}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-semibold text-slate-700">${title}</p>
+          <p class="text-[10px] ${on ? 'text-emerald-600' : 'text-slate-400'}">${desc}</p>
+        </div>
+        ${action}
+      </li>`;
+    const pwInput = (name, label, auto) => field(label,
+      `<input name="${name}" type="password" minlength="6" required autocomplete="${auto}" class="${INPUT_CLS}" placeholder="••••••" />`);
+
+    openModal(`
+      <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
+        <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
+        <span class="absolute right-20 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+        <p class="relative text-[11px] font-semibold text-brand-100">Profilim 👤</p>
+        <div class="relative flex items-center gap-3.5 mt-3">
+          ${avatarHTML(u, 'w-16 h-16 text-lg ring-4 ring-white/25')}
+          <div class="min-w-0">
+            <h3 class="text-lg font-bold truncate">${escapeHTML(u.name)}</h3>
+            <p class="text-[11px] text-brand-100 truncate">${escapeHTML(u.email || '')}</p>
+            <div class="flex items-center gap-1.5 flex-wrap mt-1">
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/20">${u.role === 'admin' ? '★ ' : ''}${ROLES[u.role]?.label}</span>
+              ${u.joinedAt ? `<span class="text-[10px] text-brand-100">Üyelik: ${formatLongDate(dateFromKey(u.joinedAt))}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-5 sm:p-6 space-y-5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          ${[
+            { label: 'Bakiye', value: formatMoney(u.balance), tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
+            { label: 'Aktif Kiralık', value: `${activeCount} kitap`, tone: 'text-brand-700', bg: 'bg-brand-50/70' },
+            { label: 'Toplam Harcama', value: formatMoney(s.spent), tone: 'text-slate-800', bg: 'bg-slate-50' },
+            { label: 'İndirim Kazancı', value: formatMoney(s.savings.total), tone: 'text-amber-600', bg: 'bg-amber-50/70' }
+          ].map((t) => `
+            <div class="rounded-2xl ${t.bg} px-3 py-3">
+              <p class="text-[10px] text-slate-400 font-medium">${t.label}</p>
+              <p class="text-sm font-bold ${t.tone} truncate">${t.value}</p>
+            </div>`).join('')}
+        </div>
+
+        <form data-form="saveName" class="space-y-2" autocomplete="off">
+          <h4 class="text-xs font-bold text-slate-700">Ad Soyad</h4>
+          <div class="flex gap-2">
+            <input name="name" required minlength="2" maxlength="60" value="${escapeHTML(u.name)}" class="${INPUT_CLS} flex-1 min-w-0" />
+            <button type="submit" class="${BTN_PRIMARY} shrink-0">Kaydet</button>
+          </div>
+        </form>
+
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 mb-2">Giriş Yöntemleri</h4>
+          <ul class="space-y-2">
+            ${method(hasGoogle, '🟢', 'Google', hasGoogle ? 'Bağlı · Google ile tek tıkla giriş' : 'Bağlı değil',
+              hasGoogle ? '<span class="text-[10px] font-semibold text-emerald-600 shrink-0">✓</span>'
+                : `<button type="button" data-link-google class="${BTN_SOFT} !py-1.5 shrink-0">Bağla</button>`)}
+            ${method(hasPassword, '🔑', 'E-posta & Şifre', hasPassword ? 'Şifre belirlendi · e-posta + şifre ile de girebilirsin' : 'Henüz şifre belirlenmedi',
+              hasPassword ? '<span class="text-[10px] font-semibold text-emerald-600 shrink-0">✓</span>' : '')}
+          </ul>
+        </div>
+
+        <form data-form="setPassword" class="p-4 rounded-2xl bg-brand-50/40 border border-brand-100 space-y-3" autocomplete="off">
+          <div>
+            <h4 class="text-xs font-bold text-slate-700">${hasPassword ? 'Şifreyi Değiştir' : 'Şifre Belirle'}</h4>
+            <p class="text-[10px] text-slate-400 mt-0.5">${hasPassword
+              ? 'Yeni şifren en az 6 karakter olmalı.'
+              : 'Şifre belirlersen giriş ekranında e-posta + şifre ile de girebilirsin. Google girişin aynen kalır.'}</p>
+          </div>
+          ${hasPassword && !hasGoogle ? pwInput('current', 'Mevcut Şifre', 'current-password') : ''}
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            ${pwInput('password', 'Yeni Şifre', 'new-password')}
+            ${pwInput('repeat', 'Yeni Şifre (tekrar)', 'new-password')}
+          </div>
+          <button type="submit" class="${BTN_PRIMARY} w-full !py-2.5">${hasPassword ? 'Şifreyi Güncelle' : 'Şifreyi Kaydet'}</button>
+        </form>
+
+        <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50/80">
+          <span class="text-base">✉️</span>
+          <p class="flex-1 min-w-0 text-[11px] text-slate-500">Şifreni mi unuttun? <b class="text-slate-600">${escapeHTML(u.email || '')}</b> adresine sıfırlama bağlantısı gönderelim.</p>
+          <button type="button" data-send-reset class="${BTN_SOFT} !py-1.5 shrink-0">Gönder</button>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <button type="button" data-sign-out class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">Çıkış Yap</button>
+          <div class="flex gap-2">
+            <button type="button" data-user-stats="${u.id}" class="${BTN_SOFT}">📊 İstatistiklerim</button>
+            <button type="button" data-modal-close class="${BTN_PRIMARY}">Kapat</button>
+          </div>
+        </div>
+      </div>`, 'lg');
+  }
+
+  async function handleSaveName(fd) {
+    const name = String(fd.name || '').trim();
+    if (name.length < 2) return toast('Ad en az 2 karakter olmalı.', 'error');
+    const u = currentUser();
+    if (!u || name === u.name) return;
+    const ok = await run(col('users').doc(u.id).update({ name }), 'Adın güncellendi.');
+    if (ok) {
+      auth.currentUser?.updateProfile({ displayName: name }).catch(() => {});
+      if (state.modalOpen) openProfileModal();
+    }
+  }
+
+  async function handleSetPassword(fd) {
+    const user = auth.currentUser;
+    if (!user) return;
+    if ((fd.password || '').length < 6) return toast('Şifre en az 6 karakter olmalı.', 'error');
+    if (fd.password !== fd.repeat) return toast('Şifreler birbiriyle aynı değil.', 'error');
+    const hasPassword = authProviders().includes('password');
+    try {
+      if (hasPassword && fd.current) {
+        await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, fd.current));
+      }
+      if (hasPassword) await withRecentLogin(() => user.updatePassword(fd.password));
+      else await withRecentLogin(() => user.linkWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, fd.password)));
+      await user.reload();
+      state.authUser = auth.currentUser;
+      toast(hasPassword ? 'Şifren güncellendi 🔑' : 'Şifren belirlendi 🔑 Artık e-posta + şifre ile de girebilirsin.', 'success');
+      openProfileModal();
+    } catch (e) {
+      toast(authErrorMsg(e), 'error');
+    }
+  }
+
+  async function linkGoogle() {
+    try {
+      await withRecentLogin(() => auth.currentUser.linkWithPopup(googleProvider()));
+      await auth.currentUser.reload();
+      state.authUser = auth.currentUser;
+      toast('Google hesabın bağlandı.', 'success');
+      openProfileModal();
+    } catch (e) {
+      toast(authErrorMsg(e), 'error');
+    }
+  }
+
+  async function sendResetFromProfile() {
+    const email = auth.currentUser?.email;
+    if (!email) return;
+    try {
+      await auth.sendPasswordResetEmail(email);
+      toast(`Sıfırlama bağlantısı ${email} adresine gönderildi.`, 'success');
+    } catch (e) {
+      toast(authErrorMsg(e), 'error');
+    }
   }
 
   /* ==========================================================
@@ -3811,6 +4060,8 @@
       const t = e.target;
       let m;
       if ((m = t.closest('[data-sign-out]')))        return signOut();
+      if ((m = t.closest('[data-open-profile]')))    return openProfileModal();
+      if (t.closest('a[href^="#"]'))                 return toggleProfile(false);
       if ((m = t.closest('[data-seed]')))            return seedCatalog(m.dataset.seed);
       if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction);
       if ((m = t.closest('[data-panel-tab]')))       { state.panelTab = m.dataset.panelTab; return renderAdminPanel(); }
@@ -3827,6 +4078,10 @@
       let m;
       if ((m = el('[data-modal-close]')))      return closeModal();
       if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
+      if ((m = el('[data-sign-out]')))         return signOut();
+      if ((m = el('[data-open-profile]')))     return openProfileModal();
+      if ((m = el('[data-link-google]')))      return linkGoogle();
+      if ((m = el('[data-send-reset]')))       return sendResetFromProfile();
       if ((m = el('[data-stats-page]')))       return goStatsPage(m.dataset.statsPage, m.dataset.page);
       if ((m = el('[data-stats-del-rental]'))) return deleteStatsRecord('rental', m.dataset.statsDelRental);
       if ((m = el('[data-stats-del-purchase]'))) return deleteStatsRecord('purchase', m.dataset.statsDelPurchase);
@@ -3874,6 +4129,8 @@
         case 'saveOffer':   return handleSaveOffer(fd, editId);
         case 'saveType':    return handleSaveType(fd, editId);
         case 'saveNews':    return handleSaveNews(fd);
+        case 'saveName':    return handleSaveName(fd);
+        case 'setPassword': return handleSetPassword(fd);
       }
     });
 
@@ -4002,6 +4259,16 @@
     state.currentUserId = user?.uid || null;
     if (!user) { closeModal(); toggleProfile(false); return showAuth('form'); }
 
+    // İzinli liste dışındaki hesaplar içeri alınmaz (kurallar da tüm erişimi reddeder)
+    if (!isAllowedEmail(user.email)) {
+      const email = user.email || 'Bu hesap';
+      await auth.signOut().catch(() => {});
+      showAuth('form');
+      return showAuthError(`${email} hesabının bu siteye erişim izni yok. Yalnızca aile üyelerinin hesapları girebilir.`);
+    }
+    // Şifreyle açılmış ve henüz doğrulanmamış e-posta → doğrulama ekranı (oturum açık kalır)
+    if (!user.emailVerified) return showAuth('verify', user.email);
+
     showAuth('loading', 'Veriler yükleniyor…');
     try {
       await ensureUserDoc(user);
@@ -4025,6 +4292,36 @@
     if (failed.length) toast(`Bazı veriler okunamadı (${failed.join(', ')}). Firestore kurallarını deploy etmeyi unutma.`, 'error');
   }
 
+  /* --- E-posta doğrulama --- */
+  function setVerifyMsg(msg, ok = false) {
+    const el = $('#authVerifyMsg');
+    el.textContent = msg;
+    el.className = `${msg ? '' : 'hidden '}text-[11px] font-medium rounded-xl px-3 py-2 ${ok ? 'text-emerald-700 bg-emerald-50' : 'text-rose-500 bg-rose-50'}`;
+  }
+
+  /* Doğrulandı mı? Kullanıcıyı ve kimlik belirtecini yenile (kurallar email_verified'ı belirteçten okur) */
+  async function checkVerified() {
+    const user = auth.currentUser;
+    if (!user) return showAuth('form');
+    try {
+      await user.reload();
+      if (!auth.currentUser.emailVerified) return setVerifyMsg('Henüz doğrulanmamış. E-postandaki bağlantıya tıkladıktan sonra tekrar dene (spam klasörüne de bak).');
+      await auth.currentUser.getIdToken(true);
+      handleAuthState(auth.currentUser);
+    } catch (e) {
+      setVerifyMsg(authErrorMsg(e));
+    }
+  }
+
+  async function resendVerification() {
+    try {
+      await auth.currentUser?.sendEmailVerification();
+      setVerifyMsg('Doğrulama e-postası tekrar gönderildi.', true);
+    } catch (e) {
+      setVerifyMsg(authErrorMsg(e));
+    }
+  }
+
   /* Yükleme hatasından sonra aynı oturumla yeniden dene */
   function retryLoad() {
     if (auth.currentUser) handleAuthState(auth.currentUser);
@@ -4039,7 +4336,9 @@
     $('#authLoading').classList.toggle('hidden', view !== 'loading');
     $('#authCard').classList.toggle('hidden', view !== 'form');
     $('#authRetry').classList.toggle('hidden', view !== 'retry');
+    $('#authVerify').classList.toggle('hidden', view !== 'verify');
     if (view === 'retry') $('#authRetryText').textContent = text;
+    else if (view === 'verify') { $('#authVerifyEmail').textContent = text; setVerifyMsg(''); }
     else if (text) $('#authLoadingText').textContent = text;
     if (view === 'form') setAuthMode(authMode);
   }
@@ -4080,6 +4379,11 @@
       'auth/popup-closed-by-user': 'Google penceresi kapatıldı.',
       'auth/cancelled-popup-request': 'Google penceresi kapatıldı.',
       'auth/network-request-failed': 'İnternet bağlantısı yok.',
+      'auth/requires-recent-login': 'Güvenlik için yeniden giriş gerekiyor. Çıkış yapıp tekrar girdikten sonra dene.',
+      'auth/provider-already-linked': 'Bu giriş yöntemi hesabına zaten bağlı.',
+      'auth/credential-already-in-use': 'Bu Google hesabı başka bir kullanıcıya bağlı.',
+      'auth/popup-blocked': 'Tarayıcı açılır pencereyi engelledi. İzin verip tekrar dene.',
+      'auth/missing-password': 'Şifre girmelisin.',
       'auth/operation-not-allowed': 'Bu giriş yöntemi Firebase konsolunda açık değil (Authentication → Sign-in method).',
       'auth/unauthorized-domain': `Bu adres (${location.hostname || 'file://'}) Firebase'de yetkili değil. Authentication → Settings → Authorized domains listesine ekle.`
     };
@@ -4088,8 +4392,7 @@
 
   async function signInGoogle() {
     if (location.protocol === 'file:') return showAuthError('Google girişi dosyadan (file://) açılınca çalışmaz. Sayfayı http://localhost üzerinden aç.');
-    const provider = new firebase.auth.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
+    const provider = googleProvider();
     showAuthError('');
     try {
       await auth.signInWithPopup(provider);
@@ -4108,6 +4411,7 @@
     const name = $('#authName').value.trim();
     if (!email || !password) return showAuthError('E-posta ve şifre zorunlu.');
     if (authMode === 'signup' && !name) return showAuthError('Ad Soyad zorunlu.');
+    if (!isAllowedEmail(email)) return showAuthError('Bu e-postanın siteye erişim izni yok. Yalnızca aile üyelerinin hesapları girebilir.');
     const btn = $('#authSubmit');
     btn.disabled = true;
     try {
@@ -4115,6 +4419,8 @@
         state.pendingName = name;
         const cred = await auth.createUserWithEmailAndPassword(email, password);
         await cred.user.updateProfile({ displayName: name });
+        await cred.user.sendEmailVerification();
+        showAuth('verify', cred.user.email);
       } else {
         await auth.signInWithEmailAndPassword(email, password);
       }
@@ -4150,6 +4456,9 @@
     $('#authReset').addEventListener('click', resetPassword);
     $('#authRetryBtn').addEventListener('click', retryLoad);
     $('#authRetrySignOut').addEventListener('click', signOut);
+    $('#authVerifyDone').addEventListener('click', checkVerified);
+    $('#authVerifyResend').addEventListener('click', resendVerification);
+    $('#authVerifySignOut').addEventListener('click', signOut);
     $$('[data-auth-mode]').forEach((b) => b.addEventListener('click', () => setAuthMode(b.dataset.authMode)));
   }
 
