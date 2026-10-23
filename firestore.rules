@@ -170,6 +170,11 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // Uygulama ayarları · settings/deals.refreshedAt: Kontrolcünün "Şimdi Yenile" anı
+    match /settings/{settingId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
 
     // Diğer her şey kapalı
     match /{document=**} {
