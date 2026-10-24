@@ -1598,37 +1598,53 @@
      • Geçmiş tarih → log o güne (12:00) yazılır; eski fiyat o günkü fiyattır.
        Sonraki ilk logun "eski fiyatı" yeni fiyata çekilir (zincir tutarlı kalır).
        O tarihten sonra başka (gerçekleşmiş) değişim yoksa kitabın güncel fiyatı da değişir.
-     • Gelecek tarih → planlı log (o gün 00:00'da geçerli); kitabın fiyatı şimdi değişmez,
-       tarihi gelince applyDuePrices() uygular. Tarihinden önce silinirse hiçbir şey değişmez. */
-  function changeBookPrice(bookId, newPrice, dateKey = localDateKey(), oldPriceOverride = null) {
+     • Gelecek an → planlı log (seçilen tarih + saatte geçerli); kitabın fiyatı şimdi değişmez,
+       zamanı gelince applyDuePrices() uygular. Zamanından önce silinirse hiçbir şey değişmez.
+       Gelecek tarihte saat zorunlu; bugün saat boşsa hemen, ileri bir saatse o saatte uygulanır. */
+  function priceChangeMoment(dateKey, timeKey = '') {
+    const today = localDateKey();
+    if (!isDateKey(dateKey)) return { error: 'Geçerli bir tarih seçin.' };
+    if (dateKey < today) { const d = dateFromKey(dateKey); d.setHours(12, 0, 0, 0); return { at: d, kind: 'past' }; }
+    if (!timeKey) {
+      if (dateKey === today) return { at: new Date(), kind: 'now' };
+      return { error: 'Gelecek tarihli değişim için saat girin.' };
+    }
+    if (!isTimeKey(timeKey)) return { error: 'Geçerli bir saat seçin.' };
+    const d = dateFromKey(dateKey);
+    d.setHours(...timeKey.split(':').map(Number), 0, 0);
+    if (d.getTime() <= Date.now()) return { error: 'Bugün için ileri bir saat seç ya da saati boş bırak (hemen uygulanır).' };
+    return { at: d, kind: 'future' };
+  }
+
+  function changeBookPrice(bookId, newPrice, dateKey = localDateKey(), oldPriceOverride = null, timeKey = '') {
     const book = getBook(bookId);
     if (!book) return { ok: false, reason: 'Kitap bulunamadı.' };
     newPrice = round2(newPrice);
     if (!(newPrice > 0)) return { ok: false, reason: 'Geçerli bir fiyat girin.' };
-    const today = localDateKey();
-    if (!isDateKey(dateKey)) return { ok: false, reason: 'Geçerli bir tarih seçin.' };
+    const moment = priceChangeMoment(dateKey, timeKey);
+    if (moment.error) return { ok: false, reason: moment.error };
 
-    const isToday = dateKey === today;
-    const isFuture = dateKey > today;
-    const at = isToday ? new Date() : (() => { const d = dateFromKey(dateKey); d.setHours(isFuture ? 0 : 12, 0, 0, 0); return d; })();
+    const { at } = moment;
+    const isNow = moment.kind === 'now';
+    const isFuture = moment.kind === 'future';
     // Geçmiş tarihte o günkü fiyatı Kontrolcü girebilir (zam/indirim buna göre hesaplanır)
     const override = round2(parseFloat(oldPriceOverride));
-    const oldPrice = isToday ? book.price : isFuture ? priceAt(book, at.getTime()) : (override > 0 ? override : priceAt(book, at.getTime()));
-    if (newPrice === oldPrice) return { ok: false, reason: `${isToday ? 'Yeni fiyat mevcut fiyatla' : 'Yeni fiyat o tarihteki fiyatla'} aynı.` };
+    const oldPrice = isNow ? book.price : isFuture ? priceAt(book, at.getTime()) : (override > 0 ? override : priceAt(book, at.getTime()));
+    if (newPrice === oldPrice) return { ok: false, reason: `${isNow ? 'Yeni fiyat mevcut fiyatla' : 'Yeni fiyat o tarihteki fiyatla'} aynı.` };
 
     const later = priceTimeline(book.id).filter((l) => new Date(l.changedAt) > at);
     const laterDone = later.filter((l) => !isFutureLog(l));
-    const updatesCurrent = isToday || (!isFuture && !laterDone.length);
+    const updatesCurrent = isNow || (!isFuture && !laterDone.length);
     const batch = db.batch();
     batch.set(col('priceLogs').doc(), {
       bookId: book.id, oldPrice, newPrice,
-      changedBy: state.currentUserId, changedAt: at.toISOString(), backdated: !isToday && !isFuture,
+      changedBy: state.currentUserId, changedAt: at.toISOString(), backdated: moment.kind === 'past',
       ...(isFuture ? { scheduled: true, effectiveAt: Timestamp.fromDate(at) } : {})
     });
     if (later.length) batch.update(col('priceLogs').doc(later[0].id), { oldPrice: newPrice });
     // Elle değişim de "en son geçerli an"ı ilerletir → daha eski planlı loglar bunu ezemez
-    if (updatesCurrent) batch.update(bookRef(book.id), { price: newPrice, priceEffectiveAt: Timestamp.fromDate(isToday ? new Date() : at) });
-    return { ok: true, book, oldPrice, newPrice, isToday, isFuture, updatesCurrent, pct: pricePct(oldPrice, newPrice), done: batch.commit() };
+    if (updatesCurrent) batch.update(bookRef(book.id), { price: newPrice, priceEffectiveAt: Timestamp.fromDate(isNow ? new Date() : at) });
+    return { ok: true, book, oldPrice, newPrice, at, isToday: isNow, isFuture, updatesCurrent, pct: pricePct(oldPrice, newPrice), done: batch.commit() };
   }
 
   /* Kiralamayı tamamen siler (Kontrolcü). Paket (özel teklif) kiralamasında paketin
@@ -2936,7 +2952,7 @@
         <div class="flex items-center gap-2 p-2.5 rounded-xl ${future ? 'bg-violet-50/60 border border-dashed border-violet-200' : 'bg-slate-50/80'}">
           <div class="flex-1 min-w-0">
             <p class="text-[10px] ${future ? 'text-violet-600 font-semibold' : 'text-slate-400'}">${future
-              ? `⏳ Planlandı · ${formatLongDate(l.changedAt)} · ${formatRemaining(logEffMs(l) - Date.now())}`
+              ? `⏳ Planlandı · ${formatLongDate(l.changedAt)} ${formatTime(l.changedAt)} · ${formatRemaining(logEffMs(l) - Date.now())}`
               : `${formatLongDate(l.changedAt)} · ${formatTime(l.changedAt)}`}</p>
             <p class="text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
               <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
@@ -3217,7 +3233,7 @@
     openConfirm({
       title: 'Fiyat kaydı silinsin mi?',
       message: `${b ? `"${escapeHTML(b.title)}" · ` : ''}${formatMoney(l.oldPrice)} → ${formatMoney(l.newPrice)} ${isFutureLog(l)
-        ? `planlı değişimi iptal edilecek. ${formatLongDate(l.changedAt)} geldiğinde fiyat <b>değişmeyecek</b>.`
+        ? `planlı değişimi iptal edilecek. ${formatLongDate(l.changedAt)} ${formatTime(l.changedAt)} geldiğinde fiyat <b>değişmeyecek</b>.`
         : 'değişimi logdan kaldırılacak. Kitabın güncel fiyatı değişmez.'}`,
       onConfirm: () => {
         closeModal();
@@ -3714,7 +3730,7 @@
                 ${coverHTML(b, 'sm')}
                 <div class="flex-1 min-w-0">
                   <p class="text-xs font-semibold text-slate-800 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
-                  <p class="text-[11px] text-violet-600 font-semibold">${formatLongDate(l.changedAt)} · ${formatRemaining(logEffMs(l) - nowMs)}</p>
+                  <p class="text-[11px] text-violet-600 font-semibold">${formatLongDate(l.changedAt)} ${formatTime(l.changedAt)} · ${formatRemaining(logEffMs(l) - nowMs)}</p>
                 </div>
                 <div class="shrink-0 text-right">
                   <p class="text-xs"><span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span> → <b class="text-slate-800">${formatMoney(l.newPrice)}</b></p>
@@ -5058,7 +5074,11 @@
     openModal(`
       ${modalHeader('Fiyat Güncelle', 'Tarih seç → kitap seç → yeni fiyatı yaz. Değişim Fiyat Logu\'na kaydedilir.', 'price-logs')}
       <form data-form="changePrice" class="p-5 space-y-3.5" autocomplete="off">
-        ${field('Tarih', `<input name="date" id="cpDate" type="date" required value="${today}" class="${INPUT_CLS}" />`, 'Bugün → fiyat hemen değişir · geçmiş tarih → kayıt o tarihe yazılır · gelecek tarih → o gün geldiğinde fiyat değişir')}
+        <div class="grid grid-cols-[1fr_auto] gap-3">
+          ${field('Tarih', `<input name="date" id="cpDate" type="date" required value="${today}" class="${INPUT_CLS} min-w-0" />`)}
+          <div id="cpTimeWrap">${field('Saat', `<input name="time" id="cpTime" type="time" class="${INPUT_CLS} w-[6.5rem]" />`)}</div>
+        </div>
+        <p id="cpTimeHint" class="text-[10px] text-slate-400 -mt-2"></p>
         ${field('Kitap', `<select name="bookId" id="cpBook" class="${INPUT_CLS}">
           ${sorted.map((b) => `<option value="${b.id}" ${b.id === sel.id ? 'selected' : ''}>${escapeHTML(seriesLabel(b))} · ${escapeHTML(b.title)}</option>`).join('')}
         </select>`)}
@@ -5084,12 +5104,20 @@
     const box = $('#cpPreview');
     if (!b || !box) return;
     const dateKey = $('#cpDate')?.value || localDateKey();
-    const isToday = dateKey === localDateKey();
-    const isFuture = dateKey > localDateKey();
-    const at = isToday ? Date.now() : dateFromKey(dateKey).setHours(isFuture ? 0 : 12, 0, 0, 0);
+    const timeKey = $('#cpTime')?.value || '';
+    const pastDay = dateKey < localDateKey();
+    // Saat: geçmiş tarihte gizli · gelecek tarihte zorunlu · bugün isteğe bağlı (boş = hemen)
+    $('#cpTimeWrap').classList.toggle('hidden', pastDay);
+    $('#cpTime').required = dateKey > localDateKey();
+    $('#cpTimeHint').textContent = pastDay ? 'Geçmiş tarih: kayıt o güne yazılır.'
+      : dateKey > localDateKey() ? 'Gelecek tarih: saat zorunlu · o an geldiğinde fiyat değişir.'
+        : 'Bugün: saati boş bırakırsan fiyat hemen değişir · ileri bir saat seçersen o saatte değişir.';
+    const moment = priceChangeMoment(dateKey, timeKey);
+    const isFuture = moment.kind === 'future';
+    const isToday = moment.kind === 'now';
+    const at = moment.at ? moment.at.getTime() : Date.now();
     const oldInput = $('#cpOld');
-    // Geçmiş tarihte o günkü fiyat elle yazılabilir; gelecekte o günkü (planlı dahil) fiyat kullanılır
-    const pastDay = !isToday && !isFuture;
+    // Geçmiş tarihte o günkü fiyat elle yazılabilir; gelecekte o anki (planlı dahil) fiyat kullanılır
     if (pastDay && (resetOld || !oldInput.value)) oldInput.value = priceAt(b, at) || '';
     oldInput.classList.toggle('hidden', !pastDay);
     oldInput.required = pastDay;
@@ -5100,8 +5128,9 @@
     $('#cpCurrent').textContent = formatMoney(oldPrice);
     const np = parseFloat($('#cpNew')?.value);
     const later = pastDay && priceTimeline(b.id).some((l) => new Date(l.changedAt).getTime() > at && !isFutureLog(l));
-    const note = isToday ? 'Kitabın fiyatı hemen değişir.'
-      : isFuture ? `⏳ Planlı değişim: ${formatLongDate(dateKey + 'T12:00:00')} geldiğinde kitabın fiyatı otomatik değişir. O tarihten önce kaydı silersen hiçbir şey değişmez.`
+    const note = moment.error ? `⚠️ ${moment.error}`
+      : isToday ? 'Kitabın fiyatı hemen değişir.'
+      : isFuture ? `⏳ Planlı değişim: ${formatLongDate(moment.at.toISOString())} saat ${formatTime(moment.at.toISOString())} geldiğinde kitabın fiyatı otomatik değişir. O andan önce kaydı silersen hiçbir şey değişmez.`
       : later ? 'Geçmişe kayıt: bu tarihten sonra başka değişim olduğu için kitabın güncel fiyatı değişmez.'
         : 'Geçmişe kayıt: sonrasında başka değişim olmadığı için kitabın güncel fiyatı da bu fiyata geçer.';
     if (!(np > 0)) { box.textContent = note; return; }
@@ -5116,12 +5145,12 @@
 
   function handleChangePrice(fd) {
     if (!requireAdmin()) return;
-    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice), fd.date, fd.oldPrice);
+    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice), fd.date, fd.oldPrice, fd.time || '');
     if (!res.ok) return toast(res.reason, 'error');
     closeModal();
     const pctTxt = pctText(res.pct);
     run(res.done, `"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${pctTxt})${res.isToday ? ''
-      : res.isFuture ? ` · ⏳ ${formatLongDate(fd.date + 'T12:00:00')} tarihinde uygulanacak`
+      : res.isFuture ? ` · ⏳ ${formatLongDate(res.at.toISOString())} ${formatTime(res.at.toISOString())} itibarıyla uygulanacak`
       : res.updatesCurrent ? ' · geçmişe kaydedildi, güncel fiyat da değişti' : ' · geçmişe kaydedildi'}`);
   }
 
@@ -6244,6 +6273,7 @@
       if (t.matches('[data-filter-kind]')) { const p = t.dataset.filterKind; state[`${p}Kind`] = t.value; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if (t.matches('[data-filter-value]')) { const p = t.dataset.filterValue; state[`${p}Value`] = t.value; return rerenderFilter(p); }
       if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview(true);
+      if (t.id === 'cpTime') updateChangePricePreview();
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
     });
 
