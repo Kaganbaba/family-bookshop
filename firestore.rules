@@ -73,7 +73,8 @@ service cloud.firestore {
         let tx = after.lastTx;
         return changedKeys().hasOnly(['balance', 'lastTx', 'lastTxType'])
           && tx is string && tx != before.get('lastTx', null)
-          && after.balance is number && after.balance >= 0 && after.balance < before.balance
+          // bedava (%100 indirimli) kiralamada bakiye aynı kalır
+          && after.balance is number && after.balance >= 0 && after.balance <= before.balance
           && ((after.lastTxType == 'rental' && paidRental(tx, before.balance, after.balance))
             || (after.lastTxType == 'package' && paidPackage(tx, before.balance, after.balance)));
       }
@@ -154,11 +155,12 @@ service cloud.firestore {
           && r.discount <= 50
           && r.price >= r.listPrice * 0.5 - 0.01;
       }
-      // Vitrin İndirimi: Kontrolcünün discounts/{kitap} belgesindeki yüzdenin aynısı
+      // Vitrin İndirimi: Kontrolcünün discounts/{kitap} belgesindeki yüzdenin aynısı (süresi dolmamış)
       function vitrineDiscount(r) {
         let d = get(path('discounts', string(r.bookId))).data;
         return r.discountSource == 'custom'
           && d.rate is int && r.discount == d.rate
+          && (!('endsAt' in d) || request.time < d.endsAt)
           && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
       }
       // Paket: aynı batch'teki satın alıma ait olmalı
@@ -211,13 +213,15 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
-    // Vitrin İndirimi · belge adı = kitap numarası · { bookId, rate (1–90), createdAt, createdBy }
+    // Vitrin İndirimi · belge adı = kitap numarası · { bookId, name, rate (1–100, 100 = bedava), endsAt, createdAt, createdBy }
     match /discounts/{bookId} {
       allow read: if signedIn();
       allow delete: if isAdmin();
       allow create, update: if isAdmin()
         && request.resource.data.rate is int
-        && request.resource.data.rate >= 1 && request.resource.data.rate <= 90
+        && request.resource.data.rate >= 1 && request.resource.data.rate <= 100
+        && request.resource.data.endsAt is timestamp
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
         && string(request.resource.data.bookId) == bookId;
     }
     // Uygulama ayarları · settings/deals.refreshedAt: Kontrolcünün "Şimdi Yenile" anı
