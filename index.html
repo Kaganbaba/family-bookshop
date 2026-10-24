@@ -2187,7 +2187,7 @@
             </div>
           </div>
           <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full">
-            <span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>Süresi Doldu
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>${endedLabel(r)}
           </span>
           ${rentalDeleteBtn(r)}
         </li>`;
@@ -2405,7 +2405,7 @@
                     <div data-rental-bar="${r.id}" class="h-full rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
                   </div>
                   <span data-rental-left="${r.id}" class="text-[11px] font-semibold shrink-0 tabular-nums"></span>` : `
-                  <span class="flex-1"><span class="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>Süresi Doldu</span></span>`}
+                  <span class="flex-1"><span class="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>${endedLabel(r)}</span></span>`}
                 ${rentalDeleteBtn(r)}
               </div>
             </div>
@@ -2958,7 +2958,7 @@
       const active = isActiveRental(r, nowMs);
       const statusChip = active
         ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-emerald-50 text-emerald-600">Aktif</span>'
-        : '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-slate-100 text-slate-500">Süresi Doldu</span>';
+        : `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-slate-100 text-slate-500">${endedLabel(r)}</span>`;
       const discChip = r.offerId
         ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-violet-50 text-violet-600">🎁 Paket</span>'
         : r.couponId ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-emerald-50 text-emerald-600">${couponRentalLabel(r)}</span>`
@@ -4593,28 +4593,79 @@
     });
   }
 
-  /* --- Kiralamayı iptal et / sil --- */
+  /* --- Kiralamayı iptal et (istatistik kalır) / iptal et + istatistikleri sil (kayıt silinir) ---
+     Kitap ve kullanıcı istatistikleri kiralama kayıtlarından hesaplanır:
+     • İptal Et: kayıt kalır, "iptal edildi" olarak hemen biter, kitap boşa çıkar.
+     • İstatistikleri de sil: kayıt kalıcı olarak silinir (kiralanma sayısı, harcama, puan vb. düşer).
+     Paket (özel teklif) kiralamasında işlem paketin tüm kitaplarına uygulanır. Bakiye iade edilmez. */
+  const rentalGroup = (r) => (r.purchaseId ? rentals.filter((x) => x.purchaseId === r.purchaseId) : [r]);
+
   function deleteRental(id) {
     if (!requireAdmin()) return;
     const r = getRental(id);
     if (!r) return;
     const b = getBook(r.bookId);
     const usr = getUser(r.userId);
-    const pkg = r.purchaseId ? rentals.filter((x) => x.purchaseId === r.purchaseId) : [];
-    const what = pkg.length > 1
-      ? `Bu kitap bir özel teklif paketine ait. Paketteki <b>${pkg.length} kiralamanın hepsi</b> ve satın alım kaydı silinecek.`
-      : `<b>${escapeHTML(usr?.name || 'Kullanıcı')}</b> adına "${escapeHTML(b?.title || 'kitap')}" kiralaması kalıcı olarak silinecek.`;
-    openConfirm({
-      title: 'Kiralama iptal edilsin mi?',
-      message: `${what} Kitap anında tekrar Müsait olur. Bakiye iade edilmez.`,
-      confirmLabel: 'İptal Et / Sil',
-      onConfirm: () => {
-        const { removed, done } = removeRental(id);
-        closeModal();
-        run(done, removed.length > 1 ? `Paket kiralaması silindi · ${removed.length} kitap boşa çıktı.` : `Kiralama silindi · "${b?.title || 'Kitap'}" boşa çıktı.`, 'info');
-      }
-    });
+    const group = rentalGroup(r);
+    const anyActive = group.some((x) => isActiveRental(x));
+    const what = group.length > 1
+      ? `Bu kitap bir özel teklif paketine ait; işlem paketteki <b>${group.length} kiralamanın hepsine</b> uygulanır.`
+      : `<b>${escapeHTML(usr?.name || 'Kullanıcı')}</b> · "${escapeHTML(b?.title || 'kitap')}" kiralaması.`;
+    const option = (attr, tone, label, desc) => `
+      <button type="button" ${attr}="${r.id}" class="w-full text-left rounded-2xl border px-4 py-3 transition ${tone}">
+        <span class="block text-xs font-bold">${label}</span>
+        <span class="block text-[10px] mt-0.5 opacity-80 leading-snug">${desc}</span>
+      </button>`;
+    openModal(`
+      <div class="p-6">
+        <div class="text-center">
+          <span class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">${icon('close', 'w-6 h-6')}</span>
+          <h3 class="text-sm font-bold text-slate-800 mt-3">${anyActive ? 'Kiralama iptal edilsin mi?' : 'Kiralama kaydı silinsin mi?'}</h3>
+          <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">${what} Bakiye iade edilmez.</p>
+        </div>
+        <div class="space-y-2.5 mt-5">
+          ${anyActive ? option('data-cancel-rental', 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100',
+            'İptal Et · istatistikler kalsın',
+            'Kiralama hemen biter, kitap boşa çıkar. Kullanıcının ve kitabın istatistiklerinde (kiralanma sayısı, harcama, puan) kalır.') : ''}
+          ${option('data-wipe-rental', 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100',
+            `${anyActive ? 'İptal Et + ' : ''}İstatistikleri de Sil`,
+            'Kayıt kalıcı olarak silinir; bu kiralama kullanıcının ve kitabın istatistiklerinden tamamen düşer.')}
+          <button type="button" data-modal-close class="w-full py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Vazgeç</button>
+        </div>
+      </div>`);
   }
+
+  /* İptal (istatistik korunur): aktif kayıtlar "iptal edildi" ile hemen biter, kitap kilitleri açılır */
+  function cancelRental(id) {
+    if (!requireAdmin()) return;
+    const r = getRental(id);
+    if (!r) return;
+    const nowIso = isoAt(Date.now());
+    const list = rentalGroup(r).filter((x) => isActiveRental(x));
+    const ops = [];
+    list.forEach((x) => {
+      ops.push((bt) => bt.update(col('rentals').doc(x.id), { returnedAt: nowIso, cancelledAt: nowIso, dueAt: nowIso }));
+      const b = getBook(x.bookId);
+      if (b && b.lockRental === x.id) ops.push((bt) => bt.update(bookRef(b.id), { lockUntil: null, lockBy: null, lockRental: null }));
+    });
+    closeModal();
+    run(commitOps(ops), list.length > 1 ? `Paket kiralaması iptal edildi · ${list.length} kitap boşa çıktı · istatistikler korundu.`
+      : `Kiralama iptal edildi · "${getBook(r.bookId)?.title || 'Kitap'}" boşa çıktı · istatistikler korundu.`, 'info');
+  }
+
+  /* İptal + istatistikleri sil: kayıt(lar) kalıcı olarak silinir */
+  function wipeRental(id) {
+    if (!requireAdmin()) return;
+    const r = getRental(id);
+    if (!r) return;
+    const { removed, done } = removeRental(id);
+    closeModal();
+    run(done, removed.length > 1 ? `Paket kiralaması ve istatistikleri silindi · ${removed.length} kitap.`
+      : `Kiralama ve istatistikleri silindi · "${getBook(r.bookId)?.title || 'Kitap'}".`, 'info');
+  }
+
+  /* Biten kiralamanın etiketi: Kontrolcü iptal ettiyse "İptal Edildi", yoksa "Süresi Doldu" */
+  const endedLabel = (r) => (r.cancelledAt ? 'İptal Edildi' : 'Süresi Doldu');
 
   /* --- Kategorileri (kitap türlerini) yönet --- */
   const paletteOptions = (sel) => Object.entries(TYPE_PALETTES)
@@ -5442,6 +5493,8 @@
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
+      if ((m = el('[data-cancel-rental]')))    return cancelRental(m.dataset.cancelRental);
+      if ((m = el('[data-wipe-rental]')))      return wipeRental(m.dataset.wipeRental);
       if ((m = el('[data-delete-type]')))      return deleteType(m.dataset.deleteType);
       if ((m = el('[data-delete-news]')))      return deleteNews(m.dataset.deleteNews);
       if ((m = el('[data-edit-news]')))        return openNewsModal(m.dataset.editNews);
