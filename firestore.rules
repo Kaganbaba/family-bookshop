@@ -40,6 +40,14 @@ service cloud.firestore {
     function canRent() { return signedIn() && me().role in ['admin', 'member']; }
     function changedKeys() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function near(a, b) { return math.abs(a - b) < 0.005; }
+    // ISO (UTC) metni "YYYY-MM-DDTHH:MM:SS.sssZ" → timestamp (dakika hassasiyeti)
+    function isoToTs(iso) {
+      let d = iso.split('T')[0].split('-');
+      let t = iso.split('T')[1].split(':');
+      return timestamp.date(int(d[0]), int(d[1]), int(d[2])) + duration.value(int(t[0]) * 60 + int(t[1]), 'm');
+    }
+    // Türkiye saatiyle (sabit UTC+3) o günün bitişi = ertesi gün 00:00 (TR)
+    function trDayEnd(ts) { return (ts + duration.value(3, 'h')).date() + duration.value(21, 'h'); }
     // Kupon türü / değeri (eski kayıtlar: yalnızca rate → yüzde kuponu)
     function couponType(c) { return c.get('type', 'percent'); }
     function couponValue(c) { return c.get('value', c.get('rate', 0)); }
@@ -348,6 +356,36 @@ service cloud.firestore {
           && f.createdAt is string
           && f.status == 'open' && f.replies == [] && f.adminSeen == false
           && f.lastReplyAt == null && f.userSeenAt == null;
+      }
+    }
+
+    // İade talebi · belge adı = kiralama (kiralama başına tek talep)
+    // { userId, rentalId, bookId, amount, reason, createdAt, status, decidedAt, decidedBy, adminNote, userSeenAt }
+    // Üye yalnızca kendi indirimsiz, tekli, aktif kiralaması için ödediği tutarla talep açar; yalnızca "sonucu gördüm"
+    // işaretini günceller. Admin hepsini okur ve karar verir (bakiye iadesi + kiralama silme Admin yetkisiyle yapılır).
+    // Talep yalnızca kiralandığı gün açılabilir: Türkiye saatiyle gece 00:00'a kadar (kural denetler).
+    match /refunds/{rentalId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == uid());
+      allow create: if canRent() && validRefund(request.resource.data, get(path('rentals', rentalId)).data);
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.userId == uid() && resource.data.status != 'pending'
+          && changedKeys().hasOnly(['userSeenAt']) && request.resource.data.userSeenAt is string);
+      allow delete: if isAdmin();
+
+      function validRefund(f, r) {
+        return f.keys().hasOnly(['userId', 'rentalId', 'bookId', 'amount', 'reason', 'createdAt', 'status', 'decidedAt', 'decidedBy', 'adminNote', 'userSeenAt'])
+          && f.userId == uid() && f.rentalId == rentalId
+          && r.userId == uid() && r.bookId == f.bookId
+          // yalnızca indirimsiz tekli kiralama (indirimli / kuponlu / özel teklif iade edilemez)
+          && r.get('purchaseId', null) == null && r.get('offerId', null) == null && r.get('couponId', null) == null
+          && r.get('discountSource', null) == null && r.get('discount', 0) == 0
+          && r.get('returnedAt', null) == null
+          // kiralandığı gün (Türkiye saatiyle gece 00:00'dan önce)
+          && request.time < trDayEnd(isoToTs(r.rentedAt))
+          && f.amount == r.price
+          && f.reason is string && f.reason.size() >= 3 && f.reason.size() <= 500
+          && f.createdAt is string
+          && f.status == 'pending' && f.decidedAt == null && f.decidedBy == null && f.adminNote == null && f.userSeenAt == null;
       }
     }
 

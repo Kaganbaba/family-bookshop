@@ -322,7 +322,7 @@
               </div>
               <!-- Hızlı özet: bakiye · aktif kiralama · harcama -->
               <div id="panelQuick" class="relative grid grid-cols-3 gap-2 mt-3.5"></div>
-              <div class="relative grid grid-cols-3 gap-2 mt-3">
+              <div class="relative grid grid-cols-2 gap-2 mt-3">
                 <button type="button" data-open-profile
                   class="flex items-center justify-center gap-1 py-2 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-[11px] font-semibold shadow-soft transition">
                   👤 Profilim
@@ -335,6 +335,12 @@
                   class="relative flex items-center justify-center gap-1 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
                   💬 Geri Bildirim
                   <span id="fbBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold items-center justify-center ring-2 ring-brand-600"></span>
+                </button>
+                <!-- Admin: Onay Bekleyenler (iade talepleri) · üye: İadelerim -->
+                <button type="button" data-open-refunds
+                  class="relative flex items-center justify-center gap-1 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
+                  <span id="panelRefundLabel">↩️ İadelerim</span>
+                  <span id="rfBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold items-center justify-center ring-2 ring-brand-600"></span>
                 </button>
               </div>
             </div>
@@ -599,6 +605,9 @@
   /* feedback/{id} · { userId, type, message, createdAt, status ('open'|'answered'), replies: [{ by, text, at }],
      adminSeen, lastReplyAt, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
   const feedbacks = [];
+  /* refunds/{rentalId} · iade talebi: { userId, rentalId, bookId, amount, reason, createdAt, status ('pending'|'approved'|'rejected'),
+     decidedAt, decidedBy, adminNote, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
+  const refunds = [];
 
   /* ==========================================================
      1.1) ÖRNEK KATALOG (Admin panelinden bir kez Firestore'a yüklenir)
@@ -729,6 +738,8 @@
     fbFilter: 'open',      // Admin: 'open' | 'answered' | 'all'
     fbFresh: null,         // pencere açılırken "yeni" olan geri bildirimler
     fbListOnly: false,     // "Gönderdiklerim ve cevaplar": yazma kutusu olmadan yalnızca liste
+    refundsOpen: false,    // Onay Bekleyenler / İadelerim penceresi açık mı
+    refundFilter: 'pending', // Admin: 'pending' | 'approved' | 'rejected'
     memberView: (() => { try { return localStorage.getItem('fb.memberView') === '1'; } catch { return false; } })(), // Admin: Üye Görünümü
     bookTab: 'all',
     bookFilterKind: 'none', // Kitaplar: filtre türü (place | year | status | rating)
@@ -2492,7 +2503,7 @@
                   <div data-rental-bar="${r.id}" class="h-full rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
                 </div>
                 <span data-rental-left="${r.id}" class="text-[11px] font-semibold shrink-0 tabular-nums"></span>
-                ${rentalDeleteBtn(r)}
+                ${refundBtnHTML(r)}${rentalDeleteBtn(r)}
               </div>
             </div>
           </div>
@@ -2536,7 +2547,7 @@
           <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full">
             <span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>${endedLabel(r)}
           </span>
-          ${rentalDeleteBtn(r)}
+          ${refundBtnHTML(r)}${rentalDeleteBtn(r)}
         </li>`;
     }).join('');
   }
@@ -2790,7 +2801,7 @@
                   </div>
                   <span data-rental-left="${r.id}" class="text-[11px] font-semibold shrink-0 tabular-nums"></span>` : `
                   <span class="flex-1"><span class="inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>${endedLabel(r)}</span></span>`}
-                ${rentalDeleteBtn(r)}
+                ${refundBtnHTML(r)}${rentalDeleteBtn(r)}
               </div>
             </div>
           </div>
@@ -2854,6 +2865,7 @@
             <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-[11px] text-amber-700">
               ${avatarHTML(holder, 'w-6 h-6 text-[10px]')}
               <span class="flex-1 min-w-0"><b>${escapeHTML(holder.name)}</b> kiraladı · ${formatRemaining(new Date(active.dueAt) - now)}</span>
+              ${refundBtnHTML(active)}
             </div>` : ''}
           ${myCoupons.length ? `
             <label class="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs">
@@ -4885,6 +4897,7 @@
     state.modalOpen = false;
     state.confirmAction = null;
     state.feedbackOpen = false;
+    state.refundsOpen = false;
     state.bookLogsOpen = null;
     $('#modalBackdrop').classList.add('opacity-0');
     $('#modalPanel').classList.add('opacity-0', 'translate-y-6', 'sm:translate-y-2', 'sm:scale-95');
@@ -5799,7 +5812,14 @@
     fbBadge.textContent = fbCount > 9 ? '9+' : fbCount;
     fbBadge.classList.toggle('hidden', !fbCount);
     fbBadge.classList.toggle('flex', !!fbCount);
-    $('#fbDot').classList.toggle('hidden', !fbCount);
+    // İade rozeti: Admin → bekleyen talep · üye → sonuçlanan talep
+    const rfCount = refundBadgeCount();
+    const rfBadge = $('#rfBadge');
+    rfBadge.textContent = rfCount > 9 ? '9+' : rfCount;
+    rfBadge.classList.toggle('hidden', !rfCount);
+    rfBadge.classList.toggle('flex', !!rfCount);
+    $('#panelRefundLabel').textContent = isAdmin() ? '⏳ Onay Bekleyenler' : '↩️ İadelerim';
+    $('#fbDot').classList.toggle('hidden', !fbCount && !rfCount);
     // Alt bilgideki geri bildirim kutusu yalnızca üyelerde (Admin, Üye Görünümü'nde de yazamaz)
     $('#footerFeedback').classList.toggle('hidden', !canSendFeedback());
     $('#footerFeedbackAdmin').classList.toggle('hidden', canSendFeedback());
@@ -6130,6 +6150,181 @@
   }
 
   /* ==========================================================
+     17.06) İADE · kiralandığı gün (gece 00:00'a kadar) açıklamayla talep → Admin onaylar / reddeder
+     • Yalnızca indirimsiz tekli kiralama (indirimli, kuponlu, özel teklif/paket iade edilemez).
+     • Onay: ödenen tutar bakiyeye döner, kiralama kaydı silinir (istatistikler ve o kitaba oyu da gider),
+       kitap boşa çıkar. Talep belgesi kayıt olarak kalır (belge adı = kiralama → kiralama başına tek talep).
+     ========================================================== */
+  const refundOf = (rentalId) => refunds.find((x) => x.id === rentalId) || null;
+  const sameLocalDay = (a, b) => localDateKey(a) === localDateKey(b);
+  /* Neden iade edilemez? (boş = edilebilir) */
+  function refundBlockReason(r, now = new Date()) {
+    if (!r || r.userId !== state.currentUserId) return 'Yalnızca kendi kiralamanı iade edebilirsin.';
+    if (!isActiveRental(r, now.getTime()) || r.cancelledAt) return 'Bu kiralama artık aktif değil.';
+    if (r.purchaseId || r.offerId) return 'Özel teklifle alınan kitaplar iade edilemez.';
+    if (r.couponId || r.discountSource || r.discount > 0) return 'İndirimle alınan kitaplar iade edilemez.';
+    if (!sameLocalDay(r.rentedAt, now)) return 'İade yalnızca kiralandığı gün (gece 00:00\'a kadar) yapılabilir.';
+    return '';
+  }
+  /* Kiralama satırındaki iade butonu / durum rozeti (yalnızca kiralamanın sahibine) */
+  function refundBtnHTML(r) {
+    if (r.userId !== state.currentUserId) return '';
+    const req = refundOf(r.id);
+    if (req?.status === 'pending') return '<span class="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-100 whitespace-nowrap">⏳ İade bekliyor</span>';
+    if (req?.status === 'rejected') return '<span class="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">İade reddedildi</span>';
+    if (refundBlockReason(r)) return '';
+    return `<button type="button" data-refund-rental="${r.id}" title="Bugün 23:59'a kadar iade talebi gönderebilirsin"
+      class="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-600 bg-sky-50 border border-sky-200 hover:bg-sky-500 hover:text-white hover:border-sky-500 px-2.5 py-1 rounded-full whitespace-nowrap transition">↩️ İade</button>`;
+  }
+
+  /* Üye: iade talebi penceresi (açıklama zorunlu) */
+  function openRefundRequest(rentalId) {
+    const r = getRental(rentalId);
+    const why = refundBlockReason(r);
+    if (why) return toast(why, 'error');
+    if (refundOf(r.id)) return toast('Bu kiralama için zaten bir iade talebin var.', 'info');
+    const b = getBook(r.bookId);
+    openModal(`
+      ${modalHeader('İade Talebi ↩️', 'Admin onaylayınca ödediğin tutar bakiyene geri yüklenir.', 'back', 'bg-sky-50 text-sky-600')}
+      <form data-form="sendRefund" data-rental-id="${r.id}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="flex items-center gap-3 p-3 rounded-2xl bg-slate-50">
+          ${coverHTML(b, 'sm')}
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(b?.title || 'Kitap')}</p>
+            <p class="text-[10px] text-slate-400">Kiralandı: ${formatDate(r.rentedAt, true)}</p>
+          </div>
+          <span class="text-sm font-bold text-emerald-600 shrink-0">${formatMoney(r.price)}</span>
+        </div>
+        ${field('Açıklama', `<textarea name="reason" rows="3" required minlength="3" maxlength="500" autofocus class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Neden iade etmek istiyorsun?"></textarea>`)}
+        <p class="text-[10px] text-slate-400 leading-relaxed">⏳ Talep bugün 23:59'a kadar gönderilebilir. Onaylanırsa kiralama ve bu kiralamaya ait istatistikler (ve varsa bu kitaba verdiğin oy) silinir; kitap boşa çıkar.</p>
+        ${formFooter('Talebi Gönder')}
+      </form>`);
+  }
+
+  function handleSendRefund(fd, form) {
+    const r = getRental(form.dataset.rentalId);
+    const why = refundBlockReason(r);
+    if (why) return toast(why, 'error');
+    const reason = (fd.reason || '').trim();
+    if (reason.length < 3) return toast('Lütfen kısa bir açıklama yaz.', 'error');
+    closeModal();
+    run(col('refunds').doc(r.id).set({
+      userId: r.userId, rentalId: r.id, bookId: r.bookId, amount: r.price, reason,
+      createdAt: isoAt(Date.now()), status: 'pending', decidedAt: null, decidedBy: null, adminNote: null, userSeenAt: null
+    }), 'İade talebin gönderildi · Admin onayı bekleniyor ⏳');
+  }
+
+  /* Rozet: Admin → bekleyen talep · üye → sonuçlanıp görülmemiş kendi talebi */
+  const refundBadgeCount = () => (isAdmin()
+    ? refunds.filter((f) => f.status === 'pending').length
+    : refunds.filter((f) => f.userId === state.currentUserId && f.status !== 'pending' && !f.userSeenAt).length);
+
+  /* Admin: Onay Bekleyenler · üye: İadelerim */
+  function openRefundsModal() {
+    state.refundsOpen = true;
+    const admin = isAdmin();
+    const filterBtn = (k, label, n) => `
+      <button type="button" data-refund-filter="${k}" class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${state.refundFilter === k ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}">
+        ${label} <span class="opacity-70">${n}</span></button>`;
+    const n = (s) => refunds.filter((f) => f.status === s).length;
+    openModal(`
+      ${modalHeader(admin ? 'Onay Bekleyenler ⏳' : 'İadelerim ↩️',
+        admin ? 'İade taleplerini onayla ya da reddet · açıklama yazmak isteğe bağlı.' : 'İade taleplerin ve Admin\'in kararı.', 'back', 'bg-sky-50 text-sky-600')}
+      <div class="p-5 space-y-4">
+        ${admin ? `<div class="flex gap-1.5 flex-wrap">
+          ${filterBtn('pending', '⏳ Bekleyen', n('pending'))}${filterBtn('approved', '✓ Onaylanan', n('approved'))}${filterBtn('rejected', '✕ Reddedilen', n('rejected'))}
+        </div>` : ''}
+        <div id="refundList"></div>
+        <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
+      </div>`, 'lg');
+    renderRefundList();
+  }
+
+  function renderRefundList() {
+    const box = $('#refundList');
+    if (!box) return;
+    const admin = isAdmin();
+    const drafts = {};
+    box.querySelectorAll('[data-refund-note]').forEach((t) => { drafts[t.dataset.refundNote] = t.value; });
+    let list = admin ? refunds.filter((f) => f.status === state.refundFilter) : refunds.filter((f) => f.userId === state.currentUserId);
+    list = [...list].sort((a, b) => isoMs(b.createdAt) - isoMs(a.createdAt));
+    const statusChip = (s) => ({
+      pending: '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">⏳ Bekliyor</span>',
+      approved: '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ Onaylandı · bakiyeye yüklendi</span>',
+      rejected: '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">✕ Reddedildi</span>'
+    }[s] || '');
+    const card = (f) => {
+      const usr = getUser(f.userId);
+      const b = getBook(f.bookId);
+      const r = getRental(f.rentalId);
+      const inTime = r ? sameLocalDay(r.rentedAt, f.createdAt) : true;
+      return `
+        <li class="rounded-2xl border border-slate-100 bg-white p-3.5">
+          <div class="flex items-center gap-3">
+            ${coverHTML(b, 'sm')}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                ${admin && usr ? `<span class="flex items-center gap-1.5 text-xs font-semibold text-slate-700">${avatarHTML(usr, 'w-5 h-5 text-[9px]')}${escapeHTML(usr.name)}</span>` : ''}
+                ${statusChip(f.status)}
+              </div>
+              <p class="text-xs font-semibold text-slate-700 truncate mt-1">${escapeHTML(b?.title || 'Silinmiş kitap')}</p>
+              <p class="text-[10px] text-slate-400">${r ? `Kiralandı: ${formatDate(r.rentedAt, true)} · ` : ''}Talep: ${formatDate(f.createdAt, true)}${admin && r ? ` · ${inTime ? '<b class="text-emerald-600">aynı gün ✓</b>' : '<b class="text-rose-500">farklı gün ✕</b>'}` : ''}</p>
+            </div>
+            <span class="text-sm font-bold text-emerald-600 shrink-0">${formatMoney(f.amount)}</span>
+          </div>
+          <p class="text-xs text-slate-700 leading-relaxed whitespace-pre-line mt-2.5 bg-slate-50 rounded-xl px-3 py-2"><span class="text-[10px] font-semibold text-slate-400 block">Açıklama</span>${escapeHTML(f.reason)}</p>
+          ${f.adminNote ? `<p class="text-xs text-slate-700 leading-relaxed whitespace-pre-line mt-2 ml-3 pl-3 border-l-2 border-emerald-200"><span class="text-[10px] font-semibold text-emerald-700 block">🛡️ ${escapeHTML(getUser(f.decidedBy)?.name || 'Admin')}</span>${escapeHTML(f.adminNote)}</p>` : ''}
+          ${admin && f.status === 'pending' ? `
+            <textarea data-refund-note="${f.id}" rows="2" maxlength="500" class="${INPUT_CLS} mt-3 resize-y !text-xs" placeholder="Açıklama (isteğe bağlı)"></textarea>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+              <button type="button" data-refund-decide="reject" data-refund="${f.id}" class="py-2 rounded-xl text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 transition">✕ Reddet</button>
+              <button type="button" data-refund-decide="approve" data-refund="${f.id}" class="py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition">✓ Onayla · ${formatMoney(f.amount)} iade</button>
+            </div>` : ''}
+        </li>`;
+    };
+    box.innerHTML = list.length
+      ? `<ul class="space-y-3">${list.map(card).join('')}</ul>`
+      : emptyState(admin ? 'Bu filtrede iade talebi yok.' : 'Henüz iade talebin yok. Kiraladığın gün, indirimsiz bir kitabı "↩️ İade" ile iade edebilirsin.');
+    box.querySelectorAll('[data-refund-note]').forEach((t) => { if (drafts[t.dataset.refundNote]) t.value = drafts[t.dataset.refundNote]; });
+    // Üye: sonuçlanan talepleri gördü olarak işaretle
+    if (!admin) {
+      const todo = refunds.filter((f) => f.userId === state.currentUserId && f.status !== 'pending' && !f.userSeenAt && !state.purgePending.has(`rfseen:${f.id}`));
+      if (todo.length) {
+        todo.forEach((f) => state.purgePending.add(`rfseen:${f.id}`));
+        const now = isoAt(Date.now());
+        commitOps(todo.map((f) => (bt) => bt.update(col('refunds').doc(f.id), { userSeenAt: now }))).catch((e) => console.error(e));
+      }
+    }
+  }
+
+  /* Admin: onayla (bakiye iadesi + kiralama ve istatistik silme) / reddet */
+  async function decideRefund(id, decision) {
+    if (!requireAdmin()) return;
+    const f = refunds.find((x) => x.id === id);
+    if (!f || f.status !== 'pending') return;
+    const adminNote = (document.querySelector(`[data-refund-note="${id}"]`)?.value || '').trim() || null;
+    const decided = { decidedAt: isoAt(Date.now()), decidedBy: state.currentUserId, adminNote };
+    if (decision === 'reject') {
+      await run(col('refunds').doc(id).update({ status: 'rejected', ...decided }), 'İade talebi reddedildi.', 'info');
+      return;
+    }
+    const r = getRental(f.rentalId);
+    const u = getUser(f.userId);
+    if (!r || !u) return toast('Kiralama ya da kullanıcı bulunamadı; talep onaylanamaz.', 'error');
+    const b = getBook(r.bookId);
+    const ops = [
+      ...rentalDeleteOps([r]),          // kiralama silinir + kitap kilidi açılır
+      ...ratingCleanupOps([r]),         // o kitaba başka kiralaması yoksa oyu da silinir
+      ...pointsSyncOps([u.id], { rentals: new Set([r.id]) }),
+      (bt) => bt.update(col('users').doc(u.id), { balance: round2(u.balance + f.amount) }),
+      (bt) => bt.update(col('refunds').doc(id), { status: 'approved', ...decided })
+    ];
+    // Özel kitap kiralanınca "Kira dışı" olmuştu → iade edilince yeniden Kiralık
+    if (b && isSpecialBook(b) && bookStatus(b) === 'kiradisi' && b.lockRental === r.id) ops.push((bt) => bt.update(bookRef(b.id), { status: 'kiralik' }));
+    await run(commitOps(ops), `✓ İade onaylandı · ${u.name} bakiyesine ${formatMoney(f.amount)} yüklendi.`);
+  }
+
+  /* ==========================================================
      17.0) PROFİLİM · ad, giriş yöntemleri, şifre belirle / değiştir / sıfırla
      ========================================================== */
   const authProviders = () => (auth.currentUser?.providerData || []).map((p) => p.providerId);
@@ -6412,6 +6607,7 @@
       if ((m = t.closest('[data-set-role]')))        return setRole(m.dataset.user, m.dataset.setRole);
       if ((m = t.closest('[data-toggle-member-view]'))) return setMemberView(!state.memberView);
       if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(m.dataset.openFeedback === 'list'); }
+      if ((m = t.closest('[data-open-refunds]')))    { toggleProfile(false); return openRefundsModal(); }
       if ((m = t.closest('[data-quick-amount]')))    { const i = $('#bmAmount'); if (i) { i.value = m.dataset.quickAmount; i.focus(); } return; }
       if ((m = t.closest('[data-panel-user]')))      { state.panelUser = state.panelUser === m.dataset.panelUser ? null : m.dataset.panelUser; return renderAdminPanel(); }
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
@@ -6432,6 +6628,9 @@
       if ((m = el('[data-fb-filter]')))        { state.fbFilter = m.dataset.fbFilter; return openFeedbackModal(); }
       if ((m = el('[data-send-reply]')))       return sendFeedbackReply(m.dataset.sendReply);
       if ((m = el('[data-delete-feedback]')))  return deleteFeedback(m.dataset.deleteFeedback);
+      if ((m = el('[data-refund-rental]')))    return openRefundRequest(m.dataset.refundRental);
+      if ((m = el('[data-refund-filter]')))    { state.refundFilter = m.dataset.refundFilter; return openRefundsModal(); }
+      if ((m = el('[data-refund-decide]')))    return decideRefund(m.dataset.refund, m.dataset.refundDecide);
       if ((m = el('[data-modal-close]')))      return closeModal();
       if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
       if ((m = el('[data-sign-out]')))         return signOut();
@@ -6512,6 +6711,7 @@
         case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
         case 'bulkNews':    return handleBulkNews(fd);
         case 'sendFeedback': return handleSendFeedback(fd);
+        case 'sendRefund':  return handleSendRefund(fd, form);
         case 'useBogo':     return handleUseBogo(form);
       }
     });
@@ -6620,19 +6820,27 @@
   /* Geri bildirim dinleyicisi: gerçek Admin hepsini, diğerleri yalnızca kendininkini dinler
      (kural, üyenin başkasının geri bildirimini okumasına izin vermez). Rol değişince yeniden kurulur. */
   let feedbackUnsub = null;
+  let refundUnsub = null;
   let feedbackMode = null;
   function ensureFeedbackSync() {
     if (!state.currentUserId || !currentUser()) return;
     const mode = isRealAdmin() ? 'all' : 'mine';
     if (mode === feedbackMode) return;
     feedbackUnsub?.();
+    refundUnsub?.();
     feedbackMode = mode;
-    const q = mode === 'all' ? col('feedback') : col('feedback').where('userId', '==', state.currentUserId);
-    feedbackUnsub = q.onSnapshot((snap) => {
+    const scoped = (name) => (mode === 'all' ? col(name) : col(name).where('userId', '==', state.currentUserId));
+    feedbackUnsub = scoped('feedback').onSnapshot((snap) => {
       feedbacks.splice(0, feedbacks.length, ...snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       scheduleRender();
       if (state.feedbackOpen) renderFeedbackList(); // açık pencerede yalnızca liste (yazılan taslaklar korunur)
     }, (err) => console.error('[feedback]', err));
+    // İade talepleri: aynı kapsam (Admin hepsi · üye kendininki)
+    refundUnsub = scoped('refunds').onSnapshot((snap) => {
+      refunds.splice(0, refunds.length, ...snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      scheduleRender();
+      if (state.refundsOpen) renderRefundList(); // açık pencerede yalnızca liste (Admin notu taslakları korunur)
+    }, (err) => console.error('[refunds]', err));
   }
 
   /* Tüm koleksiyonları dinler. Bir koleksiyon okunamazsa (örn. kuralı henüz yüklenmemiş)
@@ -6662,9 +6870,12 @@
     unsubscribers = [];
     SYNC.forEach(([, arr]) => { arr.length = 0; });
     feedbackUnsub?.();
+    refundUnsub?.();
     feedbackUnsub = null;
+    refundUnsub = null;
     feedbackMode = null;
     feedbacks.length = 0;
+    refunds.length = 0;
   }
 
   /* İlk girişte users/{uid} belgesi oluşturulur (bakiye 0; ana Admin e-postası → Admin) */
