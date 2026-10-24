@@ -783,7 +783,7 @@
 
   /* "3 gün önce çıktı" / "4 yıl 7 ay önce çıktı" (çıkış tarihinden) */
   function releasedAgo(dateKey) {
-    if (!isDateKey(dateKey)) return 'Çıkış tarihi yok';
+    if (!isDateKey(dateKey)) return 'Çıkış tarihi belli değil';
     const from = dateFromKey(dateKey);
     const now = new Date();
     if (from > now) return 'Yakında';
@@ -2211,8 +2211,12 @@
     if (!b || !BOOK_STATUSES[status] || bookStatus(b) === status) return;
     const toDraft = ['planlaniyor', 'yakinda'].includes(status);
     const goingLive = isDraftBook(b) && !toDraft;
-    if (goingLive && (!hasPrice(b) || !b.rentalDays || !b.pages || !isDateKey(b.releaseDate))) {
-      toast('Önce eksik bilgileri tamamlayın (fiyat, sayfa, kira süresi, çıkış tarihi) → Düzenle.', 'error');
+    if (goingLive && (!hasPrice(b) || !b.rentalDays || !b.pages)) {
+      toast('Önce eksik bilgileri tamamlayın (fiyat, sayfa, kira süresi) → Düzenle.', 'error');
+      return openBookModal(b.id);
+    }
+    if (status === 'kiralik' && !isDateKey(b.releaseDate)) {
+      toast('Kiralık yapmadan önce çıkış tarihini girin → Düzenle.', 'error');
       return openBookModal(b.id);
     }
     const batch = db.batch();
@@ -3541,15 +3545,15 @@
           ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${escapeHTML(b?.place || '')}" class="${INPUT_CLS}" placeholder="Örn. Ankara – Çankaya" />`)}
         </div>
         <div class="grid grid-cols-2 gap-3">
-          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" value="${b ? (isDateKey(b.releaseDate) ? b.releaseDate : '') : today}" class="${INPUT_CLS}" />`,
-            `Çıkış yılı buradan alınır · son ${NEW_BOOK_DISCOUNT.days} gündeyse %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi`)}
+          ${field('Çıkış Tarihi', `<input name="releaseDate" id="bf-date" type="date" value="${b ? (isDateKey(b.releaseDate) ? b.releaseDate : '') : today}" ${b ? '' : 'data-auto="1"'} class="${INPUT_CLS}" />`,
+            `Yalnızca Kiralık kitapta zorunlu · çıkış yılı buradan alınır · son ${NEW_BOOK_DISCOUNT.days} gündeyse %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi`)}
           <div id="bf-series-wrap" class="${getType(selType)?.inDeals ? '' : 'hidden'}">
             ${field('Seri No', `<input name="seriesNo" id="bf-series" type="number" min="1" step="1" inputmode="numeric" value="${b?.seriesNo ?? (b ? '' : nextSeriesNo())}" class="${INPUT_CLS}" placeholder="Kaçıncı seri?" />`,
               'Günün İndirimleri bu sıraya göre döner (1-2-3, 4-5-6…)')}
           </div>
         </div>
         ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Kitap hakkında kısa bilgi (isteğe bağlı)">${escapeHTML(b?.description || '')}</textarea>`)}
-        <p class="text-[10px] text-slate-400 -mt-1.5">Planlanıyor / Yakında durumunda yalnızca ad ve tür zorunludur; diğer bilgiler boş kalabilir.</p>
+        <p class="text-[10px] text-slate-400 -mt-1.5">Planlanıyor / Yakında durumunda yalnızca ad ve tür zorunludur; diğer bilgiler boş kalabilir. Kiralık olmayan kitaplarda çıkış tarihi boş kalabilir.</p>
         <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : currentUser().name)}</b></p>
         ${formFooter(b ? 'Değişiklikleri Kaydet' : `${icon('plus', 'w-3.5 h-3.5')}Kitabı Ekle`)}
       </form>`);
@@ -3569,6 +3573,9 @@
     $('#bf-special-wrap')?.classList.toggle('hidden', !isSpecialType($('#bf-type')?.value));
     const st = $('#bf-status')?.value;
     if (st && $('#bf-status-hint')) $('#bf-status-hint').textContent = BOOK_STATUSES[st]?.desc || '';
+    // Yeni kitapta kendiliğinden gelen bugünün tarihi yalnızca Kiralık durumda kalır (elle seçilen tarihe dokunulmaz)
+    const date = $('#bf-date');
+    if (st && date?.dataset.auto) date.value = st === 'kiralik' ? localDateKey() : '';
   }
 
   /* Sıradaki seri numarası (en büyük + 1) */
@@ -3592,9 +3599,10 @@
       if (!price) return toast('Geçerli bir fiyat girin.', 'error');
       if (!pages) return toast('Geçerli bir sayfa sayısı girin.', 'error');
       if (!rentalDays) return toast('Geçerli bir kira süresi girin.', 'error');
-      if (!releaseDate) return toast('Çıkış tarihini girin.', 'error');
-      if (releaseDate > localDateKey()) return toast('Çıkış tarihi ileri bir gün olamaz (henüz çıkmadıysa durumu Yakında yapın).', 'error');
+      if (releaseDate && releaseDate > localDateKey()) return toast('Çıkış tarihi ileri bir gün olamaz (henüz çıkmadıysa durumu Yakında yapın).', 'error');
     }
+    // Çıkış tarihi yalnızca Kiralık kitapta zorunlu
+    if (status === 'kiralik' && !releaseDate) return toast('Kiralık kitap için çıkış tarihini girin.', 'error');
 
     // Seri No: indirim türlerinde zorunlu ve benzersiz (taslakta isteğe bağlı); diğer türlerde tutulmaz
     let seriesNo = null;
@@ -4672,6 +4680,7 @@
       if (t.matches('[data-deal-group]')) return setDealGroup(t.value);
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
+      if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
       if (t.id === 'bookPlaceFilter') { state.bookPlace = t.value; return renderCurrentPage(); }
       if (t.id === 'bookYearFilter') { state.bookYear = t.value; return renderCurrentPage(); }
