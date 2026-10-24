@@ -2,7 +2,7 @@
 
 ## Firestore kuralları
 
-- `firestore.rules` her değiştiğinde veya yeni bir Firestore kuralı eklendiğinde kullanıcıya şu komutu çalıştırmasını hatırlat:
+- `firestore.rules` her değiştiğinde veya yeni bir Firestore kuralı eklendiğinde kullanıcıya "Kuralları deploy edeyim mi?" diye sor. Onay verirse şu komutu sen çalıştır; onay vermeden asla deploy etme:
 
   ```
   firebase deploy --only firestore:rules
