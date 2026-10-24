@@ -666,8 +666,8 @@
     confirmAction: null,
     panelTab: 'balance',   // profil panelindeki Kontrolcü sekmesi: 'balance' | 'roles'
     bookTab: 'all',
-    bookPlace: 'all',      // Kitaplar: yazıldığı mekan filtresi
-    bookYear: 'all',       // Kitaplar: çıkış yılı filtresi
+    bookFilterKind: 'none', // Kitaplar: filtre türü (place | year | status | rating)
+    bookFilterValue: 'all', // Kitaplar: seçili türün değeri
     rentTab: 'all',        // Kiralananlar: tür filtresi
     rentStatus: 'all',     // Kiralananlar: 'all' | 'active' | 'past'
     annTab: 'news',
@@ -1075,9 +1075,12 @@
     const s = ratingSummary(b.id);
     const list = bookRatings(b.id).sort((x, y) => new Date(y.updatedAt) - new Date(x.updatedAt));
     const dist = [5, 4, 3, 2, 1].map((n) => ({ n, c: list.filter((r) => r.score === n).length }));
+    const admin = isAdmin();
     openModal(`
       ${modalHeader(`Reyting · ${escapeHTML(b.title)}`, s ? `Ortalama ${s.text} · ${s.count} oy` : 'Henüz oy yok', 'chart', 'bg-amber-50 text-amber-600')}
       <div class="p-5 space-y-4">
+        ${admin && list.length ? `<div class="flex justify-end -mb-2"><button type="button" data-delete-rating="all" data-book="${b.id}"
+          class="text-[11px] font-semibold text-rose-500 hover:text-rose-600 flex items-center gap-1">${icon('trash', 'w-3.5 h-3.5')}Tüm oyları sil</button></div>` : ''}
         ${list.length ? `
           <div class="space-y-1">${dist.map(({ n, c }) => `
             <div class="flex items-center gap-2 text-[11px]">
@@ -1096,6 +1099,8 @@
                   <p class="text-[10px] text-slate-400">${formatLongDate(r.updatedAt)} · Saat ${formatTime(r.updatedAt)}${r.updatedAt !== r.createdAt ? ' · düzenlendi' : ''}</p>
                 </div>
                 <span class="shrink-0 text-sm tracking-tight"><span class="text-amber-400">${'★'.repeat(r.score)}</span><span class="text-slate-200">${'★'.repeat(5 - r.score)}</span></span>
+                ${admin ? `<button type="button" data-delete-rating="${r.id}" data-book="${b.id}" title="Bu oyu sil" aria-label="Bu oyu sil"
+                  class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
               </li>`;
           }).join('')}</ul>`
           : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitaba henüz kimse puan vermedi.</p>'}
@@ -1104,6 +1109,23 @@
           <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
         </div>
       </div>`);
+  }
+
+  /* Kontrolcü: oy(lar)ı sil · silinen oyun sahibi yeniden oy verebilir */
+  function deleteRating(id, bookId) {
+    if (!requireAdmin()) return;
+    const b = getBook(bookId);
+    const list = id === 'all' ? bookRatings(bookId) : ratings.filter((r) => r.id === id);
+    if (!list.length) return;
+    const who = list.length === 1 ? `<b>${escapeHTML(getUser(list[0].userId)?.name || 'Kullanıcı')}</b> kullanıcısının ${list[0].score} puanlık oyu` : `<b>${list.length} oy</b>`;
+    openConfirm({
+      title: list.length > 1 ? 'Tüm oylar silinsin mi?' : 'Oy silinsin mi?',
+      message: `"${escapeHTML(b?.title || 'Kitap')}" için ${who} silinecek. Ortalama yeniden hesaplanır; kullanıcı isterse yeniden oy verebilir.`,
+      onConfirm: async () => {
+        await run(commitOps(list.map((r) => (bt) => bt.delete(col('ratings').doc(r.id)))), `${list.length} oy silindi.`, 'info');
+        openRatingInfoModal(bookId);
+      }
+    });
   }
 
   /* Kiralanma sayısı: kayıtlardan sayılır · Kontrolcü bir kiralamayı silince kendiliğinden düşer */
@@ -2507,6 +2529,55 @@
       </div>`;
   }
 
+  /* Kitaplar filtre türleri: options(kitaplar) → [{ value, label, count }], match(kitap, değer) */
+  const RATING_FILTERS = [
+    { value: '5', label: '★ 5,0', test: (a) => a >= 5 },
+    { value: '4.5', label: '★ 4,5 ve üzeri', test: (a) => a >= 4.5 },
+    { value: '4', label: '★ 4,0 ve üzeri', test: (a) => a >= 4 },
+    { value: '3', label: '★ 3,0 ve üzeri', test: (a) => a >= 3 },
+    { value: '2', label: '★ 2,0 ve üzeri', test: (a) => a >= 2 },
+    { value: 'low', label: '★ 2,0 altı', test: (a) => a < 2 },
+    { value: 'none', label: 'Henüz oy yok', test: null }
+  ];
+  const bookPlaceOf = (b) => (b.place || '').trim();
+  const bookYearOf = (b) => (b.releaseDate || '').slice(0, 4);
+  const distinctOptions = (list, keyOf, sort) => {
+    const counts = new Map();
+    list.forEach((b) => { const k = keyOf(b); if (k) counts.set(k, (counts.get(k) || 0) + 1); });
+    return [...counts.entries()].sort(sort).map(([value, count]) => ({ value, label: value, count }));
+  };
+  const matchRating = (b, v) => {
+    const s = ratingSummary(b.id);
+    const f = RATING_FILTERS.find((x) => x.value === v);
+    return f?.test ? !!s && f.test(s.avg) : !s;
+  };
+  const BOOK_FILTERS = {
+    place: {
+      label: '📍 Yazıldığı Mekan', allLabel: 'Tüm mekanlar',
+      options: (list) => distinctOptions(list, bookPlaceOf, (a, b) => a[0].localeCompare(b[0], 'tr')),
+      match: (b, v) => bookPlaceOf(b) === v
+    },
+    year: {
+      label: '📅 Çıkış Yılı', allLabel: 'Tüm yıllar',
+      options: (list) => distinctOptions(list, bookYearOf, (a, b) => b[0].localeCompare(a[0])),
+      match: (b, v) => bookYearOf(b) === v
+    },
+    status: {
+      label: '🏷️ Durum', allLabel: 'Tüm durumlar',
+      options: (list) => Object.entries(BOOK_STATUSES)
+        .map(([k, s]) => ({ value: k, label: s.label, count: list.filter((b) => bookStatus(b) === k).length }))
+        .filter((o) => o.count),
+      match: (b, v) => bookStatus(b) === v
+    },
+    rating: {
+      label: '⭐ Reyting', allLabel: 'Tüm reytingler',
+      options: (list) => RATING_FILTERS
+        .map((f) => ({ value: f.value, label: f.label, count: list.filter((b) => matchRating(b, f.value)).length }))
+        .filter((o) => o.count),
+      match: matchRating
+    }
+  };
+
   function renderBooks() {
     setPageActions('books', isAdmin()
       ? `${manageTypesBtn()}<button type="button" data-quick="addBook" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Kitap Ekle</button>`
@@ -2521,32 +2592,31 @@
     const statusRank = (b) => ({ planlaniyor: 0, yakinda: 1 }[bookStatus(b)] ?? 2);
     const inTab = shown.filter((b) => b.type === state.bookTab);
 
-    // Filtreler: yazıldığı mekan + çıkış yılı (seçenekler bu kategorideki kitaplardan)
-    const placeOf = (b) => (b.place || '').trim();
-    const yearOf = (b) => (b.releaseDate || '').slice(0, 4);
-    const places = [...new Set(inTab.map(placeOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
-    const years = [...new Set(inTab.map(yearOf).filter(Boolean))].sort((a, b) => b.localeCompare(a));
-    if (!places.includes(state.bookPlace)) state.bookPlace = 'all';
-    if (!years.includes(state.bookYear)) state.bookYear = 'all';
-    const filtered = state.bookPlace !== 'all' || state.bookYear !== 'all';
+    // Filtre: solda tür (Mekan · Yıl · Durum · Reyting), sağda o türün seçenekleri (bu kategorideki kitaplardan)
+    const kind = BOOK_FILTERS[state.bookFilterKind] ? state.bookFilterKind : 'none';
+    const options = kind === 'none' ? [] : BOOK_FILTERS[kind].options(inTab);
+    if (!options.some((o) => o.value === state.bookFilterValue)) state.bookFilterValue = 'all';
+    const filtered = kind !== 'none' && state.bookFilterValue !== 'all';
 
     const list = inTab
-      .filter((b) => (state.bookPlace === 'all' || placeOf(b) === state.bookPlace) && (state.bookYear === 'all' || yearOf(b) === state.bookYear))
+      .filter((b) => !filtered || BOOK_FILTERS[kind].match(b, state.bookFilterValue))
       .sort((a, b) => statusRank(a) - statusRank(b) || (b.releaseDate || '').localeCompare(a.releaseDate || '') || b.id - a.id);
     const rentableCount = list.filter((b) => isRentableStatus(b) && !isBookRented(b, now)).length;
 
     const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf, 'mb-5', false);
     const filterBar = inTab.length ? `
       <div class="bg-white rounded-2xl shadow-soft p-3 grid grid-cols-2 sm:flex sm:items-center gap-2.5 mb-5">
-        <select id="bookPlaceFilter" aria-label="Yazıldığı mekana göre filtrele" class="${INPUT_CLS} min-w-0 sm:flex-1">
-          <option value="all">📍 Tüm mekanlar</option>
-          ${places.map((p) => `<option value="${escapeHTML(p)}" ${state.bookPlace === p ? 'selected' : ''}>${escapeHTML(p)}</option>`).join('')}
+        <select id="bookFilterKind" aria-label="Filtre türü" class="${INPUT_CLS} min-w-0 sm:w-56 font-semibold">
+          <option value="none">🔎 Filtre türü seç</option>
+          ${Object.entries(BOOK_FILTERS).map(([k, f]) => `<option value="${k}" ${kind === k ? 'selected' : ''}>${f.label}</option>`).join('')}
         </select>
-        <select id="bookYearFilter" aria-label="Çıkış yılına göre filtrele" class="${INPUT_CLS} min-w-0 sm:w-40">
-          <option value="all">📅 Tüm yıllar</option>
-          ${years.map((y) => `<option value="${y}" ${state.bookYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+        <select id="bookFilterValue" aria-label="Filtre değeri" ${kind === 'none' ? 'disabled' : ''} class="${INPUT_CLS} min-w-0 sm:flex-1 disabled:opacity-50">
+          ${kind === 'none'
+            ? '<option value="all">Önce soldan bir filtre türü seç</option>'
+            : `<option value="all">${BOOK_FILTERS[kind].allLabel}</option>
+               ${options.map((o) => `<option value="${escapeHTML(o.value)}" ${state.bookFilterValue === o.value ? 'selected' : ''}>${escapeHTML(o.label)} (${o.count})</option>`).join('')}`}
         </select>
-        ${filtered ? `<button type="button" data-clear-book-filters class="${BTN_SOFT} col-span-2 sm:col-span-1 shrink-0">Filtreyi Temizle</button>` : ''}
+        ${kind !== 'none' ? `<button type="button" data-clear-book-filters class="${BTN_SOFT} col-span-2 sm:col-span-1 shrink-0">Filtreyi Temizle</button>` : ''}
       </div>` : '';
 
     if (!list.length) {
@@ -5975,6 +6045,7 @@
       if ((m = el('[data-rate-book]')))        return rateBook(m.dataset.rateBook, m.dataset.score);
       if ((m = el('[data-unrate-book]')))      return unrateBook(m.dataset.unrateBook);
       if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
+      if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
       if ((m = el('[data-delete-history]')))   return deleteDiscountHistory(m.dataset.deleteHistory, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
@@ -5985,7 +6056,7 @@
       if ((m = el('[data-delete-news]')))      return deleteNews(m.dataset.deleteNews);
       if ((m = el('[data-edit-news]')))        return openNewsModal(m.dataset.editNews);
       if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
-      if ((m = el('[data-clear-book-filters]'))) { state.bookPlace = 'all'; state.bookYear = 'all'; return renderCurrentPage(); }
+      if ((m = el('[data-clear-book-filters]'))) { state.bookFilterKind = 'none'; state.bookFilterValue = 'all'; return renderCurrentPage(); }
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
       if ((m = el('[data-ann-tab]')))          { state.annTab = m.dataset.annTab; return renderCurrentPage(); }
@@ -6051,8 +6122,8 @@
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
       if (t.id === 'bn-cat' || t.matches('[data-bn-scope]')) updateBulkNewsPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
-      if (t.id === 'bookPlaceFilter') { state.bookPlace = t.value; return renderCurrentPage(); }
-      if (t.id === 'bookYearFilter') { state.bookYear = t.value; return renderCurrentPage(); }
+      if (t.id === 'bookFilterKind') { state.bookFilterKind = t.value; state.bookFilterValue = 'all'; return renderCurrentPage(); }
+      if (t.id === 'bookFilterValue') { state.bookFilterValue = t.value; return renderCurrentPage(); }
       if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview(true);
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
     });
