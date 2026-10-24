@@ -39,6 +39,8 @@ service cloud.firestore {
     function isAdmin() { return isOwner() || (signedIn() && me().role == 'admin'); }
     function canRent() { return signedIn() && me().role in ['admin', 'member']; }
     function changedKeys() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    // Hediyelerim kupon kataloğu: indirim yüzdesi → puan bedeli (index.html → COUPON_CATALOG ile aynı olmalı)
+    function couponCatalog() { return { '10': 5, '20': 12, '30': 20, '50': 40 }; }
     function near(a, b) { return math.abs(a - b) < 0.005; }
 
     // ---------- Kullanıcılar ----------
@@ -146,8 +148,17 @@ service cloud.firestore {
       function singleRental(r) {
         return r.purchaseId == null && r.offerId == null
           && r.discount is int && r.discount >= 0
-          && (standardDiscount(r) || vitrineDiscount(r))
+          && (standardDiscount(r)
+            || (r.discountSource == 'custom' && vitrineDiscount(r))
+            || (r.discountSource == 'coupon' && r.couponId is string && couponDiscount(r, get(path('coupons', r.couponId)).data)))
           && getAfter(path('users', uid())).data.lastTx == rentalId;
+      }
+      // Kupon: kendi, kullanılmamış, süresi dolmamış kuponunun yüzdesi; kupon aynı batch'te bu kiralamaya bağlanır
+      function couponDiscount(r, c) {
+        return c.userId == uid() && c.usedAt == null && request.time < c.expiresAt
+          && r.discount == c.rate
+          && r.price >= r.listPrice * (100 - c.rate) / 100 - 0.01
+          && getAfter(path('coupons', r.couponId)).data.rentalId == rentalId;
       }
       // Günün İndirimi / Yeni Kitap: en fazla %50
       function standardDiscount(r) {
@@ -158,8 +169,7 @@ service cloud.firestore {
       // Vitrin İndirimi: Kontrolcünün discounts/{kitap} belgesindeki yüzdenin aynısı (süresi dolmamış)
       function vitrineDiscount(r) {
         let d = get(path('discounts', string(r.bookId))).data;
-        return r.discountSource == 'custom'
-          && d.rate is int && r.discount == d.rate
+        return d.rate is int && r.discount == d.rate
           && (!('endsAt' in d) || request.time < d.endsAt)
           && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
       }
@@ -222,7 +232,42 @@ service cloud.firestore {
         && request.resource.data.rate >= 1 && request.resource.data.rate <= 100
         && request.resource.data.endsAt is timestamp
         && request.resource.data.name is string && request.resource.data.name.size() <= 60
-        && string(request.resource.data.bookId) == bookId;
+        && string(request.resource.data.bookId) == bookId
+        // yalnızca Kiralık durumdaki kitap (durumu olmayan eski kayıt = Kiralık)
+        && get(path('books', bookId)).data.get('status', 'kiralik') == 'kiralik';
+    }
+
+    // Hediyelerim kuponu · { userId, rate, cost, boughtAt, expiresAt (7 gün), usedAt, rentalId, bookId }
+    // Puan yeterliliği istemcide hesaplanır (puan kiralama kayıtlarından türetilir).
+    match /coupons/{couponId} {
+      allow read: if signedIn();
+      allow create: if canRent() && validCoupon();
+      allow update: if isAdmin() || useCoupon();
+      allow delete: if isAdmin();
+
+      function validCoupon() {
+        let c = request.resource.data;
+        return c.keys().hasOnly(['userId', 'rate', 'cost', 'boughtAt', 'expiresAt', 'usedAt', 'rentalId', 'bookId'])
+          && c.userId == uid()
+          && c.rate is int && string(c.rate) in couponCatalog()
+          && c.cost == couponCatalog()[string(c.rate)]
+          && c.expiresAt is timestamp
+          && c.expiresAt > request.time + duration.value(6, 'd')
+          && c.expiresAt <= request.time + duration.value(7, 'd') + duration.value(10, 'm')
+          && c.usedAt == null && c.rentalId == null && c.bookId == null;
+      }
+      // Kullanım: yalnızca sahibi, bir kez, süresi dolmadan ve aynı batch'teki yeni kiralamasıyla
+      function useCoupon() {
+        let after = request.resource.data;
+        let r = getAfter(path('rentals', after.rentalId)).data;
+        return resource.data.userId == uid()
+          && resource.data.usedAt == null
+          && request.time < resource.data.expiresAt
+          && changedKeys().hasOnly(['usedAt', 'rentalId', 'bookId'])
+          && after.rentalId is string
+          && !exists(path('rentals', after.rentalId))
+          && r.userId == uid() && r.couponId == couponId && r.bookId == after.bookId;
+      }
     }
     // Uygulama ayarları · settings/deals.refreshedAt: Kontrolcünün "Şimdi Yenile" anı
     match /settings/{settingId} {

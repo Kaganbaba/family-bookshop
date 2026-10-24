@@ -451,6 +451,11 @@
       <div data-page-header></div>
       <div id="offersContent"></div>
     </section>
+
+    <section id="page-gifts" data-page class="hidden">
+      <div data-page-header></div>
+      <div id="giftsContent"></div>
+    </section>
   </main>
 
   <!-- ===================== MODAL ===================== -->
@@ -529,6 +534,7 @@
   const announcements = [];  // announcements/{id}
   const offers = [];         // offers/{id}
   const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Kontrolcü seçer): { bookId, name, rate (1–100), endsAt, createdAt, createdBy }
+  const coupons = [];        // coupons/{id} · Hediyelerim kuponu: { userId, rate, cost, boughtAt, expiresAt, usedAt, rentalId, bookId }
   const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
 
   /* ==========================================================
@@ -627,6 +633,14 @@
     groupSize: 3              // günde kaç kitap
   };
   const NEW_BOOK_DISCOUNT = { rate: 15, days: 7 }; // yeni eklenen kitap indirimi
+  /* Hediyelerim kupon kataloğu (firestore.rules → couponCatalog() ile aynı olmalı) · cost: puan */
+  const COUPON_CATALOG = [
+    { rate: 10, cost: 5 },
+    { rate: 20, cost: 12 },
+    { rate: 30, cost: 20 },
+    { rate: 50, cost: 40 }
+  ];
+  const COUPON_DAYS = 7; // alınan kupon 1 hafta içinde kullanılmalı
   const DEFAULT_RENTAL_DAYS = 7;
 
   /* Uygulama durumu */
@@ -672,6 +686,7 @@
     'price-logs': 'M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941',
     announcements: 'M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46',
     offers: 'M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z',
+    gifts: 'M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z',
     wallet: 'M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3',
     tag: 'M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3zM6 6h.008v.008H6V6z',
     close: 'M6 18L18 6M6 6l12 12',
@@ -702,7 +717,8 @@
     'users':         { label: 'Kullanıcılar',   desc: 'Kitaplar için en çok bakiye harcayanlar liderlik tablosu.' },
     'price-logs':    { label: 'Fiyat Logu',     desc: 'Kitap fiyatlarındaki tüm değişimlerin tarihe göre geçmişi.' },
     'announcements': { label: 'Duyurular',      desc: 'Haberler ve sürüm güncellemeleri.' },
-    'offers':        { label: 'Özel Teklifler', desc: '1–3 kitaplık özel paketler · tek kiralamayla hepsi birden.' }
+    'offers':        { label: 'Özel Teklifler', desc: '1–3 kitaplık özel paketler · tek kiralamayla hepsi birden.' },
+    'gifts':         { label: 'Hediyelerim',    desc: 'İndirimlerden biriken puanlarınla kupon al, kiralık bir kitaba uygula.' }
   };
   const DEFAULT_ROUTE = 'dashboard';
 
@@ -1135,7 +1151,7 @@
   const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Vitrin İndirimi' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Vitrin İndirimi', coupon: 'Kupon' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -1358,6 +1374,7 @@
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
     custom: { label: '🏷️ Vitrin İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
+    coupon: { label: '🎟️ Kuponlar ve kuponlu kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'coupon' }, // + kupon kayıtları
     offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
   };
 
@@ -1370,6 +1387,8 @@
       ops.push(...offerPurchases.filter((p) => p.userId === userId).map((p) => (bt) => bt.delete(col('offerPurchases').doc(p.id))));
       ops.push(...rentalDeleteOps(mine.filter((r) => r.purchaseId)));
     }
+    // Kupon kayıtları silinince harcanan puan geri döner
+    if (cats.includes('coupon')) ops.push(...coupons.filter((c) => c.userId === userId).map((c) => (bt) => bt.delete(col('coupons').doc(c.id))));
     return commitOps(ops);
   }
 
@@ -1429,12 +1448,52 @@
     const savingNew   = sum(discounted.filter((r) => r.discountSource === 'new'), saveOf);
     const savingCustom = sum(discounted.filter((r) => r.discountSource === 'custom'), saveOf);
     const savingOffer = sum(purchases, (p) => Math.max(0, p.normalTotal - p.price));
+    const savingCoupon = sum(discounted.filter((r) => r.discountSource === 'coupon'), saveOf);
+    const total = round2(savingDeal + savingNew + savingCustom + savingOffer);
     return {
       count: rs.length,                                              // paket = paketteki kitap sayısı
       spent: round2(sum(singles, (r) => r.price) + sum(purchases, (p) => p.price)), // paket = +paket fiyatı
       purchases, discounted, saveOf,
-      savings: { deal: savingDeal, new: savingNew, custom: savingCustom, offer: savingOffer, total: round2(savingDeal + savingNew + savingCustom + savingOffer) }
+      savings: { deal: savingDeal, new: savingNew, custom: savingCustom, offer: savingOffer, coupon: round2(savingCoupon), total },
+      points: userPoints(userId, total)
     };
+  }
+
+  /* Puan = indirimlerden kazanılan TL (1 ₺ = 1 puan). Kuponla yapılan indirim puan kazandırmaz.
+     Harcanabilir puan = kazanılan − alınan kuponların bedeli (süresi dolan kuponun bedeli geri dönmez). */
+  function userPoints(userId, earned) {
+    const spent = round2(sum(coupons.filter((c) => c.userId === userId), (c) => c.cost));
+    return { earned: round2(earned), spent, available: Math.max(0, round2(earned - spent)) };
+  }
+  const formatPoints = (n) => `${(Math.round(n * 100) / 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} puan`;
+
+  /* Kupon durumu: aktif (kullanılmamış, süresi dolmamış) · kullanıldı · süresi doldu */
+  const couponState = (c, now = Date.now()) => (c.usedAt ? 'used' : c.expiresMs > now ? 'active' : 'expired');
+  const activeCouponsOf = (userId, now = Date.now()) => coupons
+    .filter((c) => c.userId === userId && couponState(c, now) === 'active')
+    .sort((a, b) => a.expiresMs - b.expiresMs);
+  /* Kupon yalnızca Kiralık ve başka indirimi olmayan kitaba uygulanır */
+  const couponEligible = (book, now = new Date()) => isRentableStatus(book) && hasPrice(book) && getEffectiveDiscount(book, now).rate === 0;
+
+  function couponCardHTML(c, now = Date.now()) {
+    const st = couponState(c, now);
+    const b = c.bookId ? getBook(c.bookId) : null;
+    const tone = { active: 'from-emerald-400 to-teal-500', used: 'from-slate-300 to-slate-400', expired: 'from-rose-300 to-rose-400' }[st];
+    const sub = st === 'active' ? `⏳ ${formatRemaining(c.expiresMs - now)} · son ${formatDate(new Date(c.expiresMs).toISOString(), true)}`
+      : st === 'used' ? `✓ ${b ? `"${escapeHTML(b.title)}"` : 'Bir kitap'} için kullanıldı · ${formatDate(c.usedAt, true)}`
+      : `Süresi doldu · ${formatDate(new Date(c.expiresMs).toISOString(), true)}`;
+    return `
+      <li class="flex items-stretch rounded-2xl overflow-hidden border border-slate-100 bg-white ${st === 'active' ? '' : 'opacity-70'}">
+        <div class="w-20 shrink-0 bg-gradient-to-br ${tone} text-white flex flex-col items-center justify-center py-2.5 relative">
+          <span class="text-xl font-black leading-none">%${c.rate}</span>
+          <span class="text-[8px] font-bold tracking-widest mt-1">KUPON</span>
+          <span class="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white"></span>
+        </div>
+        <div class="flex-1 min-w-0 px-3 py-2.5 border-l-2 border-dashed border-slate-200">
+          <p class="text-xs font-semibold text-slate-700">%${c.rate} İndirim Kuponu <span class="text-[10px] font-medium text-slate-400">· ${formatPoints(c.cost)}</span></p>
+          <p class="text-[10px] ${st === 'active' ? 'text-emerald-600' : 'text-slate-400'} mt-0.5 leading-snug">${sub}</p>
+        </div>
+      </li>`;
   }
 
   function computeLeaderboard() {
@@ -1556,6 +1615,7 @@
     'price-logs':    () => renderPriceLogs(),
     'announcements': () => renderAnnouncements(),
     'offers':        () => renderOffers(),
+    'gifts':         () => renderGifts(),
     'rentals':       () => renderRentals()
   };
 
@@ -1767,11 +1827,12 @@
     if (!requireAdmin()) return;
     const now = new Date();
     const dealIds = getDailyDeals(now).ids;
+    // Yalnızca Kiralık durumdaki kitaplar
     const pickable = books
-      .filter((b) => hasPrice(b) && !isDraftBook(b))
+      .filter((b) => hasPrice(b) && isRentableStatus(b))
       .map((b) => ({ b, other: customDiscountOf(b, now) ? null : otherDiscountOf(b, now, dealIds) }))
       .sort((x, y) => !!x.other - !!y.other || x.b.title.localeCompare(y.b.title, 'tr'));
-    if (!pickable.some((x) => !x.other)) return toast('Vitrine eklenebilecek kitap yok (fiyatlı kitapların hepsi başka bir indirimde).', 'info');
+    if (!pickable.some((x) => !x.other)) return toast('Vitrine eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
     const defaultEnd = localDateKey(new Date(Date.now() + 7 * DAY_MS));
     openModal(`
       ${modalHeader('Vitrin İndirimi Ekle 🏷️', 'Ana sayfadaki vitrinde görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
@@ -1782,7 +1843,7 @@
             const cur = customDiscountOf(b, now);
             return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (vitrinde %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
           }).join('')}
-        </select>`, 'Başka bir indirimdeki kitaplar seçilemez. Vitrinde zaten olan kitabı seçersen indirimi güncellenir.')}
+        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Vitrinde zaten olan kitabı seçersen indirimi güncellenir.')}
         ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" class="${INPUT_CLS}" placeholder="Örn. 30" />`,
           `1–${CUSTOM_DISCOUNT_MAX} arası tam sayı · %100 = bedava`)}
         <div class="grid grid-cols-[1fr_auto] gap-3">
@@ -1816,6 +1877,7 @@
     const name = (fd.name || '').trim();
     if (!name) return toast('İndirime bir ad verin.', 'error');
     if (!b || !hasPrice(b)) return toast('Fiyatı olan bir kitap seçin.', 'error');
+    if (!isRentableStatus(b)) return toast('Vitrine yalnızca Kiralık durumdaki kitaplar eklenebilir.', 'error');
     if (!(rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX)) return toast(`İndirim yüzdesi 1–${CUSTOM_DISCOUNT_MAX} arası olmalı.`, 'error');
     if (!isDateKey(fd.endDate) || !isTimeKey(fd.endTime)) return toast('Geçerli bir bitiş tarihi ve saati seçin.', 'error');
     const end = dateFromKey(fd.endDate);
@@ -2335,6 +2397,8 @@
     const active = activeRentalOf(b, now.getTime());
     const holder = active ? getUser(active.userId) : null;
     const check = bookRentCheck(b, u, price);
+    // Kupon: yalnızca Kiralık + indirimsiz + boştaki kitapta, kullanıcının aktif kuponlarıyla
+    const myCoupons = canRent(u) && !active && couponEligible(b, now) ? activeCouponsOf(u.id, now.getTime()) : [];
     const admin = isAdmin();
     const backOfferId = opts.backOfferId || '';
     const logs = priceLogs.filter((l) => l.bookId === b.id).sort((x, y) => new Date(y.changedAt) - new Date(x.changedAt));
@@ -2456,20 +2520,28 @@
         </div>
 
         <div class="pt-1 space-y-3">
+          ${myCoupons.length ? `
+            <label class="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs">
+              <span class="text-emerald-700 font-semibold shrink-0">🎟️ Kupon</span>
+              <select id="rentCoupon" data-book="${b.id}" class="flex-1 min-w-0 bg-white rounded-lg border border-emerald-100 text-xs py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-200">
+                <option value="">Kupon kullanma</option>
+                ${myCoupons.map((c) => `<option value="${c.id}" data-rate="${c.rate}">%${c.rate} kupon · ${formatRemaining(c.expiresMs - now.getTime())}</option>`).join('')}
+              </select>
+            </label>` : ''}
           ${canRent(u) ? `
             <div class="flex items-center justify-between rounded-xl border border-brand-100 px-3 py-2.5 text-xs">
               <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
               <span class="font-semibold text-slate-700">
                 ${formatMoney(u.balance)}
-                ${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - price))}</span>` : ''}
+                <span id="rentBalAfter" class="${check.ok ? '' : 'hidden'}"><span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - price))}</span></span>
               </span>
             </div>` : ''}
-          ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${check.reason}</p>`}
+          <p id="rentReason" class="${check.ok ? 'hidden' : ''} text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${check.ok ? '' : check.reason}</p>
           <div class="grid grid-cols-2 gap-2.5">
             ${admin
               ? `<button type="button" data-edit-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>`
               : `<button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>`}
-            <button type="button" data-rent-book="${b.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">
+            <button type="button" id="rentBtn" data-rent-book="${b.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">
               ${isRentableStatus(b) && hasPrice(b) ? `${formatMoney(price)} · ${b.rentalDays} gün Kirala` : `${statusView(b, now.getTime()).label} · Kiralanamaz`}
             </button>
           </div>
@@ -2525,14 +2597,46 @@
     return { ok: true };
   }
 
+  /* Kitap detayında seçili kupon (yoksa null) */
+  function selectedCoupon(bookId) {
+    const sel = $('#rentCoupon');
+    if (!sel || sel.dataset.book !== String(bookId) || !sel.value) return null;
+    return coupons.find((c) => c.id === sel.value) || null;
+  }
+
+  /* Kupon seçimi değişince fiyat, kalan bakiye ve Kirala butonu güncellenir */
+  function updateRentCoupon() {
+    const sel = $('#rentCoupon');
+    const b = sel && getBook(sel.dataset.book);
+    const u = currentUser();
+    if (!b || !u) return;
+    const coupon = selectedCoupon(b.id);
+    const rate = coupon ? coupon.rate : getEffectiveDiscount(b).rate;
+    const price = round2(b.price * (1 - rate / 100));
+    const check = bookRentCheck(b, u, price);
+    $('#rentBtn').disabled = !check.ok;
+    $('#rentBtn').textContent = `${formatMoney(price)} · ${b.rentalDays} gün Kirala${coupon ? ` (%${coupon.rate} kupon)` : ''}`;
+    $('#rentBalAfter')?.classList.toggle('hidden', !check.ok);
+    const after = $('#rentBalAfter .text-brand-600');
+    if (after) after.textContent = formatMoney(round2(u.balance - price));
+    $('#rentReason').classList.toggle('hidden', check.ok);
+    $('#rentReason').textContent = check.ok ? '' : check.reason;
+  }
+
   /* Kirala: kiralama kaydı + kitap kilidi + bakiye düşüşü tek batch'te yazılır.
-     Kurallar: kayıt kendi uid'inle, kitap boşta, bakiye tam fiyat kadar düşmeli. */
+     Kurallar: kayıt kendi uid'inle, kitap boşta, bakiye tam fiyat kadar düşmeli.
+     Kupon seçildiyse kupon aynı batch'te "kullanıldı" olarak işaretlenir. */
   async function rentBook(bookId) {
     const b = getBook(bookId);
     const u = currentUser();
     if (!b || !u) return;
 
-    const { rate, source } = getEffectiveDiscount(b);
+    const coupon = selectedCoupon(b.id);
+    if (coupon) {
+      if (coupon.userId !== u.id || couponState(coupon) !== 'active') return toast('Bu kupon artık kullanılamaz (süresi dolmuş ya da kullanılmış).', 'error');
+      if (!couponEligible(b)) return toast('Kupon yalnızca Kiralık ve başka indirimi olmayan kitaba uygulanır.', 'error');
+    }
+    const { rate, source } = coupon ? { rate: coupon.rate, source: 'coupon' } : getEffectiveDiscount(b);
     const price = round2(b.price * (1 - rate / 100));
     const check = bookRentCheck(b, u, price);
     if (!check.ok) return toast(check.reason, 'error');
@@ -2544,15 +2648,16 @@
     batch.set(ref, {
       bookId: b.id, userId: u.id,
       listPrice: b.price, price, discount: rate, discountSource: rate ? source : null,
-      offerId: null, purchaseId: null, offerPrice: null,
+      offerId: null, purchaseId: null, offerPrice: null, couponId: coupon ? coupon.id : null,
       rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
     });
     // Özel kitap: kiralandığı an "Kira dışı"; kiradayken "Kirada" görünür, süre bitince Kira dışı kalır
     batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     batch.update(col('users').doc(u.id), { balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental' });
+    if (coupon) batch.update(col('coupons').doc(coupon.id), { usedAt: isoAt(now), rentalId: ref.id, bookId: b.id });
 
     closeModal();
-    await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}`);
+    await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}${coupon ? ` · 🎟️ %${coupon.rate} kupon kullanıldı` : ''}`);
   }
 
   /* Kitabı sil (Kontrolcü) · her yerden temizlenir: duyurular, kiralamalar (ana sayfa +
@@ -2808,7 +2913,7 @@
         : '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-slate-100 text-slate-500">Süresi Doldu</span>';
       const discChip = r.offerId
         ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-violet-50 text-violet-600">🎁 Paket</span>'
-        : r.discount ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-amber-50 text-amber-600' : r.discountSource === 'custom' ? 'bg-indigo-50 text-indigo-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>` : '';
+        : r.discount ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-amber-50 text-amber-600' : r.discountSource === 'custom' ? 'bg-indigo-50 text-indigo-600' : r.discountSource === 'coupon' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>` : '';
       return `
         <li class="flex items-center gap-3 p-2.5 rounded-xl ${active ? 'bg-emerald-50/30 border border-emerald-100' : 'bg-slate-50/80'}">
           ${coverHTML(b, 'xs')}
@@ -2892,6 +2997,9 @@
       if (k === 'offer') {
         const ps = offerPurchases.filter((p) => p.userId === userId);
         out[k] = { count: ps.length, unit: 'paket', spent: sum(ps, (p) => p.price) };
+      } else if (k === 'coupon') {
+        const rs = mine.filter(c.pick);
+        out[k] = { count: rs.length + coupons.filter((x) => x.userId === userId).length, unit: 'kayıt', spent: sum(rs, (r) => r.price) };
       } else {
         const rs = mine.filter(c.pick);
         out[k] = { count: rs.length, unit: 'kiralama', spent: sum(rs, (r) => r.price) };
@@ -2962,6 +3070,21 @@
     if (box) box.innerHTML = kind === 'rentals' ? statsRentalsHTML(state.statsUserId) : statsPurchasesHTML(state.statsUserId);
   }
 
+  /* İstatistiklerde kuponlar: aktif → kullanılan → süresi dolan */
+  function statsCouponsHTML(userId) {
+    const now = Date.now();
+    const mine = coupons.filter((c) => c.userId === userId);
+    if (!mine.length) return '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz kupon yok.</p>';
+    const group = (st, title) => {
+      const list = mine.filter((c) => couponState(c, now) === st)
+        .sort((a, b) => (st === 'active' ? a.expiresMs - b.expiresMs : b.expiresMs - a.expiresMs));
+      return list.length ? `
+        <p class="text-[10px] font-semibold text-slate-400 mt-2 mb-1.5">${title} (${list.length})</p>
+        <ul class="space-y-2">${list.map((c) => couponCardHTML(c, now)).join('')}</ul>` : '';
+    };
+    return group('active', 'Aktif kuponlar') + group('used', 'Kullanılan kuponlar') + group('expired', 'Süresi dolan kuponlar');
+  }
+
   /* Detaylı Aile Üyesi İstatistikleri modalı */
   function openUserStatsModal(userId, keepPages = null) {
     const u = getUser(userId);
@@ -3008,15 +3131,27 @@
       <div class="p-5 sm:p-6 space-y-5">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">${tiles}</div>
 
-        <div class="rounded-2xl p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
-          <p class="text-[11px] font-semibold text-emerald-700">İndirimlerden Toplam ${self ? 'Kazancınız' : 'Kazancı'}</p>
-          <p class="text-2xl font-black text-emerald-600 mt-0.5">${formatMoney(s.savings.total)}</p>
-          <div class="flex flex-wrap gap-1.5 mt-2.5">
-            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Günün İndirimi: ${formatMoney(s.savings.deal)}</span>
-            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-sky-600">Yeni Kitap: ${formatMoney(s.savings.new)}</span>
-            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-indigo-600">Vitrin İndirimi: ${formatMoney(s.savings.custom)}</span>
-            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-violet-600">Özel Teklif: ${formatMoney(s.savings.offer)}</span>
+        <div class="rounded-2xl p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-100">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-[11px] font-semibold text-amber-700">${self ? 'Puanın' : 'Puanı'} ⭐</p>
+              <p class="text-2xl font-black text-amber-600 mt-0.5">${formatPoints(s.points.available)}</p>
+            </div>
+            ${self ? `<a href="#gifts" class="${BTN_SOFT} !py-1.5 shrink-0">🎟️ Hediyelerim</a>` : ''}
           </div>
+          <div class="flex flex-wrap gap-1.5 mt-2.5">
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-emerald-600">Kazanılan: ${formatPoints(s.points.earned)}</span>
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Kupona harcanan: ${formatPoints(s.points.spent)}</span>
+          </div>
+          <p class="text-[10px] text-amber-700/70 mt-2">İndirimlerden kazanılan her 1 ₺ = 1 puan · kuponlu kiralamalar puan kazandırmaz</p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <h4 class="text-xs font-bold text-slate-700">🎟️ Kuponlar</h4>
+            <span class="text-[10px] text-slate-400">${activeCouponsOf(userId).length} aktif · ${coupons.filter((c) => c.userId === userId).length} toplam</span>
+          </div>
+          ${statsCouponsHTML(userId)}
         </div>
 
         <div>
@@ -3391,6 +3526,105 @@
           <button type="button" data-modal-close class="${BTN_PRIMARY}">Kapat</button>
         </div>
       </div>`, 'lg');
+  }
+
+  /* ==========================================================
+     12.5) HEDİYELERİM — PUAN & KUPONLAR
+     ----------------------------------------------------------
+     • Puan = indirimlerden kazanılan TL · kuponlar puanla alınır.
+     • Kupon 7 gün geçerli, tek kullanımlık; yalnızca Kiralık ve başka
+       indirimi olmayan kitaba (kitap detayında Kirala'dan) uygulanır.
+     • Özel tekliflere kupon uygulanmaz.
+     ========================================================== */
+  function renderGifts() {
+    const u = currentUser();
+    const now = Date.now();
+    const pts = userStats(u.id).points;
+    const active = activeCouponsOf(u.id, now);
+    const rentOk = canRent(u);
+
+    const shop = COUPON_CATALOG.map((k) => {
+      const enough = pts.available >= k.cost;
+      const ok = rentOk && enough;
+      return `
+        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col">
+          <div class="relative px-4 pt-4 pb-5 bg-gradient-to-br ${k.rate >= 50 ? 'from-rose-500 via-fuchsia-500 to-amber-400' : k.rate >= 30 ? 'from-violet-500 to-fuchsia-500' : k.rate >= 20 ? 'from-brand-500 to-indigo-500' : 'from-emerald-400 to-teal-500'} text-white">
+            <span class="absolute inset-0 offer-pattern opacity-60"></span>
+            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90">İNDİRİM KUPONU</p>
+            <p class="relative text-4xl font-black leading-none mt-1">%${k.rate}</p>
+            <span class="absolute -bottom-2 left-0 right-0 h-4 bg-[radial-gradient(circle_at_8px_0,transparent_7px,#fff_7.5px)] bg-[length:16px_16px] bg-repeat-x"></span>
+          </div>
+          <div class="p-4 pt-3 flex-1 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-amber-600">⭐ ${formatPoints(k.cost)}</span>
+              <span class="text-[10px] text-slate-400">${COUPON_DAYS} gün geçerli</span>
+            </div>
+            <button type="button" data-buy-coupon="${k.rate}" ${ok ? '' : 'disabled'} class="${BTN_PRIMARY} w-full !py-2.5 mt-auto">
+              ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(k.cost - pts.available))} eksik`}
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+    $('#giftsContent').innerHTML = `
+      <div class="relative overflow-hidden rounded-3xl p-5 sm:p-6 mb-6 bg-gradient-to-br from-amber-400 via-orange-400 to-rose-500 text-white shadow-soft-lg">
+        <span class="absolute inset-0 offer-pattern opacity-40"></span>
+        <span class="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-white/15"></span>
+        <div class="relative flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold text-white/85">Harcanabilir puanın ⭐</p>
+            <p class="text-4xl sm:text-5xl font-black leading-none mt-1.5 tabular-nums">${formatPoints(pts.available)}</p>
+            <p class="text-[11px] text-white/85 mt-2">Kazanılan ${formatPoints(pts.earned)} · Kupona harcanan ${formatPoints(pts.spent)}</p>
+          </div>
+          <div class="text-[11px] leading-relaxed bg-white/15 backdrop-blur rounded-2xl px-3.5 py-2.5 sm:max-w-xs">
+            İndirimli her kiralamada kazandığın her <b>1 ₺ = 1 puan</b>. Puanlarınla kupon al, ${COUPON_DAYS} gün içinde
+            <b>Kiralık ve indirimsiz</b> bir kitabın detayında Kirala'dan uygula. Özel tekliflere kupon uygulanmaz.
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-6">
+        <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${shop}</div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <h2 class="text-sm font-bold text-slate-800">🎟️ Aktif Kuponlarım</h2>
+          <button type="button" data-user-stats="${u.id}" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">Tüm kuponlar → İstatistiklerim</button>
+        </div>
+        ${active.length
+          ? `<ul class="grid grid-cols-1 md:grid-cols-2 gap-2.5">${active.map((c) => couponCardHTML(c, now)).join('')}</ul>
+             <p class="text-[10px] text-slate-400 mt-3">Kullanmak için: Kitaplar → kiralık ve indirimsiz bir kitap → kitap detayında kuponu seç → Kirala.</p>`
+          : emptyState('Aktif kuponun yok. Puanların yetiyorsa mağazadan bir kupon alabilirsin.')}
+      </div>`;
+  }
+
+  /* Kupon al: puan yeterliyse 7 gün geçerli kupon oluşturur */
+  function buyCoupon(rate) {
+    const u = currentUser();
+    const k = COUPON_CATALOG.find((x) => x.rate === Number(rate));
+    if (!u || !k) return;
+    if (!canRent(u)) return toast('Gözlemci rolündeki kullanıcılar kupon alamaz.', 'error');
+    const pts = userStats(u.id).points;
+    if (pts.available < k.cost) return toast(`Yetersiz puan · ${formatPoints(round2(k.cost - pts.available))} eksik.`, 'error');
+    openConfirm({
+      title: `%${k.rate} kupon alınsın mı?`,
+      message: `Puanından <b>${formatPoints(k.cost)}</b> düşecek (kalan ${formatPoints(round2(pts.available - k.cost))}).<br/>Kupon <b>${COUPON_DAYS} gün</b> geçerli; kullanılmazsa puan geri dönmez.`,
+      confirmLabel: 'Kuponu Al',
+      positive: true,
+      iconKey: 'gifts',
+      onConfirm: () => {
+        closeModal();
+        const now = Date.now();
+        run(col('coupons').add({
+          userId: u.id, rate: k.rate, cost: k.cost,
+          boughtAt: isoAt(now),
+          expiresAt: Timestamp.fromMillis(now + COUPON_DAYS * DAY_MS),
+          usedAt: null, rentalId: null, bookId: null
+        }), `🎟️ %${k.rate} kupon alındı · ${COUPON_DAYS} gün içinde kullan`);
+      }
+    });
   }
 
   /* ==========================================================
@@ -3774,15 +4008,16 @@
     </div>`;
 
   /* Onay modalı (silme vb.) */
-  function openConfirm({ title, message, confirmLabel = 'Sil', onConfirm }) {
+  /* positive: true → onay (yeşil, ikon iconKey) · varsayılan silme (kırmızı, çöp kutusu) */
+  function openConfirm({ title, message, confirmLabel = 'Sil', onConfirm, positive = false, iconKey = 'trash' }) {
     openModal(`
       <div class="p-6 text-center">
-        <span class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">${icon('trash', 'w-6 h-6')}</span>
+        <span class="w-12 h-12 rounded-2xl ${positive ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'} flex items-center justify-center mx-auto">${icon(iconKey, 'w-6 h-6')}</span>
         <h3 class="text-sm font-bold text-slate-800 mt-3">${title}</h3>
         <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">${message}</p>
         <div class="grid grid-cols-2 gap-2.5 mt-5">
           <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Vazgeç</button>
-          <button type="button" data-confirm-yes class="py-2.5 rounded-xl text-xs font-semibold bg-rose-500 text-white hover:bg-rose-600 transition">${confirmLabel}</button>
+          <button type="button" data-confirm-yes class="py-2.5 rounded-xl text-xs font-semibold ${positive ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'} text-white transition">${confirmLabel}</button>
         </div>
       </div>`);
     state.confirmAction = onConfirm;
@@ -4690,7 +4925,7 @@
             { label: 'Bakiye', value: formatMoney(u.balance), tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
             { label: 'Aktif Kiralık', value: `${activeCount} kitap`, tone: 'text-brand-700', bg: 'bg-brand-50/70' },
             { label: 'Toplam Harcama', value: formatMoney(s.spent), tone: 'text-slate-800', bg: 'bg-slate-50' },
-            { label: 'İndirim Kazancı', value: formatMoney(s.savings.total), tone: 'text-amber-600', bg: 'bg-amber-50/70' }
+            { label: 'Puan ⭐', value: formatPoints(s.points.available), tone: 'text-amber-600', bg: 'bg-amber-50/70' }
           ].map((t) => `
             <div class="rounded-2xl ${t.bg} px-3 py-3">
               <p class="text-[10px] text-slate-400 font-medium">${t.label}</p>
@@ -4936,6 +5171,7 @@
       if ((m = el('[data-delete-book]')))      return deleteBook(m.dataset.deleteBook);
       if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
       if ((m = el('[data-add-vitrine]')))      return openVitrineModal();
+      if ((m = el('[data-buy-coupon]')))       return m.disabled ? null : buyCoupon(m.dataset.buyCoupon);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
@@ -4999,6 +5235,7 @@
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'vd-book') updateVitrinePreview();
+      if (t.id === 'rentCoupon') updateRentCoupon();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
       if (t.id === 'bookPlaceFilter') { state.bookPlace = t.value; return renderCurrentPage(); }
       if (t.id === 'bookYearFilter') { state.bookYear = t.value; return renderCurrentPage(); }
@@ -5053,6 +5290,7 @@
     ['announcements', announcements],
     ['offers', offers],
     ['discounts', discounts, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
+    ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],
     ['settings', appSettings]
   ];
   let unsubscribers = [];
