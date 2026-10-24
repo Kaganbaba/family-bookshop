@@ -166,6 +166,24 @@
     .sc-duo-1 { transform: translateX(34%) rotateY(-18deg) scale(.94); z-index: 1; }
     .showcase-host:hover .sc-duo-0 { transform: translateX(-52%) rotateY(12deg) scale(.98); }
     .showcase-host:hover .sc-duo-1 { transform: translateX(52%) rotateY(-12deg) scale(.98); }
+    /* Vitrin İndirimi (Kontrolcünün seçtikleri) · gece mavisi zemin, altın çerçeve, asılı etiket */
+    .vitrine-bg { background: radial-gradient(120% 140% at 0% 0%, #3730a3 0%, #1e1b4b 42%, #0f172a 100%); }
+    .vitrine-dots { background-image: radial-gradient(rgba(255, 255, 255, .07) 1px, transparent 1.2px); background-size: 16px 16px; }
+    .vitrine-rim { background: linear-gradient(135deg, #fde68a, #b45309 30%, #fcd34d 55%, #92400e 80%, #fde68a); }
+    .vitrine-card {
+      background: linear-gradient(160deg, rgba(255, 255, 255, .11), rgba(255, 255, 255, .03));
+      border: 1px solid rgba(251, 191, 36, .22);
+    }
+    .vitrine-card:hover { border-color: rgba(251, 191, 36, .6); box-shadow: 0 18px 40px -18px rgba(251, 191, 36, .45); }
+    .vitrine-tag { clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); }
+    .vitrine-gold { background: linear-gradient(180deg, #fef3c7, #fbbf24 55%, #d97706); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .vitrine-sheen { position: relative; overflow: hidden; }
+    .vitrine-sheen::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(115deg, transparent 40%, rgba(253, 230, 138, .16) 50%, transparent 60%);
+      transform: translateX(-130%); animation: goldSweep 6s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) { .vitrine-sheen::after { animation: none; } }
   </style>
 </head>
 
@@ -356,6 +374,9 @@
       <!-- 1.5) Yeni Kitap vitrini (1 haftalık yeni kitap indirimi) -->
       <div id="newBooksSection"></div>
 
+      <!-- 1.7) Vitrin İndirimleri (Kontrolcünün seçtiği kitap + yüzde) -->
+      <div id="vitrineSection"></div>
+
       <!-- 2) Günün İndirimleri -->
       <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -507,6 +528,7 @@
   const priceLogs = [];      // priceLogs/{id}
   const announcements = [];  // announcements/{id}
   const offers = [];         // offers/{id}
+  const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Kontrolcü seçer): { bookId, rate, createdAt, createdBy }
   const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
 
   /* ==========================================================
@@ -735,6 +757,8 @@
     'Duyuru':        'bg-brand-50 text-brand-600',
     'Bilgilendirme': 'bg-sky-50 text-sky-600',
     'Yeni Kitap':    'bg-emerald-50 text-emerald-600',
+    'Kitap Durumu':  'bg-violet-50 text-violet-600',
+    'İndirim':       'bg-rose-50 text-rose-600',
     'Etkinlik':      'bg-amber-50 text-amber-700'
   };
   const newsChipCls = (c) => NEWS_CATEGORIES[c] || 'bg-slate-100 text-slate-600';
@@ -1080,8 +1104,13 @@
     if (isNewBook(book, now) && NEW_BOOK_DISCOUNT.rate > rate) {
       rate = NEW_BOOK_DISCOUNT.rate; source = 'new';
     }
+    const custom = customDiscountOf(book);
+    if (custom && custom.rate > rate) { rate = custom.rate; source = 'custom'; }
     return { rate, source };
   }
+  /* Vitrin İndirimi: Kontrolcünün kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek) */
+  const CUSTOM_DISCOUNT_MAX = 90;
+  const customDiscountOf = (book) => discounts.find((d) => d.bookId === book?.id && Number.isInteger(d.rate) && d.rate > 0) || null;
   /* 1 haftalık yeni kitap indirimi süren kitap */
   /* Yeni kitap indiriminin bitişi (ms). Kayıtlı değer ile çıkış tarihinden hesaplanan
      7. gün sonu karşılaştırılır, erken olan geçerlidir (eski kayıtlardaki 8 günlük hata düzelir). */
@@ -1094,7 +1123,7 @@
   const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Vitrin İndirimi' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -1183,6 +1212,33 @@
     pinned: false,
     readBy: []
   });
+
+  /* Haber robotu: Kontrolcü kitabın durumunu değiştirince otomatik duyuru.
+     Liste dışı kitap üyelere görünmediği için duyuruya kitap bağlanmaz. */
+  function statusAnnouncement(book, status) {
+    const name = `"${book.title}"`;
+    const special = isSpecialBook(book);
+    const [title, body] = {
+      kiralik: [`${book.title} artık kiralık`,
+        `${name} artık kiralanabilir! 📚${hasPrice(book) ? `\n💰 Kiralama fiyatı: ${formatMoney(book.price)}` : ''}${book.rentalDays ? ` · ⏳ ${book.rentalDays} gün` : ''}${special && book.period ? `\n🔒 Bu özel kitap sadece ${book.period} okunabilir.` : ''}`],
+      kiradisi: special
+        ? [`${book.title} dönem dışında`, `${name} özel kitabı şu an dönem dışında, kiralanamaz.${book.period ? `\n🔒 Sadece ${book.period} okunabilir.` : ''}`]
+        : [`${book.title} kira dışı`, `${name} şu an kira dışı. Kitaplıkta görünmeye devam eder ama bir süre kiralanamaz.`],
+      listedisi: [`${book.title} listeden kaldırıldı`, `${name} kitaplık listesinden kaldırıldı ve şu an kiralanamaz.`],
+      planlaniyor: [`${book.title} planlanıyor`, `${name} kitabının gelmesi planlanıyor! 🗓️\nBilgileri netleştikçe paylaşacağız.`],
+      yakinda: [`${book.title} yakında`, `${name} yazılmaya başlandı, yakında kitaplıkta! ✍️`]
+    }[status];
+    return {
+      type: 'news',
+      category: 'Kitap Durumu',
+      title, body,
+      bookId: status === 'listedisi' ? null : book.id,
+      authorId: state.currentUserId,
+      createdAt: isoAt(Date.now()),
+      pinned: false,
+      readBy: []
+    };
+  }
 
   function addBook(data) {
     const now = Date.now();
@@ -1289,6 +1345,7 @@
     normal: { label: '📚 İndirimsiz kiralamalar', pick: (r) => !r.purchaseId && !r.discountSource },
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
+    custom: { label: '🏷️ Vitrin İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
     offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
   };
 
@@ -1358,12 +1415,13 @@
     const saveOf = (r) => Math.max(0, (r.listPrice ?? r.price) - r.price);
     const savingDeal  = sum(discounted.filter((r) => r.discountSource === 'deal'), saveOf);
     const savingNew   = sum(discounted.filter((r) => r.discountSource === 'new'), saveOf);
+    const savingCustom = sum(discounted.filter((r) => r.discountSource === 'custom'), saveOf);
     const savingOffer = sum(purchases, (p) => Math.max(0, p.normalTotal - p.price));
     return {
       count: rs.length,                                              // paket = paketteki kitap sayısı
       spent: round2(sum(singles, (r) => r.price) + sum(purchases, (p) => p.price)), // paket = +paket fiyatı
       purchases, discounted, saveOf,
-      savings: { deal: savingDeal, new: savingNew, offer: savingOffer, total: round2(savingDeal + savingNew + savingOffer) }
+      savings: { deal: savingDeal, new: savingNew, custom: savingCustom, offer: savingOffer, total: round2(savingDeal + savingNew + savingCustom + savingOffer) }
     };
   }
 
@@ -1504,6 +1562,7 @@
     $('#page-dashboard [data-page-desc]').textContent = `Merhaba ${u.name.split(' ')[0]} 👋 Kitaplığın genel görünümü ve günün fırsatları.`;
     renderStats(now);
     renderNewBooks(now);
+    renderVitrine(now);
     renderDeals(now);
     renderActiveRentals(now);
     renderExpiredRentals(now);
@@ -1607,6 +1666,148 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>
         </div>
       </div>`;
+  }
+
+  /* --- 8.1.7 Vitrin İndirimleri (gece mavisi + altın) · Kontrolcü ekler/siler --- */
+  function renderVitrine(now) {
+    const admin = isAdmin();
+    const list = discounts
+      .map((d) => ({ d, b: getBook(d.bookId) }))
+      .filter(({ d, b }) => b && hasPrice(b) && isVisibleBook(b) && customDiscountOf(b) === d)
+      .sort((x, y) => y.d.rate - x.d.rate || new Date(y.d.createdAt) - new Date(x.d.createdAt));
+    const box = $('#vitrineSection');
+    if (!list.length && !admin) { box.innerHTML = ''; return; }
+
+    const cards = list.map(({ d, b }) => {
+      const eff = getEffectiveDiscount(b, now);
+      const newPrice = round2(b.price * (1 - eff.rate / 100));
+      return `
+        <div data-open-book="${b.id}" role="button" tabindex="0"
+          class="vitrine-card vitrine-sheen group relative cursor-pointer rounded-2xl p-4 pt-5 text-left transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-amber-300/60">
+          <div class="vitrine-tag absolute -top-px right-4 w-[4.25rem] pt-2 pb-4 bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 text-center shadow-lg z-[2]">
+            <p class="text-[8px] font-extrabold tracking-[.2em] text-amber-900/80">İNDİRİM</p>
+            <p class="text-xl font-black text-amber-950 leading-none mt-0.5">%${eff.rate}</p>
+          </div>
+          ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Vitrin indirimini kaldır" aria-label="Vitrin indirimini kaldır"
+            class="absolute top-2 left-2 z-[3] w-7 h-7 rounded-full bg-white/10 text-indigo-200 hover:bg-rose-500 hover:text-white flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
+          <div class="relative z-[1] flex gap-3 pr-16 ${admin ? 'pl-7' : ''}">
+            <div class="shrink-0 rounded-xl ring-1 ring-amber-300/40 shadow-[0_10px_25px_-10px_rgba(251,191,36,.5)]">${coverHTML(b, 'md')}</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300/80 truncate">${escapeHTML(typeLabel(b.type))}</p>
+              <p class="text-sm font-semibold text-white mt-0.5 line-clamp-2 leading-snug">${escapeHTML(b.title)}</p>
+              <p class="text-[11px] text-indigo-200/70 truncate mt-0.5">${escapeHTML(authorName(b))}</p>
+              ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
+            </div>
+          </div>
+          <div class="relative z-[1] flex items-end justify-between mt-4 pt-3 border-t border-white/10">
+            <p class="text-[10px] text-indigo-200/60 leading-tight">${eff.source === 'custom' ? 'Vitrin fiyatı' : `${discountSourceLabel(eff.source)}<br/>daha yüksek, o geçerli`}</p>
+            <div class="text-right">
+              <p class="text-[11px] text-indigo-200/50 line-through">${formatMoney(b.price)}</p>
+              <p class="vitrine-gold text-2xl font-black leading-none tracking-tight">${formatMoney(newPrice)}</p>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="vitrine-rim rounded-3xl p-[1.5px] shadow-soft-lg mb-6">
+        <div class="vitrine-bg relative rounded-[22px] overflow-hidden p-4 sm:p-5">
+          <div class="vitrine-dots absolute inset-0 pointer-events-none"></div>
+          <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <div class="flex items-center gap-3">
+              <span class="vitrine-rim w-10 h-10 rounded-full p-[1.5px] shadow-soft shrink-0">
+                <span class="w-full h-full rounded-full bg-indigo-950 flex items-center justify-center text-lg">🏷️</span>
+              </span>
+              <div>
+                <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Vitrin İndirimleri</h2>
+                <p class="text-[11px] text-indigo-200/70">Kontrolcünün seçtiği özel fırsatlar · kaldırılana kadar geçerli</p>
+              </div>
+            </div>
+            ${admin ? `<button type="button" data-add-vitrine
+              class="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-bold text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 hover:from-amber-100 hover:to-amber-300 shadow-soft transition">${icon('plus', 'w-3.5 h-3.5')}İndirim Ekle</button>` : ''}
+          </div>
+          ${list.length
+            ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`
+            : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz vitrin indirimi yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Kontrolcüler görür.</span></p>`}
+        </div>
+      </div>`;
+  }
+
+  /* Kontrolcü: vitrin indirimi ekle (aynı kitaba yeniden eklemek yüzdeyi günceller) */
+  function openVitrineModal() {
+    if (!requireAdmin()) return;
+    const pickable = books
+      .filter((b) => hasPrice(b) && !isDraftBook(b))
+      .sort((a, b) => a.title.localeCompare(b.title, 'tr'));
+    if (!pickable.length) return toast('Vitrine eklenecek fiyatlı kitap yok.', 'info');
+    openModal(`
+      ${modalHeader('Vitrin İndirimi Ekle 🏷️', 'Ana sayfadaki vitrinde görünür · kaldırılana kadar geçerli.', 'tag', 'bg-amber-50 text-amber-600')}
+      <form data-form="saveVitrine" class="p-5 space-y-3.5" autocomplete="off">
+        ${field('Kitap', `<select name="bookId" id="vd-book" required class="${INPUT_CLS}">
+          ${pickable.map((b) => {
+            const cur = customDiscountOf(b);
+            return `<option value="${b.id}">${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (şu an %${cur.rate})` : ''}</option>`;
+          }).join('')}
+        </select>`, 'Vitrinde zaten olan bir kitabı seçersen yüzdesi güncellenir.')}
+        ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" class="${INPUT_CLS}" placeholder="Örn. 30" />`,
+          `1–${CUSTOM_DISCOUNT_MAX} arası tam sayı. Kitapta daha yüksek bir indirim (Günün İndirimi, Yeni Kitap) varsa o geçerli olur.`)}
+        <div id="vd-preview" class="rounded-2xl bg-gradient-to-br from-indigo-950 to-slate-900 text-white px-4 py-3 text-xs"></div>
+        <label class="flex items-center gap-2 text-[11px] text-slate-500">
+          <input type="checkbox" name="announce" checked class="rounded border-slate-300 text-brand-600" /> 📣 Duyurulara haber olarak da düş
+        </label>
+        ${formFooter('Vitrine Ekle')}
+      </form>`);
+    updateVitrinePreview();
+  }
+
+  function updateVitrinePreview() {
+    const box = $('#vd-preview');
+    if (!box) return;
+    const b = getBook($('#vd-book')?.value);
+    const rate = parseInt($('#vd-rate')?.value, 10);
+    if (!b) { box.innerHTML = ''; return; }
+    box.innerHTML = rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX
+      ? `<span class="text-indigo-200/70">Vitrin fiyatı:</span> <span class="line-through text-indigo-200/50">${formatMoney(b.price)}</span> → <b class="vitrine-gold text-base">${formatMoney(round2(b.price * (1 - rate / 100)))}</b> <span class="text-amber-300 font-bold">(%${rate})</span>`
+      : `<span class="text-indigo-200/70">Normal fiyat ${formatMoney(b.price)} · yüzde gir, yeni fiyat burada görünsün.</span>`;
+  }
+
+  function handleSaveVitrine(fd) {
+    if (!requireAdmin()) return;
+    const b = getBook(fd.bookId);
+    const rate = parseInt(fd.rate, 10);
+    if (!b || !hasPrice(b)) return toast('Fiyatı olan bir kitap seçin.', 'error');
+    if (!(rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX)) return toast(`İndirim yüzdesi 1–${CUSTOM_DISCOUNT_MAX} arası olmalı.`, 'error');
+    const prev = customDiscountOf(b);
+    if (prev?.rate === rate) return toast(`"${b.title}" zaten %${rate} ile vitrinde.`, 'info');
+    const batch = db.batch();
+    batch.set(col('discounts').doc(String(b.id)), { bookId: b.id, rate, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
+    if (fd.announce === 'on') {
+      const newPrice = round2(b.price * (1 - rate / 100));
+      batch.set(col('announcements').doc(), {
+        type: 'news', category: 'İndirim',
+        title: `Vitrinde %${rate} indirim: ${b.title}`,
+        body: `"${b.title}" vitrine çıktı! 🏷️\n${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.\nVitrin indirimi kaldırılana kadar geçerli, kaçırma!`,
+        bookId: b.id, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
+      });
+    }
+    closeModal();
+    run(batch.commit(), prev ? `"${b.title}" vitrin indirimi %${prev.rate} → %${rate}` : `"${b.title}" %${rate} indirimle vitrine eklendi 🏷️`);
+  }
+
+  function deleteVitrine(id) {
+    if (!requireAdmin()) return;
+    const d = discounts.find((x) => x.id === id);
+    if (!d) return;
+    const b = getBook(d.bookId);
+    openConfirm({
+      title: 'Vitrin indirimi kaldırılsın mı?',
+      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabındaki %${d.rate} vitrin indirimi kaldırılacak. <b>Kitap kitaplıkta kalır</b>, normal fiyatından kiralanabilir. Önceki kiralamalar etkilenmez.`,
+      confirmLabel: 'Kaldır',
+      onConfirm: () => {
+        closeModal();
+        run(col('discounts').doc(d.id).delete(), 'Vitrin indirimi kaldırıldı.', 'info');
+      }
+    });
   }
 
   /* --- 8.2 Günün indirimleri --- */
@@ -1726,8 +1927,22 @@
   }
 
   /* Kiralama satırındaki fiyat alanı (paket kitaplarında özel ifade) */
+  /* Paket (özel teklif) kiralamasının özeti: paketteki kitap sayısı + ödenen toplam (kitap başı değil) */
+  function packageInfo(r) {
+    const p = offerPurchases.find((x) => x.id === r.purchaseId);
+    const count = p?.bookIds?.length || rentals.filter((x) => x.purchaseId && x.purchaseId === r.purchaseId).length || 1;
+    return { count, total: p?.price ?? r.offerPrice, title: p?.offerTitle || '' };
+  }
+  const packageLabel = (pk) => (pk.count > 1 ? `🎁 ${pk.count} kitaplık paket · toplam ${formatMoney(pk.total)}` : `🎁 Özel teklifle ${formatMoney(pk.total)}`);
+
   function rentalPriceHTML(r) {
-    if (r.offerId) return `<p class="text-[11px] font-semibold text-violet-600 whitespace-nowrap">(Özel teklifle ${formatMoney(r.offerPrice)})</p>`;
+    if (r.offerId) {
+      const pk = packageInfo(r);
+      return `<div title="${escapeHTML(pk.title ? `${pk.title} · ` : '')}${pk.count > 1 ? `${pk.count} kitap tek seferde, toplam ${formatMoney(pk.total)} ödendi` : ''}">
+          <p class="text-[10px] font-semibold text-violet-500 whitespace-nowrap">🎁 ${pk.count > 1 ? `${pk.count} kitaplık paket` : 'Özel teklif'}</p>
+          <p class="text-xs font-bold text-violet-600 whitespace-nowrap">${pk.count > 1 ? '<span class="text-[10px] font-semibold">toplam</span> ' : ''}${formatMoney(pk.total)}</p>
+        </div>`;
+    }
     return `<p class="text-xs font-semibold text-brand-600">${formatMoney(r.price)}</p>
             ${r.discount ? `<p class="text-[10px] font-bold text-rose-500">%${r.discount} indirimli</p>` : ''}`;
   }
@@ -1817,7 +2032,7 @@
             <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-slate-400">
               <span class="flex items-center gap-1.5">${avatarHTML(usr, 'w-4 h-4 text-[8px]')}${escapeHTML(usr.name)}</span>
               <span>Bitiş: ${formatDate(r.dueAt, true)}</span>
-              ${r.offerId ? `<span class="text-violet-500">(Özel teklifle ${formatMoney(r.offerPrice)})</span>` : ''}
+              ${r.offerId ? `<span class="text-violet-500">(${packageLabel(packageInfo(r))})</span>` : ''}
             </div>
           </div>
           <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full">
@@ -2238,6 +2453,8 @@
       patch.newDiscountUntil = newDiscountUntilFor(b.releaseDate);
       if (patch.newDiscountUntil) { batch.set(col('announcements').doc(), newBookAnnouncement({ ...b, ...patch })); extra = ' · Duyurular\'a haber düştü 📣'; }
     }
+    // Yeni kitap duyurusu atılmadıysa durum değişikliği duyurusu
+    if (!extra) { batch.set(col('announcements').doc(), statusAnnouncement(b, status)); extra = ' · Duyurular\'a haber düştü 📣'; }
     batch.update(bookRef(b.id), patch);
     await run(batch.commit(), `"${b.title}" → ${BOOK_STATUSES[status].label}${extra}`);
     if (state.modalOpen) openBookModal(b.id);
@@ -2299,11 +2516,13 @@
     const rs = rentals.filter((r) => r.bookId === b.id);
     const logs = priceLogs.filter((l) => l.bookId === b.id);
     const inOffers = offers.filter((o) => o.items.some((it) => it.bookId === b.id));
+    const vitrine = customDiscountOf(b);
     const parts = [
       anns.length && `${anns.length} duyuru`,
       rs.length && `${rs.length} kiralama kaydı`,
       logs.length && `${logs.length} fiyat logu`,
-      inOffers.length && `${inOffers.length} özel teklif`
+      inOffers.length && `${inOffers.length} özel teklif`,
+      vitrine && 'vitrin indirimi'
     ].filter(Boolean);
     openConfirm({
       title: 'Kitap silinsin mi?',
@@ -2314,6 +2533,7 @@
         anns.forEach((a) => ops.push((bt) => bt.delete(col('announcements').doc(a.id))));
         rs.forEach((r) => ops.push((bt) => bt.delete(col('rentals').doc(r.id))));
         logs.forEach((l) => ops.push((bt) => bt.delete(col('priceLogs').doc(l.id))));
+        if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));
         // Teklif paketinden çıkarılır; paket boşalırsa teklif silinir
         inOffers.forEach((o) => {
           const items = o.items.filter((it) => it.bookId !== b.id);
@@ -2539,7 +2759,7 @@
         : '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-slate-100 text-slate-500">Süresi Doldu</span>';
       const discChip = r.offerId
         ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-violet-50 text-violet-600">🎁 Paket</span>'
-        : r.discount ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>` : '';
+        : r.discount ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${r.discountSource === 'new' ? 'bg-amber-50 text-amber-600' : r.discountSource === 'custom' ? 'bg-indigo-50 text-indigo-600' : 'bg-rose-50 text-rose-500'}">${discountSourceLabel(r.discountSource)} %${r.discount}</span>` : '';
       return `
         <li class="flex items-center gap-3 p-2.5 rounded-xl ${active ? 'bg-emerald-50/30 border border-emerald-100' : 'bg-slate-50/80'}">
           ${coverHTML(b, 'xs')}
@@ -2745,6 +2965,7 @@
           <div class="flex flex-wrap gap-1.5 mt-2.5">
             <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Günün İndirimi: ${formatMoney(s.savings.deal)}</span>
             <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-sky-600">Yeni Kitap: ${formatMoney(s.savings.new)}</span>
+            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-indigo-600">Vitrin İndirimi: ${formatMoney(s.savings.custom)}</span>
             <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-violet-600">Özel Teklif: ${formatMoney(s.savings.offer)}</span>
           </div>
         </div>
@@ -3667,6 +3888,11 @@
       } else if (releaseDate !== b.releaseDate) {
         // Çıkış tarihi değiştiyse yeni kitap indirimi yeniden hesaplanır
         data.newDiscountUntil = newDiscountUntilFor(releaseDate);
+      }
+      // Durum değiştiyse (ve yeni kitap duyurusu atılmadıysa) otomatik durum duyurusu
+      if (status !== bookStatus(b) && !extra) {
+        batch.set(col('announcements').doc(), statusAnnouncement({ ...b, ...data }, status));
+        extra = ' · Duyurular\'a haber düştü 📣';
       }
       batch.update(bookRef(b.id), data);
       closeModal();
@@ -4649,6 +4875,8 @@
       if ((m = el('[data-edit-book]')))        return openBookFormModal(m.dataset.editBook);
       if ((m = el('[data-delete-book]')))      return deleteBook(m.dataset.deleteBook);
       if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
+      if ((m = el('[data-add-vitrine]')))      return openVitrineModal();
+      if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-delete-type]')))      return deleteType(m.dataset.deleteType);
@@ -4688,6 +4916,7 @@
         case 'saveName':    return handleSaveName(fd);
         case 'resetStats':  return handleResetStats(form);
         case 'setPassword': return handleSetPassword(fd);
+        case 'saveVitrine': return handleSaveVitrine(fd);
       }
     });
 
@@ -4698,6 +4927,7 @@
       if (t.id === 'bf-title') updateBookFormPreview();
       if (t.id === 'of-price') updateOfferCalc();
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
+      if (t.id === 'vd-rate') updateVitrinePreview();
     });
     document.addEventListener('change', (e) => {
       const t = e.target;
@@ -4708,6 +4938,7 @@
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'bf-date') delete t.dataset.auto;
+      if (t.id === 'vd-book') updateVitrinePreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
       if (t.id === 'bookPlaceFilter') { state.bookPlace = t.value; return renderCurrentPage(); }
       if (t.id === 'bookYearFilter') { state.bookYear = t.value; return renderCurrentPage(); }
@@ -4728,6 +4959,11 @@
       if (deal && (e.key === 'Enter' || e.key === ' ') && e.target === deal) {
         e.preventDefault();
         openBookModal(deal.dataset.openDeal);
+      }
+      const bookCard = e.target.closest?.('div[data-open-book]');
+      if (bookCard && (e.key === 'Enter' || e.key === ' ') && e.target === bookCard) {
+        e.preventDefault();
+        openBookModal(bookCard.dataset.openBook);
       }
     });
 
@@ -4756,6 +4992,7 @@
     ['priceLogs', priceLogs],
     ['announcements', announcements],
     ['offers', offers],
+    ['discounts', discounts, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['settings', appSettings]
   ];
   let unsubscribers = [];
