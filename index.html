@@ -8,7 +8,7 @@
   <!-- Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@1,600;1,800&display=swap" rel="stylesheet" />
 
   <!-- Firebase (compat SDK · Auth + Firestore) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -121,6 +121,19 @@
       .new-glow::before, .new-glow::after, .twinkle, .deal-hot, .deal-mega, .rate-pop, .confetti-layer i { animation: none; }
       .confetti-layer { display: none; }
     }
+    /* Kitaplar listesi: satır ortasında şeffaf, eğik, parıldayan kitap adı */
+    .ghost-title {
+      font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+      font-style: italic; font-weight: 800; letter-spacing: .01em;
+      transform: skewX(-10deg);
+      background: linear-gradient(105deg, rgba(100, 116, 139, .16) 30%, rgba(59, 130, 246, .55) 47%, rgba(255, 255, 255, .9) 50%, rgba(59, 130, 246, .55) 53%, rgba(100, 116, 139, .16) 70%);
+      background-size: 280% 100%;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: ghostShine 5.5s ease-in-out infinite;
+    }
+    .ghost-title.is-new { background-image: linear-gradient(105deg, rgba(217, 119, 6, .18) 30%, rgba(245, 158, 11, .65) 47%, rgba(255, 255, 255, .95) 50%, rgba(245, 158, 11, .65) 53%, rgba(217, 119, 6, .18) 70%); }
+    @keyframes ghostShine { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
+    @media (prefers-reduced-motion: reduce) { .ghost-title { animation: none; background-position: 50% 0; } }
     /* Özel teklif vitrini · arka plan indirim yüzdesine göre, yıldız rozet, nokta deseni */
     .offer-pattern { background-image: radial-gradient(rgba(255, 255, 255, .2) 1.2px, transparent 1.4px); background-size: 14px 14px; }
     .offer-mega-bg {
@@ -645,7 +658,7 @@
 
   const ROUTES = {
     'dashboard':     { label: 'Ana Sayfa',      desc: 'Kitaplığın genel görünümü ve özet istatistikler.' },
-    'books':         { label: 'Kitaplar',       desc: 'Kağan Durak\'ın tüm eserleri · yazıldığı tarihe göre en yeniden eskiye.' },
+    'books':         { label: 'Kitaplar',       desc: 'Kağan Durak\'ın tüm eserleri · çıkış tarihine göre en yeniden eskiye.' },
     'rentals':       { label: 'Kiralananlar',   desc: 'Aktif ve geçmiş kiralama kayıtları.' },
     'users':         { label: 'Kullanıcılar',   desc: 'Kitaplar için en çok bakiye harcayanlar liderlik tablosu.' },
     'price-logs':    { label: 'Fiyat Logu',     desc: 'Kitap fiyatlarındaki tüm değişimlerin tarihe göre geçmişi.' },
@@ -952,9 +965,16 @@
   }
 
   /* settings/deals.refreshedAt: Kontrolcünün indirimleri en son yenilediği an */
+  const dealsDoc = () => appSettings.find((s) => s.id === 'deals') || {};
   const dealsRefreshMs = () => {
-    const iso = appSettings.find((s) => s.id === 'deals')?.refreshedAt;
+    const iso = dealsDoc().refreshedAt;
     return iso ? new Date(iso).getTime() : null;
+  };
+  /* settings/deals.removedDay + removedIds: Kontrolcünün bugünkü indirimden çıkardığı kitaplar
+     (yalnızca o indirim günü geçerli; 10:00'da yeni gün başlayınca kendiliğinden düşer) */
+  const dealsRemovedToday = (now = new Date()) => {
+    const d = dealsDoc();
+    return d.removedDay === discountDayNumber(now) ? (d.removedIds || []).map(Number) : [];
   };
 
   function getDailyDeals(now = new Date()) {
@@ -993,9 +1013,10 @@
     }
 
     const dayIndex = Math.max(0, today - cycleStart);
+    const removed = dealsRemovedToday(now);
     const ids = snapshot
       .slice(dayIndex * size, dayIndex * size + size)
-      .filter((id) => getBook(id));     // silinmiş kitapları atla
+      .filter((id) => getBook(id) && !removed.includes(id)); // silinmiş / bugün indirimden çıkarılmış kitapları atla
 
     return {
       ids, cycleNo, dayIndex, totalDays, refreshed,
@@ -1008,16 +1029,26 @@
   const nextDealReset = (now = new Date()) => discountDayStart(discountDayNumber(now) + 1);
 
   /* Kitaba o an uygulanacak en yüksek indirim (günün indirimi veya yeni kitap indirimi) */
-  function getEffectiveDiscount(book, now = new Date()) {
+  /* dealIds verilirse günün indirimleri yeniden hesaplanmaz (listelerde tek sefer hesap) */
+  function getEffectiveDiscount(book, now = new Date(), dealIds = null) {
     let rate = 0, source = null;
-    if (getDailyDeals(now).ids.includes(book.id)) { rate = getDiscountRate(book.id); source = 'deal'; }
-    if (book.newDiscountUntil && new Date(book.newDiscountUntil) > now && NEW_BOOK_DISCOUNT.rate > rate) {
+    if ((dealIds || getDailyDeals(now).ids).includes(book.id)) { rate = getDiscountRate(book.id); source = 'deal'; }
+    if (isNewBook(book, now) && NEW_BOOK_DISCOUNT.rate > rate) {
       rate = NEW_BOOK_DISCOUNT.rate; source = 'new';
     }
     return { rate, source };
   }
   /* 1 haftalık yeni kitap indirimi süren kitap */
-  const isNewBook = (book, now = new Date()) => !!book.newDiscountUntil && new Date(book.newDiscountUntil) > now;
+  /* Yeni kitap indiriminin bitişi (ms). Kayıtlı değer ile çıkış tarihinden hesaplanan
+     7. gün sonu karşılaştırılır, erken olan geçerlidir (eski kayıtlardaki 8 günlük hata düzelir). */
+  function newDiscountEnd(book) {
+    if (!book?.newDiscountUntil) return null;
+    const stored = new Date(book.newDiscountUntil).getTime();
+    const byRelease = isDateKey(book.releaseDate) ? newDiscountEndOf(book.releaseDate).getTime() : Infinity;
+    return Math.min(stored, byRelease);
+  }
+  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return !!end && end > now.getTime(); };
+  const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now)).map((b) => b.id).join(',');
   const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif' }[s] || 'İndirim');
 
@@ -1066,13 +1097,18 @@
   /* Belgeye yazılacak veri: yerel 'id' alanını çıkarır (belge adı zaten id) */
   const docData = ({ id, ...rest }) => rest;
 
-  /* Yeni kitap indirimi çıkış gününden itibaren 7 gün sürer (7. günün sonuna kadar).
-     Çıkış tarihi bundan eskiyse indirim uygulanmaz → null */
+  /* Yeni kitap indirimi tam 7 gün: çıkış günü 1. gün sayılır, 7. günün sonunda biter
+     (ör. 20 Ekim çıkış → 26 Ekim 23:59). */
+  function newDiscountEndOf(releaseDate) {
+    const end = dateFromKey(releaseDate);
+    end.setDate(end.getDate() + NEW_BOOK_DISCOUNT.days - 1);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }
+  /* Çıkış tarihi son 7 gün içinde değilse indirim uygulanmaz → null */
   function newDiscountUntilFor(releaseDate, now = Date.now()) {
     if (!isDateKey(releaseDate)) return null;
-    const end = dateFromKey(releaseDate);
-    end.setDate(end.getDate() + NEW_BOOK_DISCOUNT.days);
-    end.setHours(23, 59, 59, 999);
+    const end = newDiscountEndOf(releaseDate);
     return end.getTime() > now ? end.toISOString() : null;
   }
 
@@ -1084,12 +1120,13 @@
       `💰 Kiralama fiyatı: ${formatMoney(book.price)}`,
       book.place ? `📍 Yazıldığı yer: ${book.place}` : ''
     ].filter(Boolean).join(' · ');
-    const daysLeft = book.newDiscountUntil ? Math.ceil((new Date(book.newDiscountUntil) - Date.now()) / DAY_MS) : 0;
+    const daysLeft = Math.ceil(newDiscountLeftMs(book) / DAY_MS);
     const promo = daysLeft > 0 ? `\n${daysLeft} gün boyunca %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimiyle yayında!` : '';
     return `Müjde! ${authorName(book)} tarafından yazılan "${book.title}" isimli yeni ${type} kitabımız kitaplığa eklendi!\n${facts}${promo}`;
   }
 
-  /* Yeni kitap ekler + "Haberler"e otomatik duyuru basar (okunmamış → kırmızı rozet) */
+  /* Yeni kitap ekler. Çıkış tarihi son 7 gün içindeyse (yeni kitap) "Haberler"e
+     otomatik duyuru basar (okunmamış → kırmızı rozet); daha eskiyse duyuru yazılmaz. */
   function addBook(data) {
     const now = Date.now();
     const id = books.reduce((m, b) => Math.max(m, b.id), 0) + 1;
@@ -1101,7 +1138,7 @@
     };
     const batch = db.batch();
     batch.set(bookRef(id), book);
-    batch.set(col('announcements').doc(), {
+    if (book.newDiscountUntil) batch.set(col('announcements').doc(), {
       type: 'news',
       category: 'Yeni Kitap',
       title: `Yeni kitap: ${book.title}`,
@@ -1117,22 +1154,53 @@
 
   /* Fiyatı değiştirir + Fiyat Loguna otomatik kayıt düşer.
      batch verilirse işlemleri ona ekler (kitap düzenleme ile tek seferde yazılır). */
-  function changeBookPrice(bookId, newPrice, batch = null) {
+  /* Bir kitabın fiyat logları (eskiden yeniye) */
+  const priceTimeline = (bookId) => priceLogs
+    .filter((l) => l.bookId === Number(bookId))
+    .sort((a, b) => new Date(a.changedAt) - new Date(b.changedAt));
+
+  /* Kitabın verilen andaki fiyatı (loglardan): o ana kadarki son değişimin yeni fiyatı;
+     o andan önce değişim yoksa ilk değişimin eski fiyatı; hiç log yoksa güncel fiyat */
+  function priceAt(book, ms) {
+    const logs = priceTimeline(book.id);
+    const before = logs.filter((l) => new Date(l.changedAt).getTime() <= ms);
+    if (before.length) return before[before.length - 1].newPrice;
+    if (logs.length) return logs[0].oldPrice;
+    return book.price;
+  }
+
+  /* Değişim yüzdesi: +%12 (zam) / −%10 (indirim) */
+  const pricePct = (oldPrice, newPrice) => (oldPrice > 0 ? Math.round(((newPrice - oldPrice) / oldPrice) * 100) : 0);
+
+  /* Fiyat Logu'ndan tarihli fiyat değişimi (yalnızca Fiyat Logu sayfası kullanır):
+     • Bugün → kitabın fiyatı değişir + şu anki saatle log.
+     • Geçmiş tarih → log o güne (12:00) yazılır; eski fiyat o günkü fiyattır.
+       Sonraki ilk logun "eski fiyatı" yeni fiyata çekilir (zincir tutarlı kalır).
+       O tarihten sonra başka değişim yoksa kitabın güncel fiyatı da otomatik değişir. */
+  function changeBookPrice(bookId, newPrice, dateKey = localDateKey()) {
     const book = getBook(bookId);
     if (!book) return { ok: false, reason: 'Kitap bulunamadı.' };
     newPrice = round2(newPrice);
     if (!(newPrice > 0)) return { ok: false, reason: 'Geçerli bir fiyat girin.' };
-    if (newPrice === book.price) return { ok: false, reason: 'Yeni fiyat mevcut fiyatla aynı.' };
+    const today = localDateKey();
+    if (!isDateKey(dateKey)) return { ok: false, reason: 'Geçerli bir tarih seçin.' };
+    if (dateKey > today) return { ok: false, reason: 'İleri bir tarih seçilemez.' };
 
-    const oldPrice = book.price;
-    const own = !batch;
-    const b = batch || db.batch();
-    b.update(bookRef(book.id), { price: newPrice });
-    b.set(col('priceLogs').doc(), {
+    const isToday = dateKey === today;
+    const at = isToday ? new Date() : (() => { const d = dateFromKey(dateKey); d.setHours(12, 0, 0, 0); return d; })();
+    const oldPrice = isToday ? book.price : priceAt(book, at.getTime());
+    if (newPrice === oldPrice) return { ok: false, reason: `${isToday ? 'Yeni fiyat mevcut fiyatla' : 'Yeni fiyat o tarihteki fiyatla'} aynı.` };
+
+    const later = priceTimeline(book.id).filter((l) => new Date(l.changedAt) > at);
+    const updatesCurrent = isToday || !later.length;
+    const batch = db.batch();
+    batch.set(col('priceLogs').doc(), {
       bookId: book.id, oldPrice, newPrice,
-      changedBy: state.currentUserId, changedAt: new Date().toISOString()
+      changedBy: state.currentUserId, changedAt: at.toISOString(), backdated: !isToday
     });
-    return { ok: true, book, oldPrice, newPrice, done: own ? b.commit() : null };
+    if (later.length) batch.update(col('priceLogs').doc(later[0].id), { oldPrice: newPrice });
+    if (updatesCurrent) batch.update(bookRef(book.id), { price: newPrice });
+    return { ok: true, book, oldPrice, newPrice, isToday, updatesCurrent, pct: pricePct(oldPrice, newPrice), done: batch.commit() };
   }
 
   /* Kiralamayı tamamen siler (Kontrolcü). Paket (özel teklif) kiralamasında paketin
@@ -1166,12 +1234,24 @@
     ]);
   }
 
-  /* Kullanıcının tüm kiralama + satın alım geçmişini siler (bakiye değişmez) */
-  function removeUserHistory(userId) {
-    return commitOps([
-      ...offerPurchases.filter((p) => p.userId === userId).map((p) => (bt) => bt.delete(col('offerPurchases').doc(p.id))),
-      ...rentalDeleteOps(rentals.filter((r) => r.userId === userId))
-    ]);
+  /* İstatistik kategorileri (sıfırlama): her biri kendi kayıtlarını seçer */
+  const STAT_CATS = {
+    normal: { label: '📚 İndirimsiz kiralamalar', pick: (r) => !r.purchaseId && !r.discountSource },
+    deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
+    new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
+    offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
+  };
+
+  /* Kullanıcının seçilen kategorilerdeki geçmişini siler; cats verilmezse tümü (bakiye değişmez) */
+  function removeUserHistory(userId, cats = Object.keys(STAT_CATS)) {
+    const mine = rentals.filter((r) => r.userId === userId);
+    const singles = mine.filter((r) => cats.some((c) => STAT_CATS[c].pick?.(r)));
+    const ops = [...rentalDeleteOps(singles)];
+    if (cats.includes('offer')) {
+      ops.push(...offerPurchases.filter((p) => p.userId === userId).map((p) => (bt) => bt.delete(col('offerPurchases').doc(p.id))));
+      ops.push(...rentalDeleteOps(mine.filter((r) => r.purchaseId)));
+    }
+    return commitOps(ops);
   }
 
   /* Kitap türü ekle / düzenle / sil */
@@ -1447,7 +1527,7 @@
                 <span class="text-4xl font-black leading-none tracking-tight bg-gradient-to-br from-amber-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent">%${eff.rate}</span>
                 <span class="text-[10px] font-extrabold text-amber-500 tracking-wider">İNDİRİM</span>
               </div>
-              <p class="text-[10px] font-semibold text-amber-700 mt-1">⏳ ${formatRemaining(new Date(b.newDiscountUntil) - now)}</p>
+              <p class="text-[10px] font-semibold text-amber-700 mt-1">⏳ ${formatRemaining(newDiscountLeftMs(b, now))}</p>
             </div>
             <div class="text-right">
               <p class="text-[11px] text-slate-400 line-through">${formatMoney(b.price)}</p>
@@ -1465,7 +1545,7 @@
               <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-white flex items-center justify-center shadow-soft text-lg">★</span>
               <div>
                 <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">Yeni Kitap <span class="twinkle text-amber-400">✨</span></h2>
-                <p class="text-[11px] text-slate-500">Yeni eklenen kitaplar ${NEW_BOOK_DISCOUNT.days} gün boyunca %${NEW_BOOK_DISCOUNT.rate} indirimli</p>
+                <p class="text-[11px] text-slate-500">Yeni çıkan kitaplar ${NEW_BOOK_DISCOUNT.days} gün boyunca %${NEW_BOOK_DISCOUNT.rate} indirimli</p>
               </div>
             </div>
             <span class="hidden sm:flex items-center gap-1 text-amber-400">
@@ -1502,11 +1582,13 @@
       const rented = isBookRented(b, now.getTime());
       const tier = dealTier(rate);
       return `
-        <button type="button" data-open-deal="${b.id}"
-          class="deal-shine ${tier ? `deal-${tier}` : ''} group text-left bg-gradient-to-br from-white to-brand-50/70 rounded-2xl border border-brand-100 p-4
+        <div data-open-deal="${b.id}" role="button" tabindex="0"
+          class="deal-shine ${tier ? `deal-${tier}` : ''} group cursor-pointer text-left bg-gradient-to-br from-white to-brand-50/70 rounded-2xl border border-brand-100 p-4
                  hover:shadow-soft-lg hover:-translate-y-0.5 hover:border-brand-200 transition duration-200 focus:outline-none focus:ring-2 focus:ring-brand-200">
           ${tier === 'mega' ? confettiHTML() : ''}
-          <div class="relative z-[1] flex gap-3">
+          ${isAdmin() ? `<button type="button" data-remove-deal="${b.id}" title="Bugünkü indirimden çıkar (kitap silinmez)" aria-label="İndirimden çıkar"
+            class="absolute top-2 right-2 z-[3] w-8 h-8 rounded-full bg-white/90 shadow-soft text-slate-400 hover:text-rose-500 hover:bg-rose-50 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>` : ''}
+          <div class="relative z-[1] flex gap-3 ${isAdmin() ? 'pr-7' : ''}">
             ${coverHTML(b, 'md')}
             <div class="flex-1 min-w-0">
               <p class="flex items-center gap-1.5 flex-wrap text-[10px] font-semibold uppercase tracking-wider text-brand-500">${escapeHTML(seriesLabel(b))} ${tierBadge(tier)}</p>
@@ -1527,7 +1609,7 @@
               <p class="text-sm font-bold text-emerald-600">${formatMoney(newPrice)}</p>
             </div>
           </div>
-        </button>`;
+        </div>`;
     }).join('');
   }
 
@@ -1550,8 +1632,27 @@
   /* Kontrolcü: günün indirimlerini o anki güncel kitaplarla yenile (sonraki geçiş yine 10:00) */
   function refreshDeals() {
     if (!requireAdmin()) return;
-    run(col('settings').doc('deals').set({ refreshedAt: new Date().toISOString(), refreshedBy: state.currentUserId }),
+    run(col('settings').doc('deals').set({ refreshedAt: new Date().toISOString(), refreshedBy: state.currentUserId }, { merge: true }),
       `Günün indirimleri güncel kitaplara göre yenilendi · sonraki yenilenme ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00`);
+  }
+
+  /* Kontrolcü: kitabı yalnızca bugünkü indirimden çıkar (kitap kitaplıkta kalır) */
+  function removeFromDeals(bookId) {
+    if (!requireAdmin()) return;
+    const b = getBook(bookId);
+    if (!b) return;
+    openConfirm({
+      title: 'İndirimden çıkarılsın mı?',
+      message: `"${escapeHTML(b.title)}" bugünkü Günün İndirimleri'nden çıkarılacak. <b>Kitap kitaplıkta kalır</b>, normal fiyatından kiralanabilir. Yarın ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da döngü normal devam eder.`,
+      confirmLabel: 'İndirimden Çıkar',
+      onConfirm: () => {
+        const today = discountDayNumber();
+        const ids = [...new Set([...dealsRemovedToday(), b.id])];
+        closeModal();
+        run(col('settings').doc('deals').set({ removedDay: today, removedIds: ids }, { merge: true }),
+          `"${b.title}" bugünkü indirimden çıkarıldı.`, 'info');
+      }
+    });
   }
 
   /* Kiralama satırındaki fiyat alanı (paket kitaplarında özel ifade) */
@@ -1702,9 +1803,11 @@
     }
 
     const nowDate = new Date(now);
+    const dealIds = getDailyDeals(nowDate).ids;
     const rows = list.map((b) => {
       const rented = isBookRented(b, now);
       const fresh = isNewBook(b, nowDate);
+      const eff = getEffectiveDiscount(b, nowDate, dealIds);
       return `
         <li>
           <button type="button" data-open-book="${b.id}"
@@ -1717,18 +1820,28 @@
                 <span class="twinkle absolute -top-1.5 -left-1.5 text-amber-400 text-xs">✦</span>
                 <span class="twinkle twinkle-d1 absolute -bottom-1 -right-1.5 text-yellow-400 text-[10px]">✦</span>` : ''}
             </div>
-            <div class="flex-1 min-w-0">
+            <div class="flex-1 sm:flex-none min-w-0 sm:max-w-[42%]">
               <p class="flex items-center gap-1.5 min-w-0">
                 <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
                 ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
               </p>
               <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : ''}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}${fresh
-                ? `<span class="text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(new Date(b.newDiscountUntil) - nowDate)}</span>` : ''}</p>
+                ? `<span class="text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(newDiscountLeftMs(b, nowDate))}</span>` : ''}</p>
             </div>
-            <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full ${rented ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">
-              <span class="w-1.5 h-1.5 rounded-full ${rented ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
-              <span class="hidden sm:inline">Durumu:</span> ${rented ? 'Kiralı' : 'Müsait'}
-            </span>
+            <!-- Orta boşluk: şeffaf, eğik, parıldayan kitap adı (tablet/masaüstü) -->
+            <span class="ghost-title ${fresh ? 'is-new' : ''} hidden sm:block flex-1 min-w-0 truncate text-center text-xl lg:text-2xl px-3 select-none pointer-events-none" aria-hidden="true">${escapeHTML(b.title)}</span>
+            <div class="shrink-0 flex flex-col items-end gap-1 text-right">
+              <p class="leading-none whitespace-nowrap">
+                ${eff.rate ? `<span class="text-[10px] text-slate-400 line-through mr-1">${formatMoney(b.price)}</span>` : ''}
+                <span class="text-xs sm:text-sm font-bold ${eff.rate ? 'text-emerald-600' : 'text-slate-800'}">${formatMoney(round2(b.price * (1 - eff.rate / 100)))}</span>
+              </p>
+              <div class="flex items-center gap-1">
+                ${eff.rate ? `<span class="text-[9px] font-extrabold text-white bg-gradient-to-r ${eff.source === 'new' ? 'from-amber-400 to-yellow-500' : 'from-rose-500 to-orange-400'} px-1.5 py-0.5 rounded-full">%${eff.rate}</span>` : ''}
+                <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${rented ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">
+                  <span class="w-1.5 h-1.5 rounded-full ${rented ? 'bg-amber-400' : 'bg-emerald-400'}"></span>${rented ? 'Kiralı' : 'Müsait'}
+                </span>
+              </div>
+            </div>
             <span class="hidden sm:block text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
           </button>
         </li>`;
@@ -1878,7 +1991,7 @@
                       <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
                       <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
                       <b class="text-slate-800">${formatMoney(l.newPrice)}</b>
-                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '+' : '−'}${formatMoney(Math.abs(diff))}</span>
+                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '+' : '−'}${formatMoney(Math.abs(diff))} · ${up ? '+' : '−'}%${Math.abs(pricePct(l.oldPrice, l.newPrice))} ${up ? 'zam' : 'indirim'}</span>
                     </p>
                   </div>
                   ${admin ? `<button type="button" data-delete-log="${l.id}" data-book-id="${b.id}" data-back-offer="${backOfferId}" title="Bu kaydı sil"
@@ -2333,22 +2446,75 @@
   }
 
   /* Kullanıcının tüm istatistiklerini sıfırla (Kontrolcü) · kiralamalar + satın alımlar silinir */
+  /* Kategori özetleri: kayıt sayısı + harcama (sıfırlama penceresi) */
+  function statCatSummary(userId) {
+    const mine = rentals.filter((r) => r.userId === userId);
+    const out = {};
+    Object.entries(STAT_CATS).forEach(([k, c]) => {
+      if (k === 'offer') {
+        const ps = offerPurchases.filter((p) => p.userId === userId);
+        out[k] = { count: ps.length, unit: 'paket', spent: sum(ps, (p) => p.price) };
+      } else {
+        const rs = mine.filter(c.pick);
+        out[k] = { count: rs.length, unit: 'kiralama', spent: sum(rs, (r) => r.price) };
+      }
+    });
+    return out;
+  }
+
+  /* İstatistik sıfırlama penceresi (Kontrolcü): kategori kategori ya da tümü */
   function resetUserStats(userId) {
     if (!requireAdmin()) return;
     const u = getUser(userId);
     if (!u) return;
-    const rc = rentals.filter((r) => r.userId === userId).length;
-    const pc = offerPurchases.filter((p) => p.userId === userId).length;
-    if (!rc && !pc) return toast('Bu kullanıcının silinecek istatistiği yok.', 'info');
+    const sm = statCatSummary(userId);
+    if (!Object.values(sm).some((x) => x.count)) return toast('Bu kullanıcının silinecek istatistiği yok.', 'info');
+    openModal(`
+      ${modalHeader(`${escapeHTML(u.name)} · İstatistik Sıfırla`, 'Kategori seçerek ayrı ayrı ya da hepsini birden sıfırlayabilirsin. Bakiye değişmez.', 'chart', 'bg-rose-50 text-rose-500')}
+      <form data-form="resetStats" data-user-id="${u.id}" class="p-5 space-y-3" autocomplete="off">
+        <ul class="space-y-2">
+          ${Object.entries(STAT_CATS).map(([k, c]) => `
+            <li>
+              <label class="flex items-center gap-3 p-3 rounded-xl border ${sm[k].count ? 'border-slate-100 hover:border-rose-200 cursor-pointer' : 'border-slate-100 opacity-50'} transition">
+                <input type="checkbox" name="cat" value="${k}" ${sm[k].count ? '' : 'disabled'} class="w-4 h-4 rounded border-slate-300 text-rose-500" />
+                <span class="flex-1 min-w-0">
+                  <span class="block text-xs font-semibold text-slate-700">${c.label}</span>
+                  <span class="block text-[10px] text-slate-400">${sm[k].count} ${sm[k].unit} · ${formatMoney(sm[k].spent)} harcama</span>
+                </span>
+              </label>
+            </li>`).join('')}
+        </ul>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Silinen kayıtlar harcama, kazanç ve sıralamadan düşer; aktif kiralamalardaki kitaplar müsait olur.</p>
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button type="button" data-reset-all="${u.id}" class="py-2.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 transition">Tümünü Sıfırla</button>
+          <button type="submit" class="py-2.5 rounded-xl text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 transition">Seçilenleri Sıfırla</button>
+        </div>
+      </form>`);
+  }
+
+  /* cats: sıfırlanacak kategori anahtarları (boş/yok → tümü) */
+  function confirmResetStats(userId, cats) {
+    if (!requireAdmin()) return;
+    const u = getUser(userId);
+    if (!u) return;
+    const all = !cats || cats.length === Object.keys(STAT_CATS).length;
+    const keys = all ? Object.keys(STAT_CATS) : cats;
+    const sm = statCatSummary(userId);
     openConfirm({
-      title: `${escapeHTML(u.name)} sıfırlansın mı?`,
-      message: `<b>${rc} kiralama</b> ve <b>${pc} paket satın alımı</b> kalıcı olarak silinecek; harcama, kazanç ve sıralama sıfırlanır. Aktif kiralamalardaki kitaplar müsait olur. Bakiye değişmez.`,
+      title: all ? `${escapeHTML(u.name)} tamamen sıfırlansın mı?` : 'Seçilen istatistikler sıfırlansın mı?',
+      message: `${keys.map((k) => `<b>${STAT_CATS[k].label}</b> (${sm[k].count})`).join('<br>')}<br>kalıcı olarak silinecek. Bakiye değişmez.`,
       confirmLabel: 'Sıfırla',
       onConfirm: async () => {
-        await run(removeUserHistory(userId), `${u.name} istatistikleri sıfırlandı.`, 'info');
+        await run(removeUserHistory(userId, keys), all ? `${u.name} istatistikleri tamamen sıfırlandı.` : `${u.name}: seçilen istatistikler sıfırlandı.`, 'info');
         openUserStatsModal(userId);
       }
     });
+  }
+
+  function handleResetStats(form) {
+    const cats = [...form.querySelectorAll('input[name="cat"]:checked')].map((i) => i.value);
+    if (!cats.length) return toast('En az bir kategori seç.', 'error');
+    confirmResetStats(form.dataset.userId, cats);
   }
 
   function goStatsPage(kind, page) {
@@ -2431,7 +2597,7 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2">
-          ${isAdmin() ? `<button type="button" data-stats-reset="${u.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}Tüm İstatistikleri Sıfırla</button>` : '<span></span>'}
+          ${isAdmin() ? `<button type="button" data-stats-reset="${u.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}İstatistikleri Sıfırla</button>` : '<span></span>'}
           <button type="button" data-modal-close class="${BTN_SOFT}">Kapat</button>
         </div>
       </div>`, 'lg');
@@ -2485,7 +2651,11 @@
         const by = getUser(l.changedBy);
         const diff = round2(l.newPrice - l.oldPrice);
         const up = diff > 0;
-        const diffChip = `<span class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold tabular-nums ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '+' : '−'}${formatMoney(Math.abs(diff))}</span>`;
+        const pct = Math.abs(pricePct(l.oldPrice, l.newPrice));
+        const diffChip = `<span class="inline-flex flex-col items-end px-2 py-1 rounded-lg text-[11px] font-bold tabular-nums leading-tight ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">
+          <span>${up ? '+' : '−'}${formatMoney(Math.abs(diff))}</span>
+          <span class="text-[9px] font-extrabold">${up ? '+' : '−'}%${pct} ${up ? 'ZAM' : 'İNDİRİM'}</span>
+        </span>`;
         const priceFlow = `
           <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
           <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
@@ -2547,6 +2717,18 @@
     .filter((a) => a.type === 'update')
     .sort((a, b) => (new Date(b.releaseDate) - new Date(a.releaseDate)) || compareVersions(a.version, b.version));
 
+  /* "YENİ" yalnızca en son gönderilen güncellemede, gönderildikten sonra 7 gün boyunca.
+     7 gün dolmadan yeni güncelleme gelirse etiket ona geçer. */
+  const NEW_UPDATE_DAYS = 7;
+  function newUpdateId(now = Date.now()) {
+    const latest = announcements.filter((a) => a.type === 'update')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    return latest && now - new Date(latest.createdAt).getTime() < NEW_UPDATE_DAYS * DAY_MS ? latest.id : null;
+  }
+  const newUpdateBadge = '<span class="text-[9px] font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 px-1.5 py-0.5 rounded-full shadow-soft animate-pulse">YENİ</span>';
+  /* Güncelleme tarihi + gönderildiği saat */
+  const updateWhen = (a) => `${isDateKey(a.releaseDate) ? formatLongDate(dateFromKey(a.releaseDate)) : formatLongDate(a.createdAt)}${a.createdAt ? ` · ${formatTime(a.createdAt)}` : ''}`;
+
   function renderAnnouncements() {
     markAnnouncementsRead();   // sayfa açıldığı an rozet sıfırlanır
 
@@ -2594,9 +2776,13 @@
       return `
         <div data-open-ann="${a.id}" role="button" tabindex="0"
           class="relative cursor-pointer text-left bg-white rounded-2xl shadow-soft p-4 sm:p-5 flex gap-4 border border-transparent hover:border-brand-100 hover:shadow-soft-lg hover:-translate-y-0.5 transition duration-200 focus:outline-none focus:ring-2 focus:ring-brand-200">
-          ${admin ? `<button type="button" data-delete-news="${a.id}" title="Sil" class="absolute top-2.5 right-2.5 ${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
+          ${admin ? `
+            <div class="absolute top-2 right-2 flex gap-0.5">
+              <button type="button" data-edit-news="${a.id}" title="Düzenle" aria-label="Düzenle" class="${BTN_ICON} text-slate-300 hover:text-brand-600 hover:bg-brand-50">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
+              <button type="button" data-delete-news="${a.id}" title="Sil" aria-label="Sil" class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>
+            </div>` : ''}
           ${book ? coverHTML(book, 'md') : `<span class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 flex items-center justify-center shrink-0">${icon('announcements', 'w-6 h-6')}</span>`}
-          <div class="flex-1 min-w-0 ${admin ? 'pr-6' : ''}">
+          <div class="flex-1 min-w-0 ${admin ? 'pr-14' : ''}">
             <div class="flex items-center gap-1.5 flex-wrap">
               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${newsChipCls(a.category)}">${escapeHTML(a.category)}</span>
               ${a.pinned ? '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">📌 Sabit</span>' : ''}
@@ -2642,6 +2828,7 @@
     if (!list.length) { $('#updList').innerHTML = emptyState('Filtreye uyan sürüm notu bulunamadı.'); return; }
 
     const admin = isAdmin();
+    const freshUpdate = newUpdateId();
     $('#updList').innerHTML = `
       <p class="text-[11px] text-slate-400 mb-3 px-1">${list.length} sürüm notu</p>
       <ol class="relative border-l-2 border-brand-100 ml-2 sm:ml-3 space-y-4">
@@ -2653,9 +2840,9 @@
               <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-xs font-bold text-white bg-gradient-to-r from-brand-500 to-brand-700 px-2.5 py-1 rounded-lg">${escapeHTML(a.version)}</span>
-                  ${idx === 0 && state.updYear === 'all' && !q ? '<span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Güncel</span>' : ''}
-                  <span class="text-[11px] text-slate-400">${formatLongDate(dateFromKey(a.releaseDate))}</span>
-                  ${freshChip(a.id)}
+                  ${a.id === freshUpdate ? newUpdateBadge
+                    : idx === 0 && state.updYear === 'all' && !q ? '<span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Güncel</span>' : ''}
+                  <span class="text-[11px] text-slate-400">🕘 ${updateWhen(a)}</span>
                 </div>
                 ${admin ? `
                   <div class="flex gap-1 shrink-0">
@@ -2689,7 +2876,7 @@
         const now = new Date();
         const eff = getEffectiveDiscount(book, now);
         const price = round2(book.price * (1 - eff.rate / 100));
-        const leftMs = book.newDiscountUntil ? new Date(book.newDiscountUntil) - now : 0;
+        const leftMs = newDiscountLeftMs(book, now);
         bookBox = `
           <div class="mt-6 flex gap-4 p-4 rounded-2xl bg-gradient-to-br from-brand-50 to-white border border-brand-100">
             ${coverHTML(book, 'md')}
@@ -2726,7 +2913,9 @@
           </div>
           ${bookBox}
           <div class="mt-6 flex flex-wrap justify-end gap-2">
-            ${isAdmin() ? `<button type="button" data-delete-news="${a.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}Sil</button>` : ''}
+            ${isAdmin() ? `
+              <button type="button" data-delete-news="${a.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}Sil</button>
+              <button type="button" data-edit-news="${a.id}" class="${BTN_SOFT}">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>` : ''}
             <button type="button" data-modal-close class="${BTN_SOFT}">Kapat</button>
           </div>
         </div>`, 'lg');
@@ -2742,7 +2931,8 @@
         <p class="relative text-3xl sm:text-4xl font-black tracking-tight mt-1">${escapeHTML(a.version)}</p>
         ${a.title ? `<p class="relative text-sm font-semibold mt-2 pr-8">${escapeHTML(a.title)}</p>` : ''}
         <div class="relative flex flex-wrap gap-2 mt-4">
-          <span class="text-[11px] px-2.5 py-1 rounded-full bg-white/20">📅 ${formatLongDate(dateFromKey(a.releaseDate))}</span>
+          ${a.id === newUpdateId() ? newUpdateBadge.replace('text-[9px]', 'text-[10px] !py-1 !px-2') : ''}
+          <span class="text-[11px] px-2.5 py-1 rounded-full bg-white/20">📅 ${updateWhen(a)}</span>
           <span class="text-[11px] px-2.5 py-1 rounded-full bg-white/20">Yayın yılı: ${a.year}</span>
         </div>
       </div>
@@ -3156,7 +3346,8 @@
 
     openModal(`
       ${modalHeader(b ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle',
-        b ? 'Fiyat değişirse Fiyat Loguna otomatik kaydedilir.' : `Eklenince Haberler'e otomatik duyuru düşer · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıktıysa %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi.`, 'books')}
+        b ? 'Buradan fiyat değişikliği Fiyat Logu\'na yazılmaz · loglu değişim için Fiyat Logu → Fiyat Güncelle.'
+          : `Son ${NEW_BOOK_DISCOUNT.days} gün içinde çıktıysa Haberler'e duyuru düşer ve %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi başlar.`, 'books')}
       <form data-form="saveBook" data-edit-id="${b ? b.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
         <div class="flex gap-4 items-center p-3 rounded-2xl bg-brand-50/50 border border-brand-100">
           <div id="bookCoverPreview">${coverHTML({ title: b ? b.title : 'Yeni Kitap', type: selType, cover: state.bookDraftCover }, 'md')}</div>
@@ -3239,24 +3430,22 @@
     if (editId) {
       const b = getBook(editId);
       if (!b) return;
-      const batch = db.batch();
-      let priceMsg = '';
-      if (price !== b.price) {
-        const res = changeBookPrice(b.id, price, batch);
-        if (res.ok) priceMsg = ' · fiyat loga işlendi';
-      }
+      // Buradan yapılan fiyat değişikliği Fiyat Logu'na ve fiyat geçmişine YAZILMAZ
+      // (loglu değişim yalnızca Fiyat Logu sayfasındaki "Fiyat Güncelle" ile yapılır)
+      data.price = price;
       // Çıkış tarihi değiştiyse yeni kitap indirimi yeniden hesaplanır
       if (fd.releaseDate !== b.releaseDate) data.newDiscountUntil = newDiscountUntilFor(fd.releaseDate);
-      batch.update(bookRef(b.id), data);
       closeModal();
-      run(batch.commit(), `"${title}" güncellendi${priceMsg}.`);
+      run(bookRef(b.id).update(data), `"${title}" güncellendi.`);
       return;
     }
 
     const { book, done } = addBook({ ...data, price });
     state.bookTab = 'all';
     closeModal();
-    run(done, `"${book.title}" eklendi · Duyurular'a haber düştü 📣${book.newDiscountUntil ? '' : ` · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıkmadığı için yeni kitap indirimi yok`}`);
+    run(done, book.newDiscountUntil
+      ? `"${book.title}" eklendi · Duyurular'a haber düştü 📣 · ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim`
+      : `"${book.title}" eklendi · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıkmadığı için duyuru ve yeni kitap indirimi yok`);
   }
 
   /* --- Hızlı fiyat güncelleme (Fiyat Logu sayfası) --- */
@@ -3265,30 +3454,59 @@
     const sorted = [...books].sort((a, b) => a.id - b.id);
     const sel = getBook(preselectId) || sorted[0];
     if (!sel) return toast('Önce kitap eklemelisin.', 'error');
+    const today = localDateKey();
     openModal(`
-      ${modalHeader('Fiyat Güncelle', 'Değişiklik Fiyat Logu sayfasına otomatik kaydedilir.', 'price-logs')}
+      ${modalHeader('Fiyat Güncelle', 'Tarih seç → kitap seç → yeni fiyatı yaz. Değişim Fiyat Logu\'na kaydedilir.', 'price-logs')}
       <form data-form="changePrice" class="p-5 space-y-3.5" autocomplete="off">
+        ${field('Tarih', `<input name="date" id="cpDate" type="date" required max="${today}" value="${today}" class="${INPUT_CLS}" />`, 'Bugün seçiliyse fiyat hemen değişir · geçmiş tarih seçersen kayıt o tarihe yazılır')}
         ${field('Kitap', `<select name="bookId" id="cpBook" class="${INPUT_CLS}">
-          ${sorted.map((b) => `<option value="${b.id}" ${b.id === sel.id ? 'selected' : ''}>#${b.id} · ${escapeHTML(b.title)}</option>`).join('')}
+          ${sorted.map((b) => `<option value="${b.id}" ${b.id === sel.id ? 'selected' : ''}>${escapeHTML(seriesLabel(b))} · ${escapeHTML(b.title)}</option>`).join('')}
         </select>`)}
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <span class="block text-[11px] font-medium text-slate-500 mb-1">Mevcut Fiyat</span>
+            <span id="cpCurrentLabel" class="block text-[11px] font-medium text-slate-500 mb-1">Mevcut Fiyat</span>
             <p id="cpCurrent" class="text-sm font-bold text-slate-700 bg-slate-50 rounded-xl px-3 py-2">${formatMoney(sel.price)}</p>
           </div>
-          ${field('Yeni Fiyat (₺)', `<input name="newPrice" type="number" min="0.01" step="0.01" required autofocus class="${INPUT_CLS}" placeholder="0,00" />`)}
+          ${field('Yeni Fiyat (₺)', `<input name="newPrice" id="cpNew" type="number" min="0.01" step="0.01" required autofocus class="${INPUT_CLS}" placeholder="0,00" />`)}
         </div>
+        <div id="cpPreview" class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2 leading-relaxed"></div>
         ${formFooter('Fiyatı Kaydet')}
       </form>`);
+    updateChangePricePreview();
   }
+
+  /* Fiyat Güncelle formu: seçilen tarihteki fiyat + zam/indirim önizlemesi */
+  function updateChangePricePreview() {
+    const b = getBook($('#cpBook')?.value);
+    const box = $('#cpPreview');
+    if (!b || !box) return;
+    const dateKey = $('#cpDate')?.value || localDateKey();
+    const isToday = dateKey === localDateKey();
+    const at = isToday ? Date.now() : dateFromKey(dateKey).setHours(12, 0, 0, 0);
+    const oldPrice = isToday ? b.price : priceAt(b, at);
+    $('#cpCurrentLabel').textContent = isToday ? 'Mevcut Fiyat' : `${formatDate(dateKey + 'T12:00:00')} tarihindeki fiyat`;
+    $('#cpCurrent').textContent = formatMoney(oldPrice);
+    const np = parseFloat($('#cpNew')?.value);
+    const later = !isToday && priceTimeline(b.id).some((l) => new Date(l.changedAt).getTime() > at);
+    const note = isToday ? 'Kitabın fiyatı hemen değişir.'
+      : later ? 'Geçmişe kayıt: bu tarihten sonra başka değişim olduğu için kitabın güncel fiyatı değişmez.'
+        : 'Geçmişe kayıt: sonrasında başka değişim olmadığı için kitabın güncel fiyatı da bu fiyata geçer.';
+    if (!(np > 0)) { box.textContent = note; return; }
+    const pct = pricePct(oldPrice, np);
+    box.innerHTML = `${formatMoney(oldPrice)} → <b class="text-slate-700">${formatMoney(np)}</b> · ${pctChipHTML(pct)}<br><span class="text-slate-400">${note}</span>`;
+  }
+
+  /* Zam / indirim yüzde rozeti */
+  const pctChipHTML = (pct) => pct === 0 ? '<span class="text-slate-400">değişim yok</span>'
+    : `<b class="${pct > 0 ? 'text-rose-500' : 'text-emerald-600'}">${pct > 0 ? '+' : '−'}%${Math.abs(pct)} ${pct > 0 ? 'zam' : 'indirim'}</b>`;
 
   function handleChangePrice(fd) {
     if (!requireAdmin()) return;
-    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice));
+    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice), fd.date);
     if (!res.ok) return toast(res.reason, 'error');
-    const diff = round2(res.newPrice - res.oldPrice);
     closeModal();
-    run(res.done, `"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${diff > 0 ? '+' : '−'}${formatMoney(Math.abs(diff))})`);
+    const pctTxt = `${res.pct > 0 ? '+' : '−'}%${Math.abs(res.pct)} ${res.pct > 0 ? 'zam' : 'indirim'}`;
+    run(res.done, `"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${pctTxt})${res.isToday ? '' : res.updatesCurrent ? ' · geçmişe kaydedildi, güncel fiyat da değişti' : ' · geçmişe kaydedildi'}`);
   }
 
   /* --- Sürüm notu ekle / düzenle / sil --- */
@@ -3452,40 +3670,46 @@
     });
   }
 
-  /* --- Duyuru / haber ekle & sil --- */
-  function openNewsModal() {
+  /* --- Duyuru / haber ekle, düzenle & sil --- */
+  function openNewsModal(editId) {
     if (!requireAdmin()) return;
+    const a = editId ? getAnn(editId) : null;
+    if (editId && !a) return;
+    const cats = Object.keys(NEWS_CATEGORIES);
+    if (a && !cats.includes(a.category)) cats.push(a.category);
     openModal(`
-      ${modalHeader('Duyuru/Haber Ekle 📣', 'Haberler sekmesinde yayınlanır · herkese bildirim rozeti düşer.', 'announcements')}
-      <form data-form="saveNews" class="p-5 space-y-3.5" autocomplete="off">
-        ${field('Başlık', `<input name="title" required autofocus maxlength="100" class="${INPUT_CLS}" placeholder="Örn. Hafta sonu kitap okuma etkinliği" />`)}
-        ${field('İçerik', `<textarea name="body" rows="5" required maxlength="2000" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Duyuru metni"></textarea>`, 'Her satır ayrı paragraf olarak gösterilir.')}
+      ${modalHeader(a ? 'Haberi Düzenle ✏️' : 'Duyuru/Haber Ekle 📣', a ? 'Değişiklik herkes için anında güncellenir.' : 'Haberler sekmesinde yayınlanır · herkese bildirim rozeti düşer.', 'announcements')}
+      <form data-form="saveNews" data-edit-id="${a ? a.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
+        ${field('Başlık', `<input name="title" required autofocus maxlength="100" value="${a ? escapeHTML(a.title) : ''}" class="${INPUT_CLS}" placeholder="Örn. Hafta sonu kitap okuma etkinliği" />`)}
+        ${field('İçerik', `<textarea name="body" rows="6" required maxlength="2000" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Duyuru metni">${a ? escapeHTML(a.body) : ''}</textarea>`, 'Her satır ayrı paragraf olarak gösterilir.')}
         <div class="grid grid-cols-2 gap-3 items-end">
-          ${field('Tür', `<select name="category" class="${INPUT_CLS}">${Object.keys(NEWS_CATEGORIES).map((c) => `<option value="${c}">${c}</option>`).join('')}</select>`)}
+          ${field('Tür', `<select name="category" class="${INPUT_CLS}">${cats.map((c) => `<option value="${escapeHTML(c)}" ${a?.category === c ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select>`)}
           <label class="flex items-center gap-2 text-[11px] text-slate-500 pb-2.5">
-            <input type="checkbox" name="pinned" class="rounded border-slate-300 text-brand-600" /> 📌 En üste sabitle
+            <input type="checkbox" name="pinned" ${a?.pinned ? 'checked' : ''} class="rounded border-slate-300 text-brand-600" /> 📌 En üste sabitle
           </label>
         </div>
-        ${formFooter('Yayınla')}
+        ${formFooter(a ? 'Değişiklikleri Kaydet' : 'Yayınla')}
       </form>`);
   }
 
-  function handleSaveNews(fd) {
+  function handleSaveNews(fd, editId) {
     if (!requireAdmin()) return;
     const title = (fd.title || '').trim(), body = (fd.body || '').trim();
     if (!title || !body) return toast('Başlık ve içerik zorunlu.', 'error');
-    const done = col('announcements').add({
-      type: 'news',
-      category: NEWS_CATEGORIES[fd.category] ? fd.category : 'Duyuru',
-      title, body, bookId: null,
-      authorId: state.currentUserId, createdAt: new Date().toISOString(),
-      pinned: fd.pinned === 'on', readBy: []
-    });
+    const prev = editId ? getAnn(editId) : null;
+    const category = (NEWS_CATEGORIES[fd.category] || fd.category === prev?.category) ? fd.category : 'Duyuru';
+    const fields = { category, title, body, pinned: fd.pinned === 'on' };
+    const done = editId
+      ? col('announcements').doc(editId).update({ ...fields, editedAt: new Date().toISOString() })
+      : col('announcements').add({
+          type: 'news', ...fields, bookId: null,
+          authorId: state.currentUserId, createdAt: new Date().toISOString(), readBy: []
+        });
     state.annTab = 'news';
     closeModal();
     if (state.route !== 'announcements') location.hash = '#announcements';
     else renderCurrentPage();
-    run(done, 'Duyuru yayınlandı 📣');
+    run(done, editId ? 'Haber güncellendi.' : 'Duyuru yayınlandı 📣');
   }
 
   function deleteNews(id) {
@@ -4153,6 +4377,7 @@
       if ((m = el('[data-stats-del-rental]'))) return deleteStatsRecord('rental', m.dataset.statsDelRental);
       if ((m = el('[data-stats-del-purchase]'))) return deleteStatsRecord('purchase', m.dataset.statsDelPurchase);
       if ((m = el('[data-stats-reset]')))      return resetUserStats(m.dataset.statsReset);
+      if ((m = el('[data-reset-all]')))        return confirmResetStats(m.dataset.resetAll, null);
       if ((m = el('[data-refresh-deals]')))    return refreshDeals();
       if ((m = el('[data-delete-page-log]')))  return deletePriceLogFromPage(m.dataset.deletePageLog);
       if ((m = el('[data-delete-log]')))       return deletePriceLog(m.dataset.deleteLog, m.dataset.bookId, m.dataset.backOffer);
@@ -4162,10 +4387,12 @@
       if ((m = el('[data-quick]')))            return runQuick(m.dataset.quick);
       if ((m = el('[data-edit-book]')))        return openBookFormModal(m.dataset.editBook);
       if ((m = el('[data-delete-book]')))      return deleteBook(m.dataset.deleteBook);
+      if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-delete-type]')))      return deleteType(m.dataset.deleteType);
       if ((m = el('[data-delete-news]')))      return deleteNews(m.dataset.deleteNews);
+      if ((m = el('[data-edit-news]')))        return openNewsModal(m.dataset.editNews);
       if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
@@ -4195,8 +4422,9 @@
         case 'saveUpdate':  return handleSaveUpdate(fd, editId);
         case 'saveOffer':   return handleSaveOffer(fd, editId);
         case 'saveType':    return handleSaveType(fd, editId);
-        case 'saveNews':    return handleSaveNews(fd);
+        case 'saveNews':    return handleSaveNews(fd, editId);
         case 'saveName':    return handleSaveName(fd);
+        case 'resetStats':  return handleResetStats(form);
         case 'setPassword': return handleSetPassword(fd);
       }
     });
@@ -4207,6 +4435,7 @@
       if (t.id === 'updQuery') { state.updQuery = t.value; renderUpdateList(); }
       if (t.id === 'bf-title') updateBookFormPreview();
       if (t.id === 'of-price') updateOfferCalc();
+      if (t.id === 'cpNew') updateChangePricePreview();
     });
     document.addEventListener('change', (e) => {
       const t = e.target;
@@ -4215,7 +4444,7 @@
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
       if (t.id === 'bf-type') return updateBookFormPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
-      if (t.id === 'cpBook') { const b = getBook(t.value); if (b) $('#cpCurrent').textContent = formatMoney(b.price); }
+      if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview();
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
     });
 
@@ -4226,6 +4455,11 @@
       if (card && (e.key === 'Enter' || e.key === ' ') && e.target === card) {
         e.preventDefault();
         openAnnouncementModal(card.dataset.openAnn);
+      }
+      const deal = e.target.closest?.('div[data-open-deal]');
+      if (deal && (e.key === 'Enter' || e.key === ' ') && e.target === deal) {
+        e.preventDefault();
+        openBookModal(deal.dataset.openDeal);
       }
     });
 
