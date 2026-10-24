@@ -328,6 +328,28 @@ service cloud.firestore {
       function rentedBy(rent, bookId) { return rent.userId == uid() && rent.bookId == bookId; }
     }
 
+    // Geri bildirim · { userId, type, message, createdAt, status, replies, adminSeen, lastReplyAt, userSeenAt }
+    // Üye yalnızca kendininkini okur/yazar ve yalnızca "cevabı gördüm" işaretini günceller; Admin hepsini okur,
+    // cevaplar (replies/status/adminSeen) ve siler.
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == uid());
+      allow create: if signedIn() && validFeedback(request.resource.data);
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.userId == uid() && changedKeys().hasOnly(['userSeenAt'])
+          && request.resource.data.userSeenAt is string);
+      allow delete: if isAdmin();
+
+      function validFeedback(f) {
+        return f.keys().hasOnly(['userId', 'type', 'message', 'createdAt', 'status', 'replies', 'adminSeen', 'lastReplyAt', 'userSeenAt'])
+          && f.userId == uid()
+          && f.type in ['idea', 'bug', 'other']
+          && f.message is string && f.message.size() >= 3 && f.message.size() <= 1000
+          && f.createdAt is string
+          && f.status == 'open' && f.replies == [] && f.adminSeen == false
+          && f.lastReplyAt == null && f.userSeenAt == null;
+      }
+    }
+
     // Hediyelerim kupon mağazası (Kontrolcü ekler/düzenler/siler) · { type, value, free, name, cost, endsAt|null, createdAt, createdBy }
     // percent: %1–100 · amount: ₺ (0–10000] · bogo: value kitap (2–5), free tanesi bedava (1 … value-1, en ucuzlar)
     match /couponShop/{shopId} {
