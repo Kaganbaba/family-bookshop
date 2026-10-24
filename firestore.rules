@@ -60,9 +60,9 @@ service cloud.firestore {
         && request.resource.data.get('lastTxType', null) == null
         && (request.resource.data.role == 'member' || (isOwner() && request.resource.data.role == 'admin'));
 
-      // Kontrolcü her şeyi; kullanıcı yalnızca kiralama ödemesi (bakiye düşüşü + lastTx)
-      // veya Profilim'den kendi adını değiştirme
-      allow update: if isAdmin() || (userId == uid() && (isPayment() || isRename()));
+      // Admin her şeyi; kullanıcı yalnızca kiralama ödemesi (bakiye düşüşü + lastTx [+ kazanılan puan]),
+      // kupon alımı (harcanan puan) veya Profilim'den kendi adını değiştirme
+      allow update: if isAdmin() || (userId == uid() && (isPayment() || isCouponBuy() || isRename()));
       allow delete: if isAdmin();
 
       function isRename() {
@@ -71,40 +71,67 @@ service cloud.firestore {
           && name is string && name.size() >= 2 && name.size() <= 60;
       }
 
+      // ---- Puan defteri: pointsEarned (kazanılan) · pointsSpent (harcanan) ----
+      // Defteri olmayan (henüz Admin kurmamış) kullanıcıda alan eklenmez; varsa tam kazanç kadar artar
+      function earnedOk(before, after, gain) {
+        return (!('pointsEarned' in before) && !('pointsEarned' in after))
+          || ('pointsEarned' in after && near(after.pointsEarned, before.get('pointsEarned', 0) + gain));
+      }
+
       // lastTxType hangi koleksiyona bakılacağını söyler (gereksiz erişim çağrısı yapılmaz)
       function isPayment() {
         let before = resource.data;
         let after = request.resource.data;
         let tx = after.lastTx;
-        return changedKeys().hasOnly(['balance', 'lastTx', 'lastTxType'])
+        return changedKeys().hasOnly(['balance', 'lastTx', 'lastTxType', 'pointsEarned'])
           && tx is string && tx != before.get('lastTx', null)
           // bedava (%100 indirimli) kiralamada bakiye aynı kalır
           && after.balance is number && after.balance >= 0 && after.balance <= before.balance
-          && ((after.lastTxType == 'rental' && paidRental(tx, before.balance, after.balance))
-            || (after.lastTxType == 'package' && paidPackage(tx, before.balance, after.balance))
-            || (after.lastTxType == 'coupon' && paidCoupon(tx, before.balance, after.balance)));
+          && ((after.lastTxType == 'rental' && paidRental(tx, before, after))
+            || (after.lastTxType == 'package' && paidPackage(tx, before, after))
+            || (after.lastTxType == 'coupon' && paidCoupon(tx, before, after)));
       }
       // Kuponlu kiralama: kupon bu batch'te kullanılıyor; bakiye kuponun paidTotal'ı kadar düşer
-      // (paidTotal'ın kiralama fiyatları toplamına eşit olduğunu kupon kuralı denetler)
-      function paidCoupon(tx, oldBal, newBal) {
+      // (paidTotal'ın kiralama fiyatları toplamına eşit olduğunu kupon kuralı denetler) · puan kazandırmaz
+      function paidCoupon(tx, before, after) {
         let c = get(path('coupons', tx)).data;
         let a = getAfter(path('coupons', tx)).data;
         return c.userId == uid() && c.usedAt == null && a.usedAt != null
-          && near(newBal, oldBal - a.paidTotal);
+          && near(after.balance, before.balance - a.paidTotal)
+          && earnedOk(before, after, 0);
       }
-      // Tekli kiralama: yeni kiralama kaydının fiyatı kadar düşer
-      function paidRental(tx, oldBal, newBal) {
+      // Tekli kiralama: yeni kiralama kaydının fiyatı kadar düşer · indirim (günün / yeni kitap / vitrin) puan kazandırır
+      function paidRental(tx, before, after) {
         let r = getAfter(path('rentals', tx)).data;
         return !exists(path('rentals', tx))
           && r.userId == uid() && r.purchaseId == null
-          && near(newBal, oldBal - r.price);
+          && near(after.balance, before.balance - r.price)
+          && earnedOk(before, after, r.discountSource in ['deal', 'new', 'custom'] ? r.listPrice - r.price : 0);
       }
-      // Paket kiralama: yeni satın alım kaydının fiyatı kadar düşer
-      function paidPackage(tx, oldBal, newBal) {
+      // Paket kiralama: yeni satın alım kaydının fiyatı kadar düşer · normal toplam − paket fiyatı puan kazandırır
+      function paidPackage(tx, before, after) {
         let p = getAfter(path('offerPurchases', tx)).data;
         return !exists(path('offerPurchases', tx))
           && p.userId == uid()
-          && near(newBal, oldBal - p.price);
+          && near(after.balance, before.balance - p.price)
+          && earnedOk(before, after, p.normalTotal > p.price ? p.normalTotal - p.price : 0);
+      }
+      // Kupon alımı: harcanan puan kuponun bedeli kadar artar ve kazanılanı aşamaz
+      function isCouponBuy() {
+        let before = resource.data;
+        let after = request.resource.data;
+        let tx = after.lastTx;
+        return changedKeys().hasOnly(['pointsSpent', 'lastTx', 'lastTxType'])
+          && after.lastTxType == 'couponBuy'
+          && tx is string && tx != before.get('lastTx', null)
+          && 'pointsEarned' in before && 'pointsSpent' in before
+          && !exists(path('coupons', tx))
+          && boughtCoupon(getAfter(path('coupons', tx)).data, before, after);
+      }
+      function boughtCoupon(c, before, after) {
+        return c.userId == uid()
+          && near(after.pointsSpent, before.pointsSpent + c.cost)
+          && after.pointsSpent <= before.pointsEarned + 0.005;
       }
     }
 
@@ -235,8 +262,13 @@ service cloud.firestore {
           && p.price == offer.price
           && p.bookIds == offer.bookIds
           && request.time <= offer.endsAt
+          // normal toplam = paketteki kitapların güncel fiyatları toplamı (puan kazancı buna göre)
+          && p.normalTotal is number && near(p.normalTotal, packagePriceSum(p.bookIds))
           && getAfter(path('users', uid())).data.lastTx == purchaseId;
       }
+      // En fazla 3 kitap (özel teklif üst sınırı)
+      function packageBookPrice(ids, i) { return ids.size() > i ? get(path('books', string(ids[i]))).data.price : 0; }
+      function packagePriceSum(ids) { return packageBookPrice(ids, 0) + packageBookPrice(ids, 1) + packageBookPrice(ids, 2); }
     }
 
     // ---------- Duyurular ----------
@@ -331,7 +363,10 @@ service cloud.firestore {
           && c.expiresAt is timestamp
           && c.expiresAt > request.time + duration.value(6, 'd')
           && c.expiresAt <= request.time + duration.value(7, 'd') + duration.value(10, 'm')
-          && c.usedAt == null && c.rentalIds == null && c.bookIds == null && c.freeBookIds == null && c.paidTotal == null;
+          && c.usedAt == null && c.rentalIds == null && c.bookIds == null && c.freeBookIds == null && c.paidTotal == null
+          // aynı batch'te puan defterinden düşülmeli (users → isCouponBuy yeterliliği denetler)
+          && getAfter(path('users', uid())).data.lastTx == couponId
+          && getAfter(path('users', uid())).data.lastTxType == 'couponBuy';
       }
       function shopMatches(c, s) {
         return c.type == s.type && c.value == s.value && c.cost == s.cost && c.name == s.name

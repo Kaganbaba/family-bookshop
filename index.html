@@ -1570,7 +1570,8 @@
     if (r.purchaseId) {
       return { removed: rentals.filter((x) => x.purchaseId === r.purchaseId), done: removePurchase(r.purchaseId) };
     }
-    return { removed: [r], done: commitOps([...rentalDeleteOps([r]), ...ratingCleanupOps([r])]) };
+    return { removed: [r], done: commitOps([...rentalDeleteOps([r]), ...ratingCleanupOps([r]),
+      ...pointsSyncOps([r.userId], { rentals: new Set([r.id]) })]) };
   }
 
   /* Kiralama silme işlemleri: kayıtları sil + kitap kilidini (bu kiralamaya aitse) aç */
@@ -1587,10 +1588,12 @@
   /* Paket satın alımını ve paketin tüm kiralamalarını siler */
   function removePurchase(purchaseId) {
     const list = rentals.filter((r) => r.purchaseId === purchaseId);
+    const owner = offerPurchases.find((p) => p.id === purchaseId)?.userId || list[0]?.userId;
     return commitOps([
       (bt) => bt.delete(col('offerPurchases').doc(purchaseId)),
       ...rentalDeleteOps(list),
-      ...ratingCleanupOps(list)
+      ...ratingCleanupOps(list),
+      ...(owner ? pointsSyncOps([owner], { purchases: new Set([purchaseId]), rentals: new Set(list.map((r) => r.id)) }) : [])
     ]);
   }
 
@@ -1609,17 +1612,25 @@
     const mine = rentals.filter((r) => r.userId === userId);
     const singles = mine.filter((r) => cats.some((c) => STAT_CATS[c].pick?.(r)));
     const removed = [...singles];
+    const ex = { rentals: new Set(), purchases: new Set(), coupons: new Set() };
     const ops = [...rentalDeleteOps(singles)];
     if (cats.includes('offer')) {
-      ops.push(...offerPurchases.filter((p) => p.userId === userId).map((p) => (bt) => bt.delete(col('offerPurchases').doc(p.id))));
+      const ps = offerPurchases.filter((p) => p.userId === userId);
+      ps.forEach((p) => ex.purchases.add(p.id));
+      ops.push(...ps.map((p) => (bt) => bt.delete(col('offerPurchases').doc(p.id))));
       const pkg = mine.filter((r) => r.purchaseId);
       removed.push(...pkg);
       ops.push(...rentalDeleteOps(pkg));
     }
     // Kupon kayıtları silinince harcanan puan geri döner
-    if (cats.includes('coupon')) ops.push(...coupons.filter((c) => c.userId === userId).map((c) => (bt) => bt.delete(col('coupons').doc(c.id))));
-    // Kitaba hiç kiralaması kalmayan kullanıcının oyu da silinir
-    ops.push(...ratingCleanupOps(removed));
+    if (cats.includes('coupon')) {
+      const cs = coupons.filter((c) => c.userId === userId);
+      cs.forEach((c) => ex.coupons.add(c.id));
+      ops.push(...cs.map((c) => (bt) => bt.delete(col('coupons').doc(c.id))));
+    }
+    removed.forEach((r) => ex.rentals.add(r.id));
+    // Kitaba hiç kiralaması kalmayan kullanıcının oyu da silinir · puan defteri yeniden hesaplanır
+    ops.push(...ratingCleanupOps(removed), ...pointsSyncOps([userId], ex));
     return commitOps(ops);
   }
 
@@ -1686,15 +1697,49 @@
       spent: round2(sum(singles, (r) => r.price) + sum(purchases, (p) => p.price)), // paket = +paket fiyatı
       purchases, discounted, saveOf,
       savings: { deal: savingDeal, new: savingNew, custom: savingCustom, offer: savingOffer, coupon: round2(savingCoupon), total },
-      points: userPoints(userId, total)
+      points: userPoints(userId)
     };
   }
 
   /* Puan = indirimlerden kazanılan TL (1 ₺ = 1 puan). Kuponla yapılan indirim puan kazandırmaz.
-     Harcanabilir puan = kazanılan − alınan kuponların bedeli (süresi dolan kuponun bedeli geri dönmez). */
-  function userPoints(userId, earned) {
-    const spent = round2(sum(coupons.filter((c) => c.userId === userId), (c) => c.cost));
-    return { earned: round2(earned), spent, available: Math.max(0, round2(earned - spent)) };
+     Harcanabilir puan = kazanılan − alınan kuponların bedeli (süresi dolan kuponun bedeli geri dönmez).
+     Puan defteri: users/{id}.pointsEarned + pointsSpent · kural kupon alımında yeterliliği bununla denetler.
+     • Kazanma: indirimli kiralama / paket ödemesiyle aynı batch'te artar (kural kazancı doğrular).
+     • Harcama: kupon alımıyla aynı batch'te artar (kural: harcanan ≤ kazanılan).
+     • Admin kayıt silince defter kayıtlardan yeniden hesaplanır; defteri olmayanınki Admin açınca kurulur. */
+  const POINT_SOURCES = ['deal', 'new', 'custom'];
+  const rentalGain = (r) => (!r.offerId && POINT_SOURCES.includes(r.discountSource) ? Math.max(0, round2((r.listPrice ?? r.price) - r.price)) : 0);
+  const purchaseGain = (p) => Math.max(0, round2(p.normalTotal - p.price));
+  const hasLedger = (u) => typeof u?.pointsEarned === 'number' && typeof u?.pointsSpent === 'number';
+  /* Kayıtlardan puan · ex: silinmek üzere olan kayıtların kimlikleri (rentals / purchases / coupons Set) */
+  function computePoints(userId, ex = {}) {
+    const earned = sum(rentals.filter((r) => r.userId === userId && !ex.rentals?.has(r.id)), rentalGain)
+      + sum(offerPurchases.filter((p) => p.userId === userId && !ex.purchases?.has(p.id)), purchaseGain);
+    const spent = sum(coupons.filter((c) => c.userId === userId && !ex.coupons?.has(c.id)), (c) => c.cost);
+    return { earned: round2(earned), spent: round2(spent) };
+  }
+  function userPoints(userId) {
+    const u = getUser(userId);
+    const p = hasLedger(u) ? { earned: u.pointsEarned, spent: u.pointsSpent } : computePoints(userId);
+    return { earned: round2(p.earned), spent: round2(p.spent), available: Math.max(0, round2(p.earned - p.spent)) };
+  }
+  /* Admin: defteri kayıtlarla eşitleyen yazmalar (yalnızca farklı olanlar) */
+  function pointsSyncOps(userIds, ex = {}) {
+    return [...new Set(userIds)].map((id) => {
+      const u = getUser(id);
+      if (!u) return null;
+      const p = computePoints(id, ex);
+      if (hasLedger(u) && Math.abs(u.pointsEarned - p.earned) < 0.005 && Math.abs(u.pointsSpent - p.spent) < 0.005) return null;
+      return (bt) => bt.update(col('users').doc(id), { pointsEarned: p.earned, pointsSpent: p.spent });
+    }).filter(Boolean);
+  }
+  /* Admin açıkken defteri olmayan kullanıcıların defterini kur (bir kez) */
+  function setupMissingLedgers() {
+    if (!isRealAdmin()) return;
+    const ids = users.filter((u) => !hasLedger(u) && !state.purgePending.has(`ledger:${u.id}`)).map((u) => u.id);
+    if (!ids.length) return;
+    ids.forEach((id) => state.purgePending.add(`ledger:${id}`));
+    commitOps(pointsSyncOps(ids)).catch((e) => { console.error(e); ids.forEach((id) => state.purgePending.delete(`ledger:${id}`)); });
   }
   const formatPoints = (n) => `${(Math.round(n * 100) / 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} puan`;
 
@@ -3068,10 +3113,15 @@
     });
     // Özel kitap: kiralandığı an "Kira dışı"; kiradayken "Kirada" görünür, süre bitince Kira dışı kalır
     batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
-    batch.update(col('users').doc(u.id), { balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental' });
+    // İndirimli kiralama puan kazandırır (defter varsa aynı batch'te; kural kazancı doğrular)
+    const gain = rentalGain({ discountSource: rate ? source : null, listPrice: b.price, price });
+    batch.update(col('users').doc(u.id), {
+      balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental',
+      ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})
+    });
 
     closeModal();
-    await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}`);
+    await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);
   }
 
   /* Kitabı sil (Admin) · her yerden temizlenir: duyurular, kiralamalar (ana sayfa +
@@ -3111,6 +3161,8 @@
         logs.forEach((l) => ops.push((bt) => bt.delete(col('priceLogs').doc(l.id))));
         if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));
         bookRatings(b.id).forEach((x) => ops.push((bt) => bt.delete(col('ratings').doc(x.id))));
+        // Silinen kiralamalar puan kazandırmış olabilir → etkilenen kullanıcıların defteri yeniden hesaplanır
+        ops.push(...pointsSyncOps(rs.map((r) => r.userId), { rentals: new Set(rs.map((r) => r.id)) }));
         // Teklif paketinden çıkarılır; paket boşalırsa teklif silinir
         inOffers.forEach((o) => {
           const items = o.items.filter((it) => it.bookId !== b.id);
@@ -4150,7 +4202,8 @@
     if (!u || !s) return;
     if (!isShopActive(s)) return toast('Bu kupon artık mağazada değil.', 'error');
     if (!canRent(u)) return toast('Gözlemci rolündeki kullanıcılar kupon alamaz.', 'error');
-    const pts = userStats(u.id).points;
+    if (!hasLedger(u)) return toast('Puanın henüz hesaplanıyor; bir Admin siteyi açınca kupon alabilirsin.', 'info');
+    const pts = userPoints(u.id);
     if (pts.available < s.cost) return toast(`Yetersiz puan · ${formatPoints(round2(s.cost - pts.available))} eksik.`, 'error');
     openConfirm({
       title: `${escapeHTML(couponBadge(s))} kuponu alınsın mı?`,
@@ -4161,12 +4214,18 @@
       onConfirm: () => {
         closeModal();
         const now = Date.now();
-        run(col('coupons').add({
+        // Kupon + puan defteri (harcanan) tek batch'te · kural: harcanan ≤ kazanılan
+        const me = getUser(u.id);
+        const ref = col('coupons').doc();
+        const batch = db.batch();
+        batch.set(ref, {
           userId: u.id, shopId: s.id, type: couponTypeOf(s), value: couponValueOf(s), free: s.free ?? null, name: s.name || '', cost: s.cost,
           boughtAt: isoAt(now),
           expiresAt: Timestamp.fromMillis(now + COUPON_DAYS * DAY_MS),
           usedAt: null, rentalIds: null, bookIds: null, freeBookIds: null, paidTotal: null
-        }), `🎟️ ${couponBadge(s)} kuponu alındı · ${COUPON_DAYS} gün içinde kullan`);
+        });
+        batch.update(col('users').doc(u.id), { pointsSpent: round2(me.pointsSpent + s.cost), lastTx: ref.id, lastTxType: 'couponBuy' });
+        run(batch.commit(), `🎟️ ${couponBadge(s)} kuponu alındı · ${COUPON_DAYS} gün içinde kullan`);
       }
     });
   }
@@ -4690,10 +4749,15 @@
       });
       batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     });
-    batch.update(col('users').doc(u.id), { balance: round2(u.balance - o.price), lastTx: purchaseId, lastTxType: 'package' });
+    // Paket indirimi puan kazandırır (normal toplam − paket fiyatı)
+    const gain = purchaseGain({ normalTotal: normal, price: o.price });
+    batch.update(col('users').doc(u.id), {
+      balance: round2(u.balance - o.price), lastTx: purchaseId, lastTxType: 'package',
+      ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})
+    });
 
     closeModal();
-    await run(batch.commit(), `🎁 "${o.title}" kiralandı · ${bs.length} kitap · ${formatMoney(o.price)}`);
+    await run(batch.commit(), `🎁 "${o.title}" kiralandı · ${bs.length} kitap · ${formatMoney(o.price)}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);
   }
 
   /* ==========================================================
@@ -6281,6 +6345,7 @@
       renderQueued = false;
       if (!state.ready || !currentUser()) return;
       applyDuePrices();
+      setupMissingLedgers();
       renderProfile();
       renderCurrentPage();
     });
