@@ -277,6 +277,25 @@ service cloud.firestore {
         && get(path('books', bookId)).data.get('status', 'kiralik') == 'kiralik';
     }
 
+    // Reyting · belge adı = "{kitap}_{kullanıcı}" (kitap başına tek oy) · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
+    // Oy veren, o kitaba ait kendi kiralama kaydını göstermeli (en az 1 kez kiralamış olmalı)
+    match /ratings/{ratingId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && validRating(request.resource.data);
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == uid());
+
+      function validRating(r) {
+        return r.keys().hasOnly(['bookId', 'userId', 'score', 'rentalId', 'createdAt', 'updatedAt'])
+          && r.userId == uid()
+          && r.bookId is int
+          && ratingId == string(r.bookId) + '_' + uid()
+          && r.score is int && r.score >= 1 && r.score <= 5
+          && r.rentalId is string
+          && rentedBy(get(path('rentals', r.rentalId)).data, r.bookId);
+      }
+      function rentedBy(rent, bookId) { return rent.userId == uid() && rent.bookId == bookId; }
+    }
+
     // Geçmiş İndirimler · { bookId, source (deal|new|custom|offer), rate, startAt, endAt, label, recordedAt }
     // Görüldükçe herhangi bir kullanıcı yazar (belge adı belirleyici → bir kez); değiştirilemez,
     // yalnızca Kontrolcü siler (kitap silinince).

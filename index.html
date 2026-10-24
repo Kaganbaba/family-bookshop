@@ -534,6 +534,7 @@
   const announcements = [];  // announcements/{id}
   const offers = [];         // offers/{id}
   const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Kontrolcü seçer): { bookId, name, rate (1–100), endsAt, createdAt, createdBy }
+  const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const discountHistory = []; // discountHistory/{id} · kitabın geçmiş süreli indirimleri: { bookId, source, rate, startAt, endAt, label, recordedAt }
   const couponShop = [];     // couponShop/{id} · Kontrolcünün mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
@@ -972,6 +973,139 @@
   const isExpiredRental = (r, now = Date.now()) => new Date(r.dueAt).getTime() <= now;
   const activeRentalOf  = (book, now = Date.now()) => rentals.find((r) => r.bookId === book.id && isActiveRental(r, now));
   const isBookRented    = (book, now = Date.now()) => !!activeRentalOf(book, now);
+  /* ==========================================================
+     REYTİNG (1 en kötü · 5 çok iyi)
+     • Kullanıcı bir kitaba tek oy verir, istediği zaman değiştirir; en az 1 kez kiralamış olmalı.
+     • O kitaba ait kiralama kayıtlarının hepsi silinirse oyu da silinir (ratingCleanupOps).
+     ========================================================== */
+  /* Ortalama rengi: [alt sınır, renk] — 5 yalnızca tam 5 ortalamada */
+  const RATING_COLORS = [[5, '#0037c5'], [4.5, '#00c3ff'], [4, '#20e816'], [3, '#fff003'], [2, '#ffc303'], [0, '#a50b0b']];
+  const ratingColor = (avg) => RATING_COLORS.find(([min]) => avg >= min)[1];
+  const bookRatings = (bookId) => ratings.filter((r) => r.bookId === Number(bookId) && r.score >= 1 && r.score <= 5);
+  const myRatingOf = (bookId, userId = state.currentUserId) => ratings.find((r) => r.id === `${bookId}_${userId}`) || null;
+  /* Ortalama: renk kesin değere göre; yazı 1 basamağa aşağı yuvarlanır (4,96 → 4,9 · renk aralığıyla çelişmesin) */
+  function ratingSummary(bookId) {
+    const rs = bookRatings(bookId);
+    if (!rs.length) return null;
+    const avg = sum(rs, (r) => r.score) / rs.length;
+    const shown = Math.floor(avg * 10 + 1e-9) / 10;
+    return { avg, count: rs.length, text: shown.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) };
+  }
+  /* Kapak üstündeki ortalama rozeti: beyaz yazı, dolgulu renk */
+  function ratingBadgeHTML(bookId, cls = 'absolute -bottom-1.5 -right-1.5 text-[10px]') {
+    const s = ratingSummary(bookId);
+    if (!s) return '';
+    return `<span class="${cls} z-[2] inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-extrabold text-white shadow-soft ring-1 ring-white leading-none"
+      style="background:${ratingColor(s.avg)};text-shadow:0 1px 2px rgba(0,0,0,.45)" title="Ortalama reyting ${s.text} · ${s.count} oy">★ ${s.text}</span>`;
+  }
+  /* Oy verebilmek için kullanıcının bu kitaba ait en az bir kiralama kaydı olmalı (iptal / süresi dolmuş da sayılır) */
+  const userRentalOf = (bookId, userId = state.currentUserId) => rentals
+    .filter((r) => r.bookId === Number(bookId) && r.userId === userId)
+    .sort((a, b) => new Date(b.rentedAt) - new Date(a.rentedAt))[0] || null;
+  /* Silinen kiralamalardan sonra o kitaba hiç kaydı kalmayan kullanıcının oyu silinir */
+  function ratingCleanupOps(removed) {
+    const gone = new Set(removed.map((r) => r.id));
+    const keys = [...new Set(removed.map((r) => `${r.bookId}_${r.userId}`))];
+    return keys
+      .filter((key) => ratings.some((x) => x.id === key) && !rentals.some((r) => !gone.has(r.id) && `${r.bookId}_${r.userId}` === key))
+      .map((key) => (bt) => bt.delete(col('ratings').doc(key)));
+  }
+
+  /* Kitap detayındaki reyting kutusu: ortalama + oy sayısı, kendi oyun (yıldızlar), Reyting bilgileri */
+  function ratingBoxHTML(b) {
+    const s = ratingSummary(b.id);
+    const mine = myRatingOf(b.id);
+    const canRate = !!userRentalOf(b.id);
+    const stars = [1, 2, 3, 4, 5].map((n) => `
+      <button type="button" data-rate-book="${b.id}" data-score="${n}" title="${n} puan" aria-label="${n} puan"
+        class="text-2xl leading-none transition hover:scale-110 ${mine && n <= mine.score ? 'text-amber-400' : 'text-slate-200 hover:text-amber-300'}">★</button>`).join('');
+    return `
+      <div class="rounded-2xl border border-slate-100 p-3.5 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            ${s ? `<span class="inline-flex items-center px-2.5 py-1.5 rounded-xl text-sm font-black text-white shadow-soft"
+                style="background:${ratingColor(s.avg)};text-shadow:0 1px 2px rgba(0,0,0,.45)">★ ${s.text}</span>`
+              : '<span class="inline-flex items-center px-2.5 py-1.5 rounded-xl text-sm font-black text-slate-400 bg-slate-100">★ —</span>'}
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-slate-700">Reyting</p>
+              <p class="text-[10px] text-slate-400">${s ? `${s.count} oy · ortalama` : 'Henüz oy yok'}</p>
+            </div>
+          </div>
+          <button type="button" data-rating-info="${b.id}" class="${BTN_SOFT} !py-1.5 shrink-0">Reyting bilgileri →</button>
+        </div>
+        ${canRate ? `
+          <div class="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-dashed border-slate-100">
+            <span class="text-[11px] text-slate-500">${mine ? `Senin puanın: <b class="text-slate-700">${mine.score}</b> · değiştirmek için tıkla` : 'Puan ver (1 en kötü · 5 çok iyi)'}</span>
+            <div class="flex items-center gap-1">${stars}</div>
+          </div>
+          ${mine ? `<button type="button" data-unrate-book="${b.id}" class="text-[10px] font-semibold text-slate-400 hover:text-rose-500">Puanımı kaldır</button>` : ''}`
+          : `<p class="text-[10px] text-slate-400 pt-2 border-t border-dashed border-slate-100">Puan verebilmek için bu kitabı en az bir kez kiralamış olmalısın.</p>`}
+      </div>`;
+  }
+
+  /* Oy ver / değiştir · kiralama kaydı kural tarafında da denetlenir (rentalId) */
+  async function rateBook(bookId, score) {
+    const b = getBook(bookId);
+    const u = currentUser();
+    score = Number(score);
+    if (!b || !u || !(score >= 1 && score <= 5)) return;
+    const rental = userRentalOf(b.id, u.id);
+    if (!rental) return toast('Puan verebilmek için bu kitabı en az bir kez kiralamış olmalısın.', 'error');
+    const prev = myRatingOf(b.id, u.id);
+    if (prev?.score === score) return;
+    const now = isoAt(Date.now());
+    const ok = await run(col('ratings').doc(`${b.id}_${u.id}`).set({
+      bookId: b.id, userId: u.id, score, rentalId: rental.id, createdAt: prev?.createdAt || now, updatedAt: now
+    }), prev ? `Puanın güncellendi: ${score} ⭐` : `"${b.title}" için ${score} puan verdin ⭐`);
+    if (ok && $('#ratingBox')) $('#ratingBox').innerHTML = ratingBoxHTML(b);
+  }
+
+  async function unrateBook(bookId) {
+    const b = getBook(bookId);
+    const mine = myRatingOf(bookId);
+    if (!b || !mine) return;
+    const ok = await run(col('ratings').doc(mine.id).delete(), 'Puanın kaldırıldı.', 'info');
+    if (ok && $('#ratingBox')) $('#ratingBox').innerHTML = ratingBoxHTML(b);
+  }
+
+  /* Reyting bilgileri: kim, ne zaman (tarih + saat), kaç puan */
+  function openRatingInfoModal(bookId) {
+    const b = getBook(bookId);
+    if (!b) return;
+    const s = ratingSummary(b.id);
+    const list = bookRatings(b.id).sort((x, y) => new Date(y.updatedAt) - new Date(x.updatedAt));
+    const dist = [5, 4, 3, 2, 1].map((n) => ({ n, c: list.filter((r) => r.score === n).length }));
+    openModal(`
+      ${modalHeader(`Reyting · ${escapeHTML(b.title)}`, s ? `Ortalama ${s.text} · ${s.count} oy` : 'Henüz oy yok', 'chart', 'bg-amber-50 text-amber-600')}
+      <div class="p-5 space-y-4">
+        ${list.length ? `
+          <div class="space-y-1">${dist.map(({ n, c }) => `
+            <div class="flex items-center gap-2 text-[11px]">
+              <span class="w-8 text-slate-500 font-semibold">${n} ★</span>
+              <span class="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden"><span class="block h-full rounded-full" style="width:${(c / list.length) * 100}%;background:${ratingColor(n)}"></span></span>
+              <span class="w-6 text-right text-slate-400 tabular-nums">${c}</span>
+            </div>`).join('')}
+          </div>
+          <ul class="space-y-2">${list.map((r) => {
+            const usr = getUser(r.userId);
+            return `
+              <li class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50/80">
+                ${usr ? avatarHTML(usr, 'w-8 h-8 text-[11px]') : '<span class="w-8 h-8 rounded-full bg-slate-200 shrink-0"></span>'}
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(usr?.name || 'Kullanıcı')}</p>
+                  <p class="text-[10px] text-slate-400">${formatLongDate(r.updatedAt)} · Saat ${formatTime(r.updatedAt)}${r.updatedAt !== r.createdAt ? ' · düzenlendi' : ''}</p>
+                </div>
+                <span class="shrink-0 text-sm tracking-tight"><span class="text-amber-400">${'★'.repeat(r.score)}</span><span class="text-slate-200">${'★'.repeat(5 - r.score)}</span></span>
+              </li>`;
+          }).join('')}</ul>`
+          : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitaba henüz kimse puan vermedi.</p>'}
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button type="button" data-open-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('back', 'w-3.5 h-3.5')}Kitaba dön</button>
+          <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
+        </div>
+      </div>`);
+  }
+
   /* Kiralanma sayısı: kayıtlardan sayılır · Kontrolcü bir kiralamayı silince kendiliğinden düşer */
   const bookRentCount   = (bookId) => rentals.filter((r) => r.bookId === Number(bookId)).length;
 
@@ -1319,9 +1453,11 @@
      sonradan elle silinse de kayıt kalır. Fiyat logundaki kalıcı fiyat değişimleri buraya girmez.
      Not: günün indirimi o gün uygulamayı açan biri olursa kaydedilir. */
   const HISTORY_SOURCES = ['deal', 'new', 'custom', 'offer'];
+  /* Kontrolcünün sildiği geçmiş kayıtları (settings/historyHidden.ids) yeniden yazılmaz */
+  const hiddenHistoryIds = () => new Set(appSettings.find((s) => s.id === 'historyHidden')?.ids || []);
   function recordDiscountHistory(now = new Date()) {
     if (!state.ready) return;
-    const have = new Set(discountHistory.map((h) => h.id));
+    const have = new Set([...discountHistory.map((h) => h.id), ...hiddenHistoryIds()]);
     const add = (id, rec) => {
       if (have.has(id) || state.purgePending.has(`dh:${id}`) || !getBook(rec.bookId) || !(rec.rate > 0)) return;
       state.purgePending.add(`dh:${id}`);
@@ -1359,9 +1495,12 @@
     if (!b) return;
     const list = bookDiscountHistory(b.id);
     const tone = { deal: 'bg-rose-50 text-rose-600', new: 'bg-amber-50 text-amber-600', custom: 'bg-indigo-50 text-indigo-600', offer: 'bg-violet-50 text-violet-600' };
+    const admin = isAdmin();
     openModal(`
       ${modalHeader(`Geçmiş İndirimler · ${escapeHTML(b.title)}`, `${list.length} süreli indirim · fiyat logundaki kalıcı değişimler burada yer almaz.`, 'tag', 'bg-rose-50 text-rose-500')}
       <div class="p-5 space-y-3">
+        ${admin && list.length ? `<div class="flex justify-end"><button type="button" data-delete-history="all" data-book="${b.id}"
+          class="text-[11px] font-semibold text-rose-500 hover:text-rose-600 flex items-center gap-1">${icon('trash', 'w-3.5 h-3.5')}Tümünü sil</button></div>` : ''}
         ${list.length ? `<ol class="relative border-l-2 border-rose-100 ml-1.5 space-y-2.5">${list.map((h) => `
           <li class="relative pl-5">
             <span class="absolute -left-[7px] top-3 w-3 h-3 rounded-full bg-white border-2 border-rose-300"></span>
@@ -1374,6 +1513,8 @@
                 </p>
                 <p class="text-[10px] text-slate-400 mt-1">${formatLongDate(h.startAt)}${h.endAt && h.source !== 'deal' ? ` → ${formatLongDate(h.endAt)}` : ''}</p>
               </div>
+              ${admin ? `<button type="button" data-delete-history="${h.id}" data-book="${b.id}" title="Bu kaydı sil" aria-label="Bu kaydı sil"
+                class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
             </div>
           </li>`).join('')}</ol>`
           : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitap henüz süreli bir indirime girmedi.</p>'}
@@ -1382,6 +1523,25 @@
           <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
         </div>
       </div>`);
+  }
+
+  /* Kontrolcü: geçmiş indirim kaydını (ya da kitabın tümünü) sil · silinenler bir daha yazılmaz */
+  function deleteDiscountHistory(id, bookId) {
+    if (!requireAdmin()) return;
+    const b = getBook(bookId);
+    const list = id === 'all' ? bookDiscountHistory(bookId) : discountHistory.filter((h) => h.id === id);
+    if (!list.length) return;
+    openConfirm({
+      title: id === 'all' ? 'Tüm geçmiş indirimler silinsin mi?' : 'Kayıt silinsin mi?',
+      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabının ${list.length > 1 ? `<b>${list.length}</b> geçmiş indirim kaydı` : 'bu geçmiş indirim kaydı'} kalıcı olarak silinecek. Kitabın fiyatı ve şu anki indirimleri etkilenmez.`,
+      onConfirm: async () => {
+        const ids = list.map((h) => h.id);
+        const ops = ids.map((hid) => (bt) => bt.delete(col('discountHistory').doc(hid)));
+        ops.push((bt) => bt.set(col('settings').doc('historyHidden'), { ids: FieldValue.arrayUnion(...ids) }, { merge: true }));
+        await run(commitOps(ops), `${ids.length} geçmiş indirim kaydı silindi.`, 'info');
+        openDiscountHistoryModal(bookId);
+      }
+    });
   }
 
   /* Gelecek tarihli (planlanan) log: tarihi gelene kadar fiyatı değiştirmez; tarihi gelince
@@ -1453,7 +1613,7 @@
     if (r.purchaseId) {
       return { removed: rentals.filter((x) => x.purchaseId === r.purchaseId), done: removePurchase(r.purchaseId) };
     }
-    return { removed: [r], done: commitOps(rentalDeleteOps([r])) };
+    return { removed: [r], done: commitOps([...rentalDeleteOps([r]), ...ratingCleanupOps([r])]) };
   }
 
   /* Kiralama silme işlemleri: kayıtları sil + kitap kilidini (bu kiralamaya aitse) aç */
@@ -1469,9 +1629,11 @@
 
   /* Paket satın alımını ve paketin tüm kiralamalarını siler */
   function removePurchase(purchaseId) {
+    const list = rentals.filter((r) => r.purchaseId === purchaseId);
     return commitOps([
       (bt) => bt.delete(col('offerPurchases').doc(purchaseId)),
-      ...rentalDeleteOps(rentals.filter((r) => r.purchaseId === purchaseId))
+      ...rentalDeleteOps(list),
+      ...ratingCleanupOps(list)
     ]);
   }
 
@@ -1489,13 +1651,18 @@
   function removeUserHistory(userId, cats = Object.keys(STAT_CATS)) {
     const mine = rentals.filter((r) => r.userId === userId);
     const singles = mine.filter((r) => cats.some((c) => STAT_CATS[c].pick?.(r)));
+    const removed = [...singles];
     const ops = [...rentalDeleteOps(singles)];
     if (cats.includes('offer')) {
       ops.push(...offerPurchases.filter((p) => p.userId === userId).map((p) => (bt) => bt.delete(col('offerPurchases').doc(p.id))));
-      ops.push(...rentalDeleteOps(mine.filter((r) => r.purchaseId)));
+      const pkg = mine.filter((r) => r.purchaseId);
+      removed.push(...pkg);
+      ops.push(...rentalDeleteOps(pkg));
     }
     // Kupon kayıtları silinince harcanan puan geri döner
     if (cats.includes('coupon')) ops.push(...coupons.filter((c) => c.userId === userId).map((c) => (bt) => bt.delete(col('coupons').doc(c.id))));
+    // Kitaba hiç kiralaması kalmayan kullanıcının oyu da silinir
+    ops.push(...ratingCleanupOps(removed));
     return commitOps(ops);
   }
 
@@ -2402,6 +2569,7 @@
               : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
             <div class="relative shrink-0">
               ${coverHTML(b, 'sm')}
+              ${ratingBadgeHTML(b.id)}
               ${fresh ? `
                 <span class="twinkle absolute -top-1.5 -left-1.5 text-amber-400 text-xs">✦</span>
                 <span class="twinkle twinkle-d1 absolute -bottom-1 -right-1.5 text-yellow-400 text-[10px]">✦</span>` : ''}
@@ -2667,6 +2835,8 @@
           </button>
         </div>
 
+        <div id="ratingBox">${ratingBoxHTML(b)}</div>
+
         ${active && holder ? `
           <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-[11px] text-amber-700">
             ${avatarHTML(holder, 'w-6 h-6 text-[10px]')}
@@ -2867,6 +3037,7 @@
         logs.forEach((l) => ops.push((bt) => bt.delete(col('priceLogs').doc(l.id))));
         if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));
         bookDiscountHistory(b.id).forEach((h) => ops.push((bt) => bt.delete(col('discountHistory').doc(h.id))));
+        bookRatings(b.id).forEach((x) => ops.push((bt) => bt.delete(col('ratings').doc(x.id))));
         // Teklif paketinden çıkarılır; paket boşalırsa teklif silinir
         inOffers.forEach((o) => {
           const items = o.items.filter((it) => it.bookId !== b.id);
@@ -3522,7 +3693,8 @@
     const admin = isAdmin();
     setPageActions('announcements', admin
       ? (state.annTab === 'news'
-          ? `<button type="button" data-quick="addNews" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Duyuru/Haber Ekle 📣</button>`
+          ? `<button type="button" data-bulk-news class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}Toplu Sil</button>
+             <button type="button" data-quick="addNews" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Duyuru/Haber Ekle 📣</button>`
           : `<button type="button" data-quick="addUpdate" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Yeni Sürüm Notu</button>`)
       : '');
 
@@ -3594,7 +3766,7 @@
             <p class="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">${escapeHTML(a.body)}</p>
             <div class="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-400">
               ${author ? avatarHTML(author, 'w-4 h-4 text-[8px]') + escapeHTML(author.name) + ' ·' : ''}
-              <span>${relativeDay(a.createdAt)}</span>
+              <span>${relativeDay(a.createdAt)} · Saat ${formatTime(a.createdAt)}</span>
             </div>
           </div>
         </div>`;
@@ -5022,6 +5194,63 @@
     run(done, editId ? 'Haber güncellendi.' : 'Duyuru yayınlandı 📣');
   }
 
+  /* Kontrolcü: haberleri toplu sil · tür (Tümü / Duyuru / İndirim / Bilgilendirme / Etkinlik) + zaman (tümü / bugün) */
+  const bulkNewsTargets = (cat, scope) => {
+    const today = localDateKey();
+    return announcements.filter((a) => a.type === 'news'
+      && (cat === 'all' || newsCategoryOf(a) === cat)
+      && (scope === 'all' || localDateKey(a.createdAt) === today));
+  };
+
+  function openBulkNewsModal() {
+    if (!requireAdmin()) return;
+    const cats = ['all', ...Object.keys(NEWS_CATEGORIES)];
+    openModal(`
+      ${modalHeader('Haberleri Toplu Sil 🗑️', 'Tür ve zaman seç · sürüm notları (Güncellemeler) etkilenmez.', 'trash', 'bg-rose-50 text-rose-500')}
+      <form data-form="bulkNews" class="p-5 space-y-3.5" autocomplete="off">
+        ${field('Tür', `<select name="cat" id="bn-cat" class="${INPUT_CLS}">
+          ${cats.map((c) => `<option value="${c}" ${state.newsCat === c ? 'selected' : ''}>${c === 'all' ? 'Tümü (bütün türler)' : c}</option>`).join('')}
+        </select>`)}
+        <div class="grid grid-cols-2 gap-2">
+          ${[['all', 'Tüm tarihler'], ['today', 'Sadece bugün']].map(([v, l], i) => `
+            <label class="flex items-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-rose-200 cursor-pointer text-xs text-slate-600">
+              <input type="radio" name="scope" value="${v}" ${i === 0 ? 'checked' : ''} data-bn-scope class="text-rose-500" /> ${l}
+            </label>`).join('')}
+        </div>
+        <p id="bn-preview" class="text-[11px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2"></p>
+        <div class="grid grid-cols-2 gap-2.5 pt-2">
+          <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Vazgeç</button>
+          <button type="submit" class="py-2.5 rounded-xl text-xs font-semibold bg-rose-500 text-white hover:bg-rose-600 transition">Sil</button>
+        </div>
+      </form>`);
+    updateBulkNewsPreview();
+  }
+
+  function updateBulkNewsPreview() {
+    const box = $('#bn-preview');
+    if (!box) return;
+    const cat = $('#bn-cat').value;
+    const scope = document.querySelector('[data-bn-scope]:checked')?.value || 'all';
+    const n = bulkNewsTargets(cat, scope).length;
+    box.textContent = n ? `${n} haber kalıcı olarak silinecek.` : 'Bu seçime uyan haber yok.';
+  }
+
+  function handleBulkNews(fd) {
+    if (!requireAdmin()) return;
+    const list = bulkNewsTargets(fd.cat, fd.scope);
+    if (!list.length) return toast('Bu seçime uyan haber yok.', 'info');
+    const label = `${fd.cat === 'all' ? 'Tüm türlerdeki' : `"${fd.cat}" türündeki`} ${fd.scope === 'today' ? 'bugünkü ' : ''}haberler`;
+    openConfirm({
+      title: 'Haberler silinsin mi?',
+      message: `${label} (<b>${list.length} haber</b>) kalıcı olarak silinecek.`,
+      confirmLabel: `${list.length} Haberi Sil`,
+      onConfirm: () => {
+        closeModal();
+        run(commitOps(list.map((a) => (bt) => bt.delete(col('announcements').doc(a.id)))), `${list.length} haber silindi.`, 'info');
+      }
+    });
+  }
+
   function deleteNews(id) {
     if (!requireAdmin()) return;
     const a = getAnn(id);
@@ -5742,6 +5971,11 @@
       if ((m = el('[data-edit-shop-coupon]'))) return openShopCouponModal(m.dataset.editShopCoupon);
       if ((m = el('[data-use-bogo]')))         return openBogoModal(m.dataset.useBogo);
       if ((m = el('[data-discount-history]'))) return openDiscountHistoryModal(m.dataset.discountHistory);
+      if ((m = el('[data-bulk-news]')))        return openBulkNewsModal();
+      if ((m = el('[data-rate-book]')))        return rateBook(m.dataset.rateBook, m.dataset.score);
+      if ((m = el('[data-unrate-book]')))      return unrateBook(m.dataset.unrateBook);
+      if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
+      if ((m = el('[data-delete-history]')))   return deleteDiscountHistory(m.dataset.deleteHistory, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
@@ -5787,6 +6021,7 @@
         case 'setPassword': return handleSetPassword(fd);
         case 'saveVitrine': return handleSaveVitrine(fd);
         case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
+        case 'bulkNews':    return handleBulkNews(fd);
         case 'useBogo':     return handleUseBogo(form);
       }
     });
@@ -5814,6 +6049,7 @@
       if (t.id === 'rentCoupon') updateRentCoupon();
       if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
+      if (t.id === 'bn-cat' || t.matches('[data-bn-scope]')) updateBulkNewsPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
       if (t.id === 'bookPlaceFilter') { state.bookPlace = t.value; return renderCurrentPage(); }
       if (t.id === 'bookYearFilter') { state.bookYear = t.value; return renderCurrentPage(); }
@@ -5868,6 +6104,7 @@
     ['announcements', announcements],
     ['offers', offers],
     ['discounts', discounts, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
+    ['ratings', ratings, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['discountHistory', discountHistory, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['couponShop', couponShop, null, (d) => ({ id: d.id, ...d.data(), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],
