@@ -100,10 +100,17 @@ service cloud.firestore {
       // Kontrolcü her şeyi; kullanıcı yalnızca boştaki kitabı kendi yeni kiralamasıyla kilitler
       allow update: if isAdmin() || isLock();
 
+      // Özel kitap: kayıttaki bayrak ya da eski kayıtlarda 'ozel' türü
+      function isSpecialBook() { return resource.data.get('special', resource.data.get('type', '') == 'ozel') == true; }
+
       function isLock() {
         let after = request.resource.data;
         return canRent()
-          && changedKeys().hasOnly(['lockUntil', 'lockBy', 'lockRental'])
+          && changedKeys().hasOnly(['lockUntil', 'lockBy', 'lockRental', 'status'])
+          // yalnızca "Kiralık" (durumu olmayan eski kayıtlar = Kiralık) kitap kiralanabilir
+          && resource.data.get('status', 'kiralik') == 'kiralik'
+          // durum değişikliği yalnızca özel kitapta ve yalnızca "Kira dışı"na (kiralanınca otomatik)
+          && (!changedKeys().hasAny(['status']) || (isSpecialBook() && after.status == 'kiradisi'))
           && (resource.data.get('lockUntil', null) == null || resource.data.lockUntil < request.time)
           && after.lockBy == uid()
           && after.lockUntil is timestamp

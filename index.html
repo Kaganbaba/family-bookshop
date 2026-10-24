@@ -506,7 +506,7 @@
      Günün İndirimleri yalnızca Seri kitaplar üzerinden döner. */
   const SEED_TYPES = [
     { id: 'seri',  label: 'Seri',  palette: 'blue',   inDeals: true },
-    { id: 'ozel',  label: 'Özel',  palette: 'rose',   inDeals: false },
+    { id: 'ozel',  label: 'Özel',  palette: 'rose',   inDeals: false, special: true },
     { id: 'album', label: 'Albüm', palette: 'violet', inDeals: false }
   ];
 
@@ -516,7 +516,9 @@
      seriesNo: kaçıncı seri · Günün İndirimleri sırası ve oranı buna göre (yalnızca indirim türlerinde)
      releaseDate: çıkış tarihi · liste sıralaması, çıkış yılı ve 7 günlük yeni kitap indirimi buradan
      addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya ''
-     lockUntil / lockBy / lockRental: kiralama kilidi (güvenlik kuralı müsaitliği bununla denetler) */
+     lockUntil / lockBy / lockRental: kiralama kilidi (güvenlik kuralı boşta olmayı bununla denetler)
+     status: kiralik | kiradisi | listedisi | planlaniyor | yakinda (yoksa kiralik) · special: özel kitap
+     period: özel kitabın dönemi ("Sadece yağmurlu günlerde") · description: açıklama */
   const SEED_BOOKS = [
     { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri', seriesNo: 1,  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
     { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri', seriesNo: 2,  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
@@ -590,7 +592,7 @@
     groupSize: 3              // günde kaç kitap
   };
   const NEW_BOOK_DISCOUNT = { rate: 15, days: 7 }; // yeni eklenen kitap indirimi
-  const DEFAULT_RENTAL_DAYS = 14;
+  const DEFAULT_RENTAL_DAYS = 7;
 
   /* Uygulama durumu */
   const state = {
@@ -680,6 +682,39 @@
   const typeStyle = (id) => TYPE_PALETTES[getType(id)?.palette] || TYPE_PALETTES.slate;
   const typeLabel = (t) => getType(t)?.label || 'Kitap';
   const defaultTypeId = () => bookTypes[0]?.id || '';
+  /* Döneme özel tür (Özel kitaplar): dönem metni + açıklama alanları, kiralanınca kendiliğinden Kira dışı */
+  const isSpecialType = (typeId) => { const t = getType(typeId); return !!(t?.special ?? typeId === 'ozel'); };
+
+  /* Kitap durumları (Kontrolcü ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
+  const BOOK_STATUSES = {
+    kiralik:     { label: 'Kiralık',     chip: 'bg-emerald-50 text-emerald-600', dot: 'bg-emerald-400', desc: 'Kiralanabilir' },
+    kiradisi:    { label: 'Kira dışı',   chip: 'bg-slate-100 text-slate-500',    dot: 'bg-slate-400',   desc: 'Görünür ama kiralanamaz' },
+    listedisi:   { label: 'Liste dışı',  chip: 'bg-rose-50 text-rose-500',       dot: 'bg-rose-400',    desc: 'Yalnızca Kontrolcüler görür' },
+    planlaniyor: { label: 'Planlanıyor', chip: 'bg-violet-50 text-violet-600',   dot: 'bg-violet-400',  desc: 'Gelmesi planlanıyor · bilgiler eksik olabilir · kiralanamaz' },
+    yakinda:     { label: 'Yakında',     chip: 'bg-sky-50 text-sky-600',         dot: 'bg-sky-400',     desc: 'Yazılmaya başlandı · bilgiler eksik olabilir · kiralanamaz' }
+  };
+  const RENTED_STATUS = { label: 'Kirada', chip: 'bg-amber-50 text-amber-600', dot: 'bg-amber-400' };
+  const bookStatus = (b) => (BOOK_STATUSES[b?.status] ? b.status : 'kiralik');   // eski kayıtlar → Kiralık
+  const isDraftBook = (b) => ['planlaniyor', 'yakinda'].includes(bookStatus(b)); // bilgileri eksik olabilir
+  const isRentableStatus = (b) => bookStatus(b) === 'kiralik';
+  const isVisibleBook = (b) => !!b && (isAdmin() || bookStatus(b) !== 'listedisi');
+  const visibleBooks = () => books.filter(isVisibleBook);
+  const hasPrice = (b) => typeof b?.price === 'number' && b.price > 0;
+  /* Görünen durum: kiradaysa "Kirada", değilse ayarlanan durum */
+  const statusView = (b, now = Date.now()) => (isBookRented(b, now) ? RENTED_STATUS : BOOK_STATUSES[bookStatus(b)]);
+  const statusChipHTML = (b, now = Date.now(), extra = '') => {
+    const s = statusView(b, now);
+    return `<span class="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.chip} ${extra}"><span class="w-1.5 h-1.5 rounded-full ${s.dot}"></span>${s.label}</span>`;
+  };
+  /* Kiralanamama sebebi (duruma göre) */
+  function statusBlockReason(b) {
+    const st = bookStatus(b);
+    if (st === 'kiradisi') return isSpecialType(b.type) ? 'Bu özel kitap şu an dönem dışında, kiralanamaz.' : 'Bu kitap şu an kira dışı.';
+    if (st === 'planlaniyor') return 'Bu kitap henüz planlanıyor, kiralanamaz.';
+    if (st === 'yakinda') return 'Bu kitap yakında çıkacak, henüz kiralanamaz.';
+    if (st === 'listedisi') return 'Bu kitap listede değil.';
+    return null;
+  }
 
   /* Haber türleri (Duyurular → Haberler) */
   const NEWS_CATEGORIES = {
@@ -934,7 +969,9 @@
     const rank = Number.isInteger(b?.seriesNo) && b.seriesNo > 0 ? b.seriesNo : Number(bookId);
     return RATE_TIERS.find((t) => rank <= t.max).rate;
   };
-  const isDiscountEligible = (book) => getType(book.type)?.inDeals !== false;
+  /* Döngüye girer: indirim türü + henüz planlanan/yazılan kitap değil.
+     Kira dışı / Liste dışı kitaplar sırasını korur ama o gün gösterilmez (o gün 2 indirim olur). */
+  const isDiscountEligible = (book) => getType(book.type)?.inDeals !== false && !isDraftBook(book);
   /* "Seri #3" etiketi (numarası yoksa kitap numarası) */
   const seriesLabel = (b) => (Number.isInteger(b?.seriesNo) && b.seriesNo > 0 ? `${typeLabel(b.type)} #${b.seriesNo}` : `#${b.id} · ${typeLabel(b.type)}`);
 
@@ -1016,7 +1053,8 @@
     const removed = dealsRemovedToday(now);
     const ids = snapshot
       .slice(dayIndex * size, dayIndex * size + size)
-      .filter((id) => getBook(id) && !removed.includes(id)); // silinmiş / bugün indirimden çıkarılmış kitapları atla
+      // silinmiş / bugün indirimden çıkarılmış / Kiralık olmayan (Kira dışı, Liste dışı) kitapları atla
+      .filter((id) => getBook(id) && !removed.includes(id) && isRentableStatus(getBook(id)));
 
     return {
       ids, cycleNo, dayIndex, totalDays, refreshed,
@@ -1049,7 +1087,7 @@
   }
   const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
-  const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now)).map((b) => b.id).join(',');
+  const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
   const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
@@ -1127,28 +1165,32 @@
 
   /* Yeni kitap ekler. Çıkış tarihi son 7 gün içindeyse (yeni kitap) "Haberler"e
      otomatik duyuru basar (okunmamış → kırmızı rozet); daha eskiyse duyuru yazılmaz. */
+  /* Haber robotunun duyuru belgesi */
+  const newBookAnnouncement = (book) => ({
+    type: 'news',
+    category: 'Yeni Kitap',
+    title: `Yeni kitap: ${book.title}`,
+    body: newBookNewsBody(book),
+    bookId: book.id,
+    authorId: state.currentUserId,
+    createdAt: isoAt(Date.now()),
+    pinned: false,
+    readBy: []
+  });
+
   function addBook(data) {
     const now = Date.now();
     const id = books.reduce((m, b) => Math.max(m, b.id), 0) + 1;
     const book = {
       id, authorId: state.currentUserId, ...data,
       addedAt: isoAt(now),
-      newDiscountUntil: newDiscountUntilFor(data.releaseDate, now),
+      // Planlanıyor / Yakında kitapta yeni kitap indirimi başlamaz
+      newDiscountUntil: isDraftBook(data) ? null : newDiscountUntilFor(data.releaseDate, now),
       lockUntil: null, lockBy: null, lockRental: null
     };
     const batch = db.batch();
     batch.set(bookRef(id), book);
-    if (book.newDiscountUntil) batch.set(col('announcements').doc(), {
-      type: 'news',
-      category: 'Yeni Kitap',
-      title: `Yeni kitap: ${book.title}`,
-      body: newBookNewsBody(book),
-      bookId: id,
-      authorId: state.currentUserId,
-      createdAt: isoAt(now),
-      pinned: false,
-      readBy: []
-    });
+    if (book.newDiscountUntil) batch.set(col('announcements').doc(), newBookAnnouncement(book));
     return { book, done: batch.commit() };
   }
 
@@ -1463,18 +1505,20 @@
   /* --- 8.1 İstatistik kartları --- */
   function renderStats(now) {
     const nowMs = now.getTime();
+    const shown = visibleBooks();
     const typeSummary = bookTypes
-      .map((t) => `${books.filter((b) => b.type === t.id).length} ${escapeHTML(t.label.toLocaleLowerCase('tr'))}`)
+      .map((t) => `${shown.filter((b) => b.type === t.id).length} ${escapeHTML(t.label.toLocaleLowerCase('tr'))}`)
       .join(' · ');
     const active = rentals.filter((r) => isActiveRental(r, nowMs));
     const myActive = active.filter((r) => r.userId === state.currentUserId).length;
+    const rentableNow = shown.filter((b) => isRentableStatus(b) && !isBookRented(b, nowMs)).length;
     const totalBalance = sum(users, (u) => u.balance);
     const deals = getDailyDeals(now);
     const maxRate = deals.ids.length ? Math.max(...deals.ids.map(getDiscountRate)) : 0;
 
     const cards = [
-      { label: 'Toplam Kitap',   value: books.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600' },
-      { label: 'Aktif Kiralık',  value: active.length,             sub: `Sende ${myActive} · ${books.length - active.length} kitap müsait`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
+      { label: 'Toplam Kitap',   value: shown.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600' },
+      { label: 'Kirada',         value: active.length,             sub: `Sende ${myActive} · ${rentableNow} kitap kiralık`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
       { label: 'Toplam Bakiye',  value: formatMoney(totalBalance), sub: `Senin: ${formatMoney(currentUser().balance)}`,                                                 icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
       { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
     ];
@@ -1494,7 +1538,7 @@
   /* --- 8.1.5 Yeni Kitap vitrini (altın parıltılı, günün indirimlerinden ayrı) --- */
   function renderNewBooks(now) {
     const list = books
-      .filter((b) => isNewBook(b, now))
+      .filter((b) => isNewBook(b, now) && isVisibleBook(b))
       .sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
     const box = $('#newBooksSection');
     state.lastNewKey = newBooksKey(now);
@@ -1518,7 +1562,7 @@
               <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-600">${escapeHTML(seriesLabel(b))}</p>
               <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
               <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
-              <span class="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${rented ? 'text-amber-700 bg-amber-100' : 'text-emerald-600 bg-emerald-50'}">${rented ? 'Kiralı' : 'Müsait'}</span>
+              ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
             </div>
           </div>
           <div class="flex items-end justify-between mt-3 pt-3 border-t border-dashed border-amber-200">
@@ -1594,9 +1638,7 @@
               <p class="flex items-center gap-1.5 flex-wrap text-[10px] font-semibold uppercase tracking-wider text-brand-500">${escapeHTML(seriesLabel(b))} ${tierBadge(tier)}</p>
               <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
               <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
-              ${rented
-                ? '<span class="inline-block mt-1.5 text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Kiralı</span>'
-                : '<span class="inline-block mt-1.5 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Müsait</span>'}
+              ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
             </div>
           </div>
           <div class="relative z-[1] flex items-end justify-between mt-3 pt-3 border-t border-dashed border-brand-100">
@@ -1765,8 +1807,22 @@
     `<button type="button" data-quick="manageTypes" class="${BTN_SOFT}">Kategorileri Yönet 📁</button>`;
 
   /* Dinamik tür sekmeleri (Kitaplar + Kiralananlar ortak). attr: data-* adı, current: seçili tür */
-  function typeTabBar(attr, current, countOf, extraCls = 'mb-5') {
-    const tabs = [{ id: 'all', label: 'Tümü' }, ...bookTypes];
+  /* Kitaplar listesinde çarpıcı, mavi tonlu fiyat etiketi (indirimde eski fiyat + yüzde rozeti) */
+  function priceTagHTML(b, eff) {
+    if (!hasPrice(b)) return '<span class="text-[11px] font-semibold italic text-slate-400 whitespace-nowrap">Fiyat yakında</span>';
+    const final = round2(b.price * (1 - (eff?.rate || 0) / 100));
+    return `
+      <span class="flex items-center gap-1.5">
+        ${eff?.rate ? `<span class="text-[10px] font-extrabold text-white bg-gradient-to-r ${eff.source === 'new' ? 'from-amber-400 to-yellow-500' : 'from-rose-500 to-orange-400'} px-1.5 py-0.5 rounded-lg shadow-soft">%${eff.rate}</span>` : ''}
+        <span class="flex flex-col items-end leading-none">
+          ${eff?.rate ? `<span class="text-[10px] text-slate-400 line-through mb-0.5">${formatMoney(b.price)}</span>` : ''}
+          <span class="text-[15px] sm:text-lg font-black tracking-tight tabular-nums whitespace-nowrap bg-gradient-to-r from-sky-500 via-brand-600 to-indigo-600 bg-clip-text text-transparent">${formatMoney(final)}</span>
+        </span>
+      </span>`;
+  }
+
+  function typeTabBar(attr, current, countOf, extraCls = 'mb-5', includeAll = true) {
+    const tabs = includeAll ? [{ id: 'all', label: 'Tümü' }, ...bookTypes] : [...bookTypes];
     return `
       <div class="flex gap-1 p-1 bg-white rounded-2xl shadow-soft ${extraCls} overflow-x-auto soft-scroll w-full sm:w-auto sm:inline-flex">
         ${tabs.map((t) => {
@@ -1788,14 +1844,18 @@
       : '');
 
     const now = Date.now();
-    if (state.bookTab !== 'all' && !getType(state.bookTab)) state.bookTab = 'all';
-    const countOf = (k) => (k === 'all' ? books.length : books.filter((b) => b.type === k).length);
-    const list = books
-      .filter((b) => state.bookTab === 'all' || b.type === state.bookTab)
-      .sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || b.id - a.id);
-    const availableCount = list.filter((b) => !isBookRented(b, now)).length;
+    // "Tümü" sekmesi yok: yalnızca kategoriler (varsayılan ilk kategori)
+    if (!getType(state.bookTab)) state.bookTab = defaultTypeId();
+    const shown = visibleBooks(); // Liste dışı kitapları yalnızca Kontrolcüler görür
+    const countOf = (k) => shown.filter((b) => b.type === k).length;
+    // Sıra: Planlanıyor → Yakında → diğerleri (çıkış tarihi yeni → eski)
+    const statusRank = (b) => ({ planlaniyor: 0, yakinda: 1 }[bookStatus(b)] ?? 2);
+    const list = shown
+      .filter((b) => b.type === state.bookTab)
+      .sort((a, b) => statusRank(a) - statusRank(b) || (b.releaseDate || '').localeCompare(a.releaseDate || '') || b.id - a.id);
+    const rentableCount = list.filter((b) => isRentableStatus(b) && !isBookRented(b, now)).length;
 
-    const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf);
+    const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf, 'mb-5', false);
 
     if (!list.length) {
       $('#booksContent').innerHTML = tabBar + emptyState('Bu kategoride henüz kitap yok.');
@@ -1830,16 +1890,12 @@
             </div>
             <!-- Orta boşluk: şeffaf, eğik, parıldayan kitap adı (tablet/masaüstü) -->
             <span class="ghost-title ${fresh ? 'is-new' : ''} hidden sm:block flex-1 min-w-0 truncate text-center text-xl lg:text-2xl px-3 select-none pointer-events-none" aria-hidden="true">${escapeHTML(b.title)}</span>
-            <div class="shrink-0 flex flex-col items-end gap-1 text-right">
-              <p class="leading-none whitespace-nowrap">
-                ${eff.rate ? `<span class="text-[10px] text-slate-400 line-through mr-1">${formatMoney(b.price)}</span>` : ''}
-                <span class="text-xs sm:text-sm font-bold ${eff.rate ? 'text-emerald-600' : 'text-slate-800'}">${formatMoney(round2(b.price * (1 - eff.rate / 100)))}</span>
-              </p>
-              <div class="flex items-center gap-1">
-                ${eff.rate ? `<span class="text-[9px] font-extrabold text-white bg-gradient-to-r ${eff.source === 'new' ? 'from-amber-400 to-yellow-500' : 'from-rose-500 to-orange-400'} px-1.5 py-0.5 rounded-full">%${eff.rate}</span>` : ''}
-                <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${rented ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">
-                  <span class="w-1.5 h-1.5 rounded-full ${rented ? 'bg-amber-400' : 'bg-emerald-400'}"></span>${rented ? 'Kiralı' : 'Müsait'}
-                </span>
+            <!-- Sağ: çarpıcı mavi fiyat (indirim varsa eski fiyat + yüzde) · durum -->
+            <div class="shrink-0 flex items-center gap-2 sm:gap-3">
+              ${priceTagHTML(b, eff)}
+              <div class="flex flex-col items-end gap-1">
+                ${statusChipHTML(b, now)}
+                ${isSpecialBook(b) && b.period ? `<span class="hidden sm:inline text-[9px] font-semibold text-rose-500 max-w-[9rem] truncate">🔒 ${escapeHTML(b.period)}</span>` : ''}
               </div>
             </div>
             <span class="hidden sm:block text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
@@ -1850,8 +1906,8 @@
     $('#booksContent').innerHTML = tabBar + `
       <div class="bg-white rounded-2xl shadow-soft overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-400">
-          <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${availableCount} müsait</span></span>
-          <span class="hidden sm:inline">Sıralama: Çıkış tarihi (yeni → eski)</span>
+          <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${rentableCount} kiralık</span></span>
+          <span class="hidden sm:inline">Sıralama: Planlanıyor · Yakında · Çıkış tarihi (yeni → eski)</span>
         </div>
         <ul class="divide-y divide-slate-100">${rows}</ul>
       </div>`;
@@ -1955,11 +2011,11 @@
   /* Kitap detay modalı (iki sütun + fiyat geçmişi zaman çizelgesi) */
   function openBookModal(bookId, opts = {}) {
     const b = getBook(bookId);
-    if (!b) return;
+    if (!isVisibleBook(b)) return; // Liste dışı: yalnızca Kontrolcü açabilir
     const u = currentUser();
     const now = new Date();
     const { rate, source } = getEffectiveDiscount(b, now);
-    const price = round2(b.price * (1 - rate / 100));
+    const price = hasPrice(b) ? round2(b.price * (1 - rate / 100)) : 0;
     const active = activeRentalOf(b, now.getTime());
     const holder = active ? getUser(active.userId) : null;
     const check = bookRentCheck(b, u, price);
@@ -2016,26 +2072,46 @@
             <div class="flex items-center gap-1.5 flex-wrap">
               ${typeChip(b.type)}
               ${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-white">#${b.seriesNo}. seri</span>` : ''}
-              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${active ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">${active ? 'Kiralı' : 'Müsait'}</span>
+              ${statusChipHTML(b, now.getTime())}
             </div>
             <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
             <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-1">${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}</p>
             <div class="mt-3 flex items-end gap-2 flex-wrap">
-              ${rate ? `<span class="text-xs text-slate-400 line-through">${formatMoney(b.price)}</span>` : ''}
-              <span class="text-xl font-black ${rate ? 'text-emerald-600' : 'text-slate-800'} leading-none">${formatMoney(price)}</span>
-              ${rate ? `<span class="text-[10px] font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 px-2 py-1 rounded-lg">%${rate} · ${discountSourceLabel(source)}</span>` : ''}
+              ${hasPrice(b) ? `
+                ${rate ? `<span class="text-xs text-slate-400 line-through">${formatMoney(b.price)}</span>` : ''}
+                <span class="text-xl font-black leading-none bg-gradient-to-r from-sky-500 via-brand-600 to-indigo-600 bg-clip-text text-transparent">${formatMoney(price)}</span>
+                ${rate ? `<span class="text-[10px] font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 px-2 py-1 rounded-lg">%${rate} · ${discountSourceLabel(source)}</span>` : ''}`
+                : '<span class="text-sm font-semibold italic text-slate-400">Fiyat yakında</span>'}
             </div>
           </div>
         </div>
+        ${admin ? `
+          <label class="mt-4 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+            Durum:
+            <select data-quick-status="${b.id}" class="flex-1 sm:flex-none text-[11px] rounded-lg border border-brand-100 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200">
+              ${Object.entries(BOOK_STATUSES).map(([k, s]) => `<option value="${k}" ${bookStatus(b) === k ? 'selected' : ''}>${s.label}</option>`).join('')}
+            </select>
+          </label>` : ''}
       </div>
 
       <div class="p-5 sm:p-6 pt-4 space-y-5">
+        ${isSpecialBook(b) ? `
+          <div class="flex gap-3 p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
+            <span class="text-xl leading-none">🔒</span>
+            <p class="text-xs text-rose-700 leading-relaxed">Bu kitap <b>özel kitaptır</b> ve sadece <b>${escapeHTML(b.period || 'belirli dönemlerde')}</b> okunabilir.${bookStatus(b) === 'kiradisi' && !active ? ' Şu an dönem dışında olduğu için kiralanamaz.' : ''}</p>
+          </div>` : ''}
+        ${isDraftBook(b) ? `
+          <div class="flex gap-3 p-3.5 rounded-2xl ${bookStatus(b) === 'planlaniyor' ? 'bg-violet-50 border-violet-100 text-violet-700' : 'bg-sky-50 border-sky-100 text-sky-700'} border">
+            <span class="text-xl leading-none">${bookStatus(b) === 'planlaniyor' ? '🗓️' : '✍️'}</span>
+            <p class="text-xs leading-relaxed">${bookStatus(b) === 'planlaniyor' ? 'Bu kitabın gelmesi <b>planlanıyor</b>.' : 'Bu kitap <b>yazılmaya başlandı</b>, yakında geliyor.'} Bazı bilgiler henüz belli değil; şimdilik kiralanamaz.</p>
+          </div>` : ''}
+        ${b.description ? `<p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line bg-slate-50/80 rounded-2xl px-4 py-3">${escapeHTML(b.description)}</p>` : ''}
         <div class="grid grid-cols-2 gap-2.5">
           <div class="space-y-2.5">
             ${info('Türü', typeLabel(b.type), 'tag')}
-            ${info('Fiyatı', formatMoney(b.price), 'wallet')}
-            ${info('Sayfa Sayısı', `${b.pages} sayfa`, 'pages')}
-            ${info('Kira Süresi', `${b.rentalDays} gün`, 'rentals')}
+            ${info('Fiyatı', hasPrice(b) ? formatMoney(b.price) : '—', 'wallet')}
+            ${info('Sayfa Sayısı', b.pages ? `${b.pages} sayfa` : '—', 'pages')}
+            ${info('Kira Süresi', b.rentalDays ? `${b.rentalDays} gün` : '—', 'rentals')}
           </div>
           <div class="space-y-2.5">
             ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'), 'pin')}
@@ -2074,19 +2150,51 @@
               ? `<button type="button" data-edit-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>`
               : `<button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>`}
             <button type="button" data-rent-book="${b.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">
-              ${formatMoney(price)} · ${b.rentalDays} gün Kirala
+              ${isRentableStatus(b) && hasPrice(b) ? `${formatMoney(price)} · ${b.rentalDays} gün Kirala` : `${statusView(b, now.getTime()).label} · Kiralanamaz`}
             </button>
           </div>
         </div>
       </div>`, 'lg');
   }
 
+  /* Kontrolcü: kitap durumunu hızlı değiştir (kitap detayındaki seçimden) */
+  async function setBookStatus(bookId, status) {
+    if (!requireAdmin()) return;
+    const b = getBook(bookId);
+    if (!b || !BOOK_STATUSES[status] || bookStatus(b) === status) return;
+    const toDraft = ['planlaniyor', 'yakinda'].includes(status);
+    const goingLive = isDraftBook(b) && !toDraft;
+    if (goingLive && (!hasPrice(b) || !b.rentalDays || !b.pages || !isDateKey(b.releaseDate))) {
+      toast('Önce eksik bilgileri tamamlayın (fiyat, sayfa, kira süresi, çıkış tarihi) → Düzenle.', 'error');
+      return openBookModal(b.id);
+    }
+    const batch = db.batch();
+    const patch = { status };
+    let extra = '';
+    if (toDraft) patch.newDiscountUntil = null;
+    if (goingLive) {
+      // Taslaktan yayına: döngüye sonraki turda girer; son 7 günde çıktıysa duyuru + yeni kitap indirimi
+      patch.addedAt = isoAt(Date.now());
+      patch.newDiscountUntil = newDiscountUntilFor(b.releaseDate);
+      if (patch.newDiscountUntil) { batch.set(col('announcements').doc(), newBookAnnouncement({ ...b, ...patch })); extra = ' · Duyurular\'a haber düştü 📣'; }
+    }
+    batch.update(bookRef(b.id), patch);
+    await run(batch.commit(), `"${b.title}" → ${BOOK_STATUSES[status].label}${extra}`);
+    if (state.modalOpen) openBookModal(b.id);
+  }
+
   /* Kitap kilidi hâlâ geçerli mi (güvenlik kuralı da aynı alanı denetler) */
   const isBookLocked = (book, now = Date.now()) => !!book.lockUntil && book.lockUntil.toMillis() > now;
+
+  /* Özel kitap mı (kitap kaydındaki bayrak ya da türü) */
+  const isSpecialBook = (b) => b?.special === true || isSpecialType(b?.type);
 
   function bookRentCheck(book, user, price) {
     if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
     if (isBookRented(book) || isBookLocked(book)) return { ok: false, reason: 'Bu kitap şu an kirada.' };
+    const blocked = statusBlockReason(book);
+    if (blocked) return { ok: false, reason: blocked };
+    if (!hasPrice(book)) return { ok: false, reason: 'Bu kitabın fiyatı henüz belirlenmedi.' };
     if (user.balance < price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(price - user.balance)} eksik.` };
     return { ok: true };
   }
@@ -2113,7 +2221,8 @@
       offerId: null, purchaseId: null, offerPrice: null,
       rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
     });
-    batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
+    // Özel kitap: kiralandığı an "Kira dışı"; kiradayken "Kirada" görünür, süre bitince Kira dışı kalır
+    batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     batch.update(col('users').doc(u.id), { balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental' });
 
     closeModal();
@@ -2484,7 +2593,7 @@
               </label>
             </li>`).join('')}
         </ul>
-        <p class="text-[10px] text-slate-400 leading-relaxed">Silinen kayıtlar harcama, kazanç ve sıralamadan düşer; aktif kiralamalardaki kitaplar müsait olur.</p>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Silinen kayıtlar harcama, kazanç ve sıralamadan düşer; aktif kiralamalardaki kitaplar yeniden kiralanabilir olur.</p>
         <div class="grid grid-cols-2 gap-2.5 pt-1">
           <button type="button" data-reset-all="${u.id}" class="py-2.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 transition">Tümünü Sıfırla</button>
           <button type="submit" class="py-2.5 rounded-xl text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 transition">Seçilenleri Sıfırla</button>
@@ -3031,6 +3140,8 @@
     if (!isOfferActive(o)) return { ok: false, reason: 'Bu teklifin süresi doldu.' };
     const bs = offerBooks(o);
     if (!bs.length || bs.length < o.items.length) return { ok: false, reason: 'Paketteki kitaplardan biri artık kitaplıkta yok.' };
+    const notRentable = bs.find((b) => !isRentableStatus(b) || !hasPrice(b));
+    if (notRentable) return { ok: false, reason: `"${notRentable.title}" şu an kiralanamaz (${statusView(notRentable).label}).` };
     const rented = bs.find((b) => isBookRented(b) || isBookLocked(b));
     if (rented) return { ok: false, reason: `"${rented.title}" şu an kirada.` };
     if (user.balance < o.price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(o.price - user.balance)} eksik.` };
@@ -3141,7 +3252,7 @@
             </div>
             <div class="text-right shrink-0">
               <p class="text-[11px] text-slate-400">${formatMoney(b.price)}</p>
-              <p class="text-[10px] font-semibold ${rented ? 'text-amber-600' : 'text-emerald-600'}">${rented ? 'Kiralı' : 'Müsait'}</p>
+              <p class="mt-0.5">${statusChipHTML(b, now.getTime())}</p>
             </div>
             <span class="text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
           </button>
@@ -3243,7 +3354,7 @@
         offerId: o.id, purchaseId, offerPrice: o.price,
         rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
       });
-      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
+      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     });
     batch.update(col('users').doc(u.id), { balance: round2(u.balance - o.price), lastTx: purchaseId, lastTxType: 'package' });
 
@@ -3365,21 +3476,33 @@
         ${field('Kitap Adı', `<input name="title" id="bf-title" required maxlength="80" ${b ? '' : 'autofocus'} value="${b ? escapeHTML(b.title) : ''}" class="${INPUT_CLS}" placeholder="Örn. Gece Yolcusu IV" />`)}
         <div class="grid grid-cols-2 gap-3">
           ${field('Türü', `<select name="type" id="bf-type" class="${INPUT_CLS}">${typeOptions}</select>`)}
-          ${field('Kiralama Fiyatı (₺)', `<input name="price" type="number" min="0.01" step="0.01" required value="${b ? b.price : ''}" class="${INPUT_CLS}" placeholder="25" />`)}
+          ${field('Durum', `<select name="status" id="bf-status" class="${INPUT_CLS}">${Object.entries(BOOK_STATUSES).map(([k, s]) =>
+            `<option value="${k}" ${bookStatus(b || {}) === k ? 'selected' : ''}>${s.label}</option>`).join('')}</select>`)}
+        </div>
+        <p id="bf-status-hint" class="text-[10px] text-slate-400 -mt-1.5">${BOOK_STATUSES[bookStatus(b || {})].desc}</p>
+        <div id="bf-special-wrap" class="${isSpecialType(selType) ? '' : 'hidden'} p-3 rounded-2xl bg-rose-50/50 border border-rose-100 space-y-2">
+          <p class="text-[11px] font-semibold text-rose-600">🔒 Özel kitap · yalnızca belirli dönemde okunabilir</p>
+          ${field('Dönem', `<input name="period" maxlength="80" value="${escapeHTML(b?.period || '')}" class="${INPUT_CLS}" placeholder='Örn. Sadece yağmurlu günlerde' />`,
+            'Kitapta "Bu kitap özel kitaptır ve sadece … okunabilir" olarak görünür. Kiralanınca otomatik Kira dışı olur.')}
         </div>
         <div class="grid grid-cols-2 gap-3">
-          ${field('Sayfa Sayısı', `<input name="pages" type="number" min="1" step="1" required value="${b ? b.pages : ''}" class="${INPUT_CLS}" placeholder="200" />`)}
-          ${field('Kira Süresi (gün)', `<input name="rentalDays" type="number" min="1" max="90" step="1" required value="${b ? b.rentalDays : DEFAULT_RENTAL_DAYS}" class="${INPUT_CLS}" />`)}
+          ${field('Kiralama Fiyatı (₺)', `<input name="price" type="number" min="0.01" step="0.01" value="${hasPrice(b) ? b.price : ''}" class="${INPUT_CLS}" placeholder="25" />`)}
+          ${field('Sayfa Sayısı', `<input name="pages" type="number" min="1" step="1" value="${b?.pages ?? ''}" class="${INPUT_CLS}" placeholder="200" />`)}
         </div>
-        ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${b ? escapeHTML(b.place) : ''}" class="${INPUT_CLS}" placeholder="Örn. Ankara – Çankaya" />`)}
         <div class="grid grid-cols-2 gap-3">
-          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" required max="${today}" value="${b && isDateKey(b.releaseDate) ? b.releaseDate : today}" class="${INPUT_CLS}" />`,
+          ${field('Kira Süresi (gün)', `<input name="rentalDays" type="number" min="1" max="90" step="1" value="${b ? (b.rentalDays ?? '') : DEFAULT_RENTAL_DAYS}" class="${INPUT_CLS}" />`)}
+          ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${escapeHTML(b?.place || '')}" class="${INPUT_CLS}" placeholder="Örn. Ankara – Çankaya" />`)}
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" value="${b ? (isDateKey(b.releaseDate) ? b.releaseDate : '') : today}" class="${INPUT_CLS}" />`,
             `Çıkış yılı buradan alınır · son ${NEW_BOOK_DISCOUNT.days} gündeyse %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi`)}
           <div id="bf-series-wrap" class="${getType(selType)?.inDeals ? '' : 'hidden'}">
             ${field('Seri No', `<input name="seriesNo" id="bf-series" type="number" min="1" step="1" inputmode="numeric" value="${b?.seriesNo ?? (b ? '' : nextSeriesNo())}" class="${INPUT_CLS}" placeholder="Kaçıncı seri?" />`,
               'Günün İndirimleri bu sıraya göre döner (1-2-3, 4-5-6…)')}
           </div>
         </div>
+        ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Kitap hakkında kısa bilgi (isteğe bağlı)">${escapeHTML(b?.description || '')}</textarea>`)}
+        <p class="text-[10px] text-slate-400 -mt-1.5">Planlanıyor / Yakında durumunda yalnızca ad ve tür zorunludur; diğer bilgiler boş kalabilir.</p>
         <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : currentUser().name)}</b></p>
         ${formFooter(b ? 'Değişiklikleri Kaydet' : `${icon('plus', 'w-3.5 h-3.5')}Kitabı Ekle`)}
       </form>`);
@@ -3394,8 +3517,11 @@
       cover: state.bookDraftCover
     }, 'md');
     $('#removeBookCover')?.classList.toggle('hidden', !state.bookDraftCover);
-    // Seri No yalnızca indirim döngüsüne giren türlerde
+    // Seri No yalnızca indirim döngüsüne giren türlerde; Dönem yalnızca özel türlerde
     $('#bf-series-wrap')?.classList.toggle('hidden', !getType($('#bf-type')?.value)?.inDeals);
+    $('#bf-special-wrap')?.classList.toggle('hidden', !isSpecialType($('#bf-type')?.value));
+    const st = $('#bf-status')?.value;
+    if (st && $('#bf-status-hint')) $('#bf-status-hint').textContent = BOOK_STATUSES[st]?.desc || '';
   }
 
   /* Sıradaki seri numarası (en büyük + 1) */
@@ -3407,45 +3533,75 @@
     const title = fd.title.trim();
     const type = getType(fd.type) ? fd.type : defaultTypeId();
     if (!type) return toast('Önce en az bir kitap türü tanımlayın.', 'error');
-    const price = round2(parseFloat(fd.price));
-    const pages = parseInt(fd.pages, 10);
-    const rentalDays = parseInt(fd.rentalDays, 10);
     if (!title) return toast('Kitap adı zorunlu.', 'error');
-    if (!(price > 0)) return toast('Geçerli bir fiyat girin.', 'error');
-    if (!(pages > 0)) return toast('Geçerli bir sayfa sayısı girin.', 'error');
-    if (!(rentalDays > 0)) return toast('Geçerli bir kira süresi girin.', 'error');
-    if (!isDateKey(fd.releaseDate)) return toast('Çıkış tarihini kontrol edin.', 'error');
+    const status = BOOK_STATUSES[fd.status] ? fd.status : 'kiralik';
+    const draft = ['planlaniyor', 'yakinda'].includes(status); // Planlanıyor / Yakında: bilgiler eksik olabilir
+    const pos = (v, int = false) => { const n = int ? parseInt(v, 10) : round2(parseFloat(v)); return n > 0 ? n : null; };
+    const price = pos(fd.price);
+    const pages = pos(fd.pages, true);
+    const rentalDays = pos(fd.rentalDays, true);
+    const releaseDate = isDateKey(fd.releaseDate) ? fd.releaseDate : null;
+    if (!draft) {
+      if (!price) return toast('Geçerli bir fiyat girin.', 'error');
+      if (!pages) return toast('Geçerli bir sayfa sayısı girin.', 'error');
+      if (!rentalDays) return toast('Geçerli bir kira süresi girin.', 'error');
+      if (!releaseDate) return toast('Çıkış tarihini girin.', 'error');
+      if (releaseDate > localDateKey()) return toast('Çıkış tarihi ileri bir gün olamaz (henüz çıkmadıysa durumu Yakında yapın).', 'error');
+    }
 
-    // Seri No: indirim türlerinde zorunlu ve benzersiz; diğer türlerde tutulmaz
+    // Seri No: indirim türlerinde zorunlu ve benzersiz (taslakta isteğe bağlı); diğer türlerde tutulmaz
     let seriesNo = null;
     if (getType(type)?.inDeals) {
-      seriesNo = parseInt(fd.seriesNo, 10);
-      if (!(seriesNo >= 1)) return toast('Kaçıncı seri olduğunu (Seri No) girin.', 'error');
-      const clash = books.find((x) => x.seriesNo === seriesNo && String(x.id) !== String(editId) && getType(x.type)?.inDeals);
+      seriesNo = pos(fd.seriesNo, true);
+      if (!seriesNo && !draft) return toast('Kaçıncı seri olduğunu (Seri No) girin.', 'error');
+      const clash = seriesNo && books.find((x) => x.seriesNo === seriesNo && String(x.id) !== String(editId) && getType(x.type)?.inDeals);
       if (clash) return toast(`Seri #${seriesNo} zaten "${clash.title}" kitabında.`, 'error');
     }
 
-    const data = { title, type, seriesNo, pages, rentalDays, place: fd.place.trim(), releaseDate: fd.releaseDate, cover: state.bookDraftCover || '' };
+    const special = isSpecialType(type);
+    const data = {
+      title, type, status, special, seriesNo, price, pages, rentalDays, releaseDate,
+      place: (fd.place || '').trim(),
+      period: special ? (fd.period || '').trim() : '',
+      description: (fd.description || '').trim(),
+      cover: state.bookDraftCover || ''
+    };
 
     if (editId) {
       const b = getBook(editId);
       if (!b) return;
       // Buradan yapılan fiyat değişikliği Fiyat Logu'na ve fiyat geçmişine YAZILMAZ
       // (loglu değişim yalnızca Fiyat Logu sayfasındaki "Fiyat Güncelle" ile yapılır)
-      data.price = price;
-      // Çıkış tarihi değiştiyse yeni kitap indirimi yeniden hesaplanır
-      if (fd.releaseDate !== b.releaseDate) data.newDiscountUntil = newDiscountUntilFor(fd.releaseDate);
+      const batch = db.batch();
+      let extra = '';
+      if (draft) {
+        data.newDiscountUntil = null;
+      } else if (isDraftBook(b)) {
+        // Planlanıyor/Yakında → yayında: döngüye sonraki turda girer; son 7 günde çıktıysa duyuru + indirim
+        data.addedAt = isoAt(Date.now());
+        data.newDiscountUntil = newDiscountUntilFor(releaseDate);
+        if (data.newDiscountUntil) {
+          batch.set(col('announcements').doc(), newBookAnnouncement({ ...b, ...data }));
+          extra = ' · Duyurular\'a haber düştü 📣';
+        }
+      } else if (releaseDate !== b.releaseDate) {
+        // Çıkış tarihi değiştiyse yeni kitap indirimi yeniden hesaplanır
+        data.newDiscountUntil = newDiscountUntilFor(releaseDate);
+      }
+      batch.update(bookRef(b.id), data);
       closeModal();
-      run(bookRef(b.id).update(data), `"${title}" güncellendi.`);
+      run(batch.commit(), `"${title}" güncellendi · ${BOOK_STATUSES[status].label}${extra}.`);
       return;
     }
 
-    const { book, done } = addBook({ ...data, price });
-    state.bookTab = 'all';
+    const { book, done } = addBook(data);
+    if (state.bookTab !== type) state.bookTab = type;
     closeModal();
-    run(done, book.newDiscountUntil
-      ? `"${book.title}" eklendi · Duyurular'a haber düştü 📣 · ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim`
-      : `"${book.title}" eklendi · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıkmadığı için duyuru ve yeni kitap indirimi yok`);
+    run(done, draft
+      ? `"${book.title}" ${BOOK_STATUSES[status].label} olarak eklendi.`
+      : book.newDiscountUntil
+        ? `"${book.title}" eklendi · Duyurular'a haber düştü 📣 · ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim`
+        : `"${book.title}" eklendi · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıkmadığı için duyuru ve yeni kitap indirimi yok`);
   }
 
   /* --- Hızlı fiyat güncelleme (Fiyat Logu sayfası) --- */
@@ -3584,7 +3740,7 @@
       onConfirm: () => {
         const { removed, done } = removeRental(id);
         closeModal();
-        run(done, removed.length > 1 ? `Paket kiralaması silindi · ${removed.length} kitap müsait.` : `Kiralama silindi · "${b?.title || 'Kitap'}" müsait.`, 'info');
+        run(done, removed.length > 1 ? `Paket kiralaması silindi · ${removed.length} kitap boşa çıktı.` : `Kiralama silindi · "${b?.title || 'Kitap'}" boşa çıktı.`, 'info');
       }
     });
   }
@@ -3734,7 +3890,8 @@
     if (editId && !o) return toast('Bu teklifin süresi doldu ve silindi.', 'info');
     state.offerDraftCovers = o ? [0, 1, 2].map((i) => o.items[i]?.cover || '') : ['', '', ''];
     const defaultEnd = localDateKey(new Date(Date.now() + 14 * DAY_MS));
-    const sorted = [...books].sort((a, b) => a.id - b.id);
+    // Planlanıyor / Yakında (fiyatı olmayabilir) kitaplar pakete eklenemez
+    const sorted = books.filter((b) => !isDraftBook(b) && hasPrice(b)).sort((a, b) => a.id - b.id);
 
     const slot = (i) => {
       const selId = o?.items[i]?.bookId || '';
@@ -4441,8 +4598,9 @@
       const t = e.target;
       if (t.matches('[data-cover-input]')) return handleCoverInput(t);
       if (t.matches('[data-role-user]')) return setRole(t.dataset.roleUser, t.value);
+      if (t.matches('[data-quick-status]')) return setBookStatus(t.dataset.quickStatus, t.value);
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
-      if (t.id === 'bf-type') return updateBookFormPreview();
+      if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
       if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview();
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
