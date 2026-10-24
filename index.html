@@ -442,6 +442,12 @@
     </div>
   </div>
 
+  <!-- Kapak büyütme (tam görünüm) · tıklayınca veya ESC ile kapanır -->
+  <div id="coverLightbox" class="fixed inset-0 z-[60] hidden bg-slate-900/85 backdrop-blur-sm items-center justify-center p-4 sm:p-8 cursor-zoom-out" role="dialog" aria-modal="true" aria-label="Kapak görseli">
+    <img id="coverLightboxImg" alt="" class="max-w-full max-h-full object-contain rounded-xl shadow-2xl bg-white" />
+    <button type="button" aria-label="Kapat" class="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/90 text-slate-600 hover:bg-white flex items-center justify-center shadow-soft">✕</button>
+  </div>
+
   <!-- Toast bildirim alanı -->
   <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 items-end pointer-events-none"></div>
 
@@ -2113,7 +2119,10 @@
           <button type="button" data-modal-close aria-label="Kapat" class="w-9 h-9 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>
         </div>
         <div class="flex gap-4 sm:gap-5 ${backOfferId ? 'pt-6 sm:pt-0' : ''}">
-          ${coverHTML(b, 'lg')}
+          ${b.cover ? `<button type="button" data-zoom-cover title="Kapağı büyüt" aria-label="Kapağı büyüt" class="relative shrink-0 self-start cursor-zoom-in rounded-2xl focus:outline-none focus:ring-2 focus:ring-brand-300 group">
+              ${coverHTML(b, 'lg')}
+              <span class="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 shadow-soft text-slate-600 text-xs flex items-center justify-center group-hover:scale-110 transition">🔍</span>
+            </button>` : coverHTML(b, 'lg')}
           <div class="min-w-0 flex-1 pt-1 pr-2 sm:pr-24">
             <div class="flex items-center gap-1.5 flex-wrap">
               ${typeChip(b.type)}
@@ -3444,6 +3453,22 @@
     setTimeout(() => { if (!state.modalOpen) $('#modalRoot').classList.add('hidden'); }, 200);
   }
 
+  /* Kapak büyütme: görsel kırpılmadan, ekrana sığacak en büyük boyutta */
+  function openCoverLightbox(img) {
+    if (!img?.src) return;
+    const box = $('#coverLightbox');
+    $('#coverLightboxImg').src = img.src;
+    $('#coverLightboxImg').alt = img.alt;
+    box.classList.remove('hidden');
+    box.classList.add('flex');
+  }
+  function closeCoverLightbox() {
+    const box = $('#coverLightbox');
+    box.classList.add('hidden');
+    box.classList.remove('flex');
+    $('#coverLightboxImg').removeAttribute('src');
+  }
+
   const closeBtn = () =>
     `<button type="button" data-modal-close aria-label="Kapat" class="w-9 h-9 rounded-full bg-slate-50 text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition shrink-0">${icon('close', 'w-4 h-4 pointer-events-none')}</button>`;
 
@@ -4601,6 +4626,8 @@
 
       const el = (sel) => t.closest(sel);
       let m;
+      if ((m = el('#coverLightbox')))          return closeCoverLightbox();
+      if ((m = el('[data-zoom-cover]')))       return openCoverLightbox(m.querySelector('img'));
       if ((m = el('[data-modal-close]')))      return closeModal();
       if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
       if ((m = el('[data-sign-out]')))         return signOut();
@@ -4690,6 +4717,7 @@
 
     // Klavye: ESC kapatır, Enter/Space div-butonları açar
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('#coverLightbox').classList.contains('hidden')) return closeCoverLightbox();
       if (e.key === 'Escape') { closeModal(); toggleProfile(false); toggleMobileMenu(false); }
       const card = e.target.closest?.('div[data-open-ann]');
       if (card && (e.key === 'Enter' || e.key === ' ') && e.target === card) {
