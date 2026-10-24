@@ -366,12 +366,16 @@ service cloud.firestore {
     // Talep yalnızca kiralandığı gün açılabilir: Türkiye saatiyle gece 00:00'a kadar (kural denetler).
     match /refunds/{rentalId} {
       allow read: if isAdmin() || (signedIn() && resource.data.userId == uid());
-      allow create: if canRent() && validRefund(request.resource.data, get(path('rentals', rentalId)).data);
+      allow create: if canRent() && validRefund(request.resource.data, get(path('rentals', rentalId)).data)
+        // 👑 sınırlı (döneme özel) kitaplar iade edilemez
+        && !limitedBook(get(path('books', string(request.resource.data.bookId))).data);
       allow update: if isAdmin()
         || (signedIn() && resource.data.userId == uid() && resource.data.status != 'pending'
           && changedKeys().hasOnly(['userSeenAt']) && request.resource.data.userSeenAt is string);
       allow delete: if isAdmin();
 
+      // Kitaptaki bayrak (eski kayıtlarda 'ozel' türü) · books → isSpecialBook ile aynı mantık
+      function limitedBook(b) { return b.get('special', b.get('type', '') == 'ozel') == true; }
       function validRefund(f, r) {
         return f.keys().hasOnly(['userId', 'rentalId', 'bookId', 'amount', 'reason', 'createdAt', 'status', 'decidedAt', 'decidedBy', 'adminNote', 'userSeenAt'])
           && f.userId == uid() && f.rentalId == rentalId

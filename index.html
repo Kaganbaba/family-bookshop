@@ -1010,17 +1010,39 @@
   function coverHTML(book, size = 'md', overrideCover = '') {
     const b = book || { title: '?', type: '' };
     const src = overrideCover || b.cover;
+    let cover;
     if (src) {
-      return `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="${COVER_SIZES[size]} object-cover shadow-soft shrink-0 bg-slate-100" />`;
-    }
-    const grad = getType(b.type) ? typeStyle(b.type).grad : 'from-brand-400 to-brand-600';
-    const letters = initials(String(b.title).replace(/[^\p{L}\p{N}\s]/gu, '') || b.title);
-    return `
+      cover = `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="${COVER_SIZES[size]} object-cover shadow-soft shrink-0 bg-slate-100" />`;
+    } else {
+      const grad = getType(b.type) ? typeStyle(b.type).grad : 'from-brand-400 to-brand-600';
+      const letters = initials(String(b.title).replace(/[^\p{L}\p{N}\s]/gu, '') || b.title);
+      cover = `
       <div class="${COVER_SIZES[size]} shrink-0 bg-gradient-to-br ${grad} text-white font-bold shadow-soft flex items-center justify-center relative overflow-hidden">
         <span class="absolute left-1.5 top-0 bottom-0 w-px bg-white/30"></span>
         <span class="absolute -right-3 -bottom-3 w-10 h-10 rounded-full bg-white/10"></span>
         <span class="drop-shadow-sm">${escapeHTML(letters)}</span>
       </div>`;
+    }
+    // SINIRLI / VIP işareti yalnızca "döneme özel" türdeki kitaplarda
+    return book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
+  }
+
+  /* Özel kitap kapağı: altta "SINIRLI" şeridi + köşede VIP tacı (en küçük boyutta yalnızca taç) */
+  const SPECIAL_BADGE = {
+    xs:   { strip: '',                       round: 'rounded-b-md',  crown: 'w-3.5 h-3.5 text-[7px] -top-1 -right-1' },
+    sm:   { strip: 'text-[6px] py-px',       round: 'rounded-b-lg',  crown: 'w-4 h-4 text-[8px] -top-1.5 -right-1.5' },
+    md:   { strip: 'text-[8px] py-0.5',      round: 'rounded-b-xl',  crown: 'w-5 h-5 text-[10px] -top-1.5 -right-1.5' },
+    lg:   { strip: 'text-[10px] py-1',       round: 'rounded-b-2xl', crown: 'w-7 h-7 text-sm -top-2 -right-2' },
+    fill: { strip: 'text-[10px] py-1',       round: 'rounded-b-xl',  crown: 'w-7 h-7 text-sm top-1.5 right-1.5' }
+  };
+  function specialCoverHTML(cover, size) {
+    const s = SPECIAL_BADGE[size] || SPECIAL_BADGE.md;
+    return `
+      <span class="${size === 'fill' ? 'relative block w-full h-full' : 'relative inline-flex shrink-0 align-top'}" title="Sınırlı · özel kitap">
+        ${cover}
+        ${s.strip ? `<span class="pointer-events-none absolute inset-x-0 bottom-0 z-[1] ${s.round} ${s.strip} text-center font-extrabold tracking-[.18em] leading-none text-white bg-gradient-to-r from-rose-500 via-fuchsia-500 to-amber-400 shadow-soft">SINIRLI</span>` : ''}
+        <span class="pointer-events-none absolute z-[2] ${s.crown} rounded-full bg-gradient-to-br from-amber-200 to-amber-500 ring-2 ring-white shadow-soft flex items-center justify-center leading-none" aria-label="VIP">👑</span>
+      </span>`;
   }
 
   function avatarHTML(user, cls = 'w-5 h-5 text-[9px]') {
@@ -2969,7 +2991,9 @@
             ${info('Yazar', escapeHTML(authorName(b)), 'pencil')}
           </div>
         </div>
-        ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`, 'books')}
+        <button type="button" data-book-rentals="${b.id}" class="w-full text-left rounded-xl hover:ring-2 hover:ring-brand-100 transition">
+          ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı${bookRentCount(b.id) ? ' · kimler kiraladı →' : ''}`, 'books')}
+        </button>
 
         <div id="ratingBox">${ratingBoxHTML(b)}</div>
 
@@ -2979,6 +3003,56 @@
             <span class="text-[10px] text-slate-400">${logs.length > PRICE_LOG_PREVIEW ? `son ${PRICE_LOG_PREVIEW} / ` : ''}${logs.length} kayıt${admin && logs.length ? ' · silmek için 🗑' : ''}</span>
           </div>
           ${timeline}
+        </div>
+      </div>`, 'lg');
+  }
+
+  /* Kiralanma geçmişi: kimin, ne zaman, ne kadara kiraladığı · 10'arlı sayfa, en yeni üstte */
+  function openBookRentalsModal(bookId, page = 1) {
+    const b = getBook(bookId);
+    if (!b) return;
+    const all = rentals.filter((r) => r.bookId === b.id).sort((x, y) => new Date(y.rentedAt) - new Date(x.rentedAt));
+    const pages = Math.max(1, Math.ceil(all.length / ANN_PER_PAGE));
+    page = Math.min(Math.max(1, page), pages);
+    const list = all.slice((page - 1) * ANN_PER_PAGE, page * ANN_PER_PAGE);
+    const nowMs = Date.now();
+    const how = (r) => (r.couponId ? couponRentalLabel(r)
+      : r.offerId ? `🎁 Özel teklif paketi (${formatMoney(r.offerPrice)})`
+      : r.discount > 0 ? `%${r.discount} ${discountSourceLabel(r.discountSource)}` : 'İndirimsiz');
+    const pageBtn = (p, label, disabled = false, active = false) => `
+      <button type="button" data-book-rentals="${b.id}" data-rpage="${p}" ${disabled ? 'disabled' : ''}
+        class="min-w-[2rem] h-8 px-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed
+          ${active ? 'bg-brand-600 text-white shadow-soft' : 'bg-white border border-slate-200 text-slate-600 hover:text-brand-600'}">${label}</button>`;
+    openModal(`
+      ${modalHeader(`Kiralanma Geçmişi · ${escapeHTML(b.title)}`, `${all.length} kez kiralandı`, 'books')}
+      <div class="p-5 space-y-3">
+        ${list.length ? `<ul class="divide-y divide-slate-100 rounded-2xl border border-slate-100 overflow-hidden">${list.map((r) => {
+          const usr = getUser(r.userId);
+          const active = isActiveRental(r, nowMs);
+          return `
+            <li class="flex items-center gap-3 px-3 py-2.5 bg-white">
+              ${usr ? avatarHTML(usr, 'w-8 h-8 text-[11px]') : '<span class="w-8 h-8 rounded-full bg-slate-200 shrink-0"></span>'}
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(usr?.name || 'Silinmiş kullanıcı')}</p>
+                <p class="text-[10px] text-slate-400 truncate">${formatLongDate(r.rentedAt)} · Saat ${formatTime(r.rentedAt)} · ${how(r)}</p>
+              </div>
+              <div class="text-right shrink-0">
+                <p class="text-xs font-bold ${r.price > 0 ? 'text-slate-800' : 'text-emerald-600'}">${r.price > 0 ? formatMoney(r.price) : 'Bedava'}</p>
+                ${r.listPrice > r.price ? `<p class="text-[10px] text-slate-400 line-through">${formatMoney(r.listPrice)}</p>` : ''}
+              </div>
+              <span class="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}">${active ? 'Aktif' : endedLabel(r)}</span>
+            </li>`;
+        }).join('')}</ul>` : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitap henüz kiralanmadı.</p>'}
+        ${pages > 1 ? `
+          <div class="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+            ${pageBtn(page - 1, '‹ Daha yeni', page <= 1)}
+            ${Array.from({ length: pages }, (_, i) => pageBtn(i + 1, i + 1, false, i + 1 === page)).join('')}
+            ${pageBtn(page + 1, 'Daha eski ›', page >= pages)}
+          </div>
+          <p class="text-center text-[10px] text-slate-400">Sayfa ${page}/${pages}</p>` : ''}
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button type="button" data-open-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('back', 'w-3.5 h-3.5')}Kitaba dön</button>
+          <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
         </div>
       </div>`, 'lg');
   }
@@ -4246,23 +4320,51 @@
     // Süreli kuponlar en başta, özel görünümle (en yakın bitiş önce); diğerleri türe göre gruplu
     const timed = items.filter((s) => s.endsMs).sort((a, b) => a.endsMs - b.endsMs);
     const regular = items.filter((s) => !s.endsMs);
-    const shopCard = (s, isTimed = false) => {
-      const type = couponTypeOf(s);
+    const adminBtns = (s, tone) => (admin ? `<div class="absolute top-2 right-2 z-[2] flex gap-1">
+        <button type="button" data-edit-shop-coupon="${s.id}" title="Düzenle" aria-label="Kuponu düzenle"
+          class="w-7 h-7 rounded-full ${tone} hover:bg-white hover:text-brand-600 flex items-center justify-center transition">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
+        <button type="button" data-delete-shop-coupon="${s.id}" title="Mağazadan kaldır" aria-label="Mağazadan kaldır"
+          class="w-7 h-7 rounded-full ${tone} hover:bg-white hover:text-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>
+      </div>` : '');
+    const buyBtn = (s, cls) => {
       const enough = pts.available >= s.cost;
-      const ok = rentOk && enough;
-      const card = `
-        <div class="relative bg-white ${isTimed ? 'rounded-[14px]' : 'rounded-2xl shadow-soft'} overflow-hidden flex flex-col h-full">
-          ${isTimed ? `<span class="absolute top-2 left-2 z-[3] text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>` : ''}
+      return `<button type="button" data-buy-coupon="${s.id}" ${rentOk && enough ? '' : 'disabled'} class="${BTN_PRIMARY} ${cls}">
+        ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(s.cost - pts.available))} eksik`}</button>`;
+    };
+    /* Süreli kupon: yatay bilet · solda renkli kupon kısmı, sağda puan / kalan süre / al */
+    const timedCard = (s) => {
+      const type = couponTypeOf(s);
+      return `
+        <div class="relative flex bg-white rounded-2xl shadow-soft overflow-hidden ring-2 ring-amber-300/70">
+          <div class="relative w-36 sm:w-40 shrink-0 bg-gradient-to-br ${COUPON_TONES[type]} text-white px-3.5 py-3 flex flex-col justify-center border-r-2 border-dashed border-white/70">
+            <span class="absolute inset-0 offer-pattern opacity-50"></span>
+            <span class="relative self-start text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>
+            <p class="relative text-[9px] font-bold tracking-[.18em] opacity-90 mt-2">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
+            <p class="relative ${type === 'bogo' ? 'text-xl' : 'text-3xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
+            ${s.name ? `<p class="relative text-[10px] font-semibold mt-1 truncate">${escapeHTML(s.name)}</p>` : ''}
+          </div>
+          <div class="relative flex-1 min-w-0 p-3 flex flex-col gap-1.5 ${admin ? 'pr-20' : ''}">
+            ${adminBtns(s, 'bg-slate-100 text-slate-500')}
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-sm font-bold text-amber-600">⭐ ${formatPoints(s.cost)}</span>
+              <span class="text-[10px] text-slate-400">· ${COUPON_DAYS} gün geçerli</span>
+            </div>
+            ${type === 'bogo' ? `<p class="text-[10px] text-slate-500 leading-snug">${bogoText(s)}.</p>` : ''}
+            <p class="text-[11px] font-extrabold text-rose-600 tabular-nums">⏳ ${formatRemaining(s.endsMs - now)}
+              <span class="font-medium text-rose-400"> · son ${formatDate(new Date(s.endsMs).toISOString(), true)}</span></p>
+            ${buyBtn(s, '!py-2 mt-auto self-start px-5')}
+          </div>
+        </div>`;
+    };
+    const shopCard = (s) => {
+      const type = couponTypeOf(s);
+      return `
+        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col h-full">
           <div class="relative px-4 pt-4 pb-5 bg-gradient-to-br ${COUPON_TONES[type]} text-white">
             <span class="absolute inset-0 offer-pattern opacity-60"></span>
-            ${admin ? `<div class="absolute top-2 right-2 z-[2] flex gap-1">
-              <button type="button" data-edit-shop-coupon="${s.id}" title="Düzenle" aria-label="Kuponu düzenle"
-                class="w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-brand-600 flex items-center justify-center transition">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
-              <button type="button" data-delete-shop-coupon="${s.id}" title="Mağazadan kaldır" aria-label="Mağazadan kaldır"
-                class="w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>
-            </div>` : ''}
-            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''} ${isTimed ? 'mt-4' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
-            <p class="relative ${type === 'bogo' ? 'text-2xl' : isTimed ? 'text-3xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
+            ${adminBtns(s, 'bg-white/20')}
+            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
+            <p class="relative ${type === 'bogo' ? 'text-2xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
             ${s.name ? `<p class="relative text-[11px] font-semibold mt-1.5 truncate">${escapeHTML(s.name)}</p>` : ''}
             <span class="absolute -bottom-2 left-0 right-0 h-4 bg-[radial-gradient(circle_at_8px_0,transparent_7px,#fff_7.5px)] bg-[length:16px_16px] bg-repeat-x"></span>
           </div>
@@ -4272,28 +4374,22 @@
               <span class="text-[10px] text-slate-400">${COUPON_DAYS} gün geçerli</span>
             </div>
             ${type === 'bogo' ? `<p class="text-[10px] text-slate-500 leading-snug">${bogoText(s)}.</p>` : ''}
-            ${s.endsMs ? `<div class="rounded-xl bg-rose-50 px-2.5 py-1.5">
-                <p class="text-[11px] font-extrabold text-rose-600 tabular-nums">⏳ ${formatRemaining(s.endsMs - now)}</p>
-                <p class="text-[9px] text-rose-400">Mağazada son: ${formatDate(new Date(s.endsMs).toISOString(), true)}</p>
-              </div>` : ''}
-            <button type="button" data-buy-coupon="${s.id}" ${ok ? '' : 'disabled'} class="${BTN_PRIMARY} w-full !py-2.5 mt-auto">
-              ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(s.cost - pts.available))} eksik`}
-            </button>
+            ${buyBtn(s, 'w-full !py-2.5 mt-auto')}
           </div>
         </div>`;
-      // Süreli: altın çerçeve + hafif parıltı
-      return isTimed ? `<div class="vitrine-rim vitrine-sheen rounded-2xl p-[2px] shadow-soft-lg">${card}</div>` : card;
     };
-    const grid = (list, isTimed) => `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${list.map((s) => shopCard(s, isTimed)).join('')}</div>`;
-    // Süreli bölüm içeriği kadar geniş (tek kupon varken sayfa boyu yayılmaz) · kartlar sabit genişlikte
+    const grid = (list) => `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${list.map(shopCard).join('')}</div>`;
+    // Süreli kuponlar en üstte: yatay bilet kartları (koyu zemin yok)
     const timedHTML = timed.length ? `
-      <div class="vitrine-bg relative overflow-hidden rounded-3xl p-3 sm:p-4 mb-5 shadow-soft-lg w-fit max-w-full">
-        <div class="vitrine-dots absolute inset-0 pointer-events-none"></div>
-        <div class="relative flex items-center justify-between gap-4 mb-3">
-          <h3 class="vitrine-gold text-sm font-extrabold italic" style="font-family:'Playfair Display',Georgia,serif">⏳ Süreli Kuponlar</h3>
-          <span class="text-[10px] text-indigo-200/80">Kısa süreliğine · kaçırma!</span>
+      <div class="mb-5">
+        <div class="flex items-center gap-2 mb-2.5 px-1">
+          <span class="text-sm">⏳</span>
+          <h3 class="text-xs font-bold text-slate-700">Süreli Kuponlar</h3>
+          <span class="text-[10px] font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">kısa süreliğine</span>
+          <span class="flex-1 h-px bg-slate-200"></span>
+          <span class="text-[10px] text-slate-400">${timed.length} kupon</span>
         </div>
-        <div class="relative flex flex-wrap gap-3">${timed.map((s) => `<div class="w-[12.5rem]">${shopCard(s, true)}</div>`).join('')}</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${timed.map(timedCard).join('')}</div>
       </div>` : '';
     const groupsHTML = Object.entries(COUPON_TYPES).map(([k, t]) => {
       const list = regular.filter((s) => couponTypeOf(s) === k);
@@ -4305,7 +4401,7 @@
             <span class="flex-1 h-px bg-slate-200"></span>
             <span class="text-[10px] text-slate-400">${list.length} kupon</span>
           </div>
-          ${grid(list, false)}
+          ${grid(list)}
         </div>` : '';
     }).join('');
 
@@ -5422,7 +5518,11 @@
             <span class="w-2.5 h-2.5 rounded-full shrink-0 ${typeStyle(t.id).dot}"></span>
             <input name="label" required maxlength="24" value="${escapeHTML(t.label)}" aria-label="Tür adı" class="${INPUT_CLS} !py-1.5 flex-1 min-w-0" />
             <select name="palette" aria-label="Renk" class="${INPUT_CLS} !py-1.5 !w-24 shrink-0">${paletteOptions(t.palette)}</select>
-            <span class="text-[10px] text-slate-400 whitespace-nowrap shrink-0" title="${t.inDeals ? 'Günün indirimi döngüsüne girer' : 'Günün indirimi döngüsüne girmez'}">${count} kitap${t.inDeals ? '' : ' · indirimsiz'}${isSpecialType(t.id) ? ' · 🔒 özel' : ''}</span>
+            <span class="text-[10px] text-slate-400 whitespace-nowrap shrink-0" title="${t.inDeals ? 'Günün indirimi döngüsüne girer' : 'Günün indirimi döngüsüne girmez'}">${count} kitap${t.inDeals ? '' : ' · indirimsiz'}</span>
+            <label class="flex items-center gap-1 text-[10px] font-semibold whitespace-nowrap shrink-0 cursor-pointer ${isSpecialType(t.id) ? 'text-rose-500' : 'text-slate-400'}"
+              title="Döneme özel: dönem alanı, kiralanınca otomatik Kira dışı, kapakta 👑 SINIRLI işareti, iade edilemez">
+              <input type="checkbox" name="special" ${isSpecialType(t.id) ? 'checked' : ''} class="rounded border-slate-300 text-rose-500" /> 🔒 Döneme özel
+            </label>
             <div class="flex gap-1 shrink-0 ml-auto">
               <button type="submit" title="Kaydet" class="${BTN_ICON} text-slate-400 hover:text-emerald-600 hover:bg-emerald-50">${icon('check', 'w-3.5 h-3.5')}</button>
               <button type="button" data-delete-type="${t.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>
@@ -5447,11 +5547,11 @@
           </label>
           <label class="flex items-center gap-2 text-[11px] text-slate-500">
             <input type="checkbox" name="special" class="rounded border-slate-300 text-rose-500" />
-            🔒 Döneme özel tür (Dönem alanı, kiralanınca otomatik Kira dışı)
+            🔒 Döneme özel tür (Dönem alanı, kiralanınca otomatik Kira dışı, kapakta 👑 SINIRLI, iade edilemez)
           </label>
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Türü Ekle</button>
         </form>
-        <p class="text-[10px] text-slate-400 leading-relaxed">İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Ad, renk ve "Döneme özel" ayarını değiştirip ✓ ile kaydet. İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
       </div>`);
   }
 
@@ -5464,8 +5564,17 @@
     const palette = TYPE_PALETTES[fd.palette] ? fd.palette : 'slate';
     let done;
     if (editId) {
-      if (!getType(editId)) return;
-      done = col('bookTypes').doc(editId).update({ label, palette });
+      const t = getType(editId);
+      if (!t) return;
+      const special = fd.special === 'on';
+      const batch = db.batch();
+      batch.update(col('bookTypes').doc(editId), { label, palette, special });
+      // "Döneme özel" değişince bu türdeki kitapların bayrağı da eşitlenir (kural kiralamada kitaptaki bayrağa bakar)
+      if (special !== isSpecialType(editId)) {
+        books.filter((b) => b.type === editId && (b.special === true) !== special)
+          .forEach((b) => batch.update(bookRef(b.id), { special }));
+      }
+      done = batch.commit();
     } else {
       done = addBookType({ label, palette, inDeals: fd.inDeals === 'on', special: fd.special === 'on' });
     }
@@ -6189,7 +6298,7 @@
 
   /* ==========================================================
      17.06) İADE · kiralandığı gün (gece 00:00'a kadar) açıklamayla talep → Admin onaylar / reddeder
-     • Yalnızca indirimsiz tekli kiralama (indirimli, kuponlu, özel teklif/paket iade edilemez).
+     • Yalnızca indirimsiz tekli kiralama (indirimli, kuponlu, özel teklif/paket ve 👑 sınırlı kitap iade edilemez).
      • Onay: ödenen tutar bakiyeye döner, kiralama kaydı silinir (istatistikler ve o kitaba oyu da gider),
        kitap boşa çıkar. Talep belgesi kayıt olarak kalır (belge adı = kiralama → kiralama başına tek talep).
      ========================================================== */
@@ -6201,6 +6310,7 @@
     if (!isActiveRental(r, now.getTime()) || r.cancelledAt) return 'Bu kiralama artık aktif değil.';
     if (r.purchaseId || r.offerId) return 'Özel teklifle alınan kitaplar iade edilemez.';
     if (r.couponId || r.discountSource || r.discount > 0) return 'İndirimle alınan kitaplar iade edilemez.';
+    if (isSpecialBook(getBook(r.bookId))) return '👑 Sınırlı (döneme özel) kitaplar iade edilemez.';
     if (!sameLocalDay(r.rentedAt, now)) return 'İade yalnızca kiralandığı gün (gece 00:00\'a kadar) yapılabilir.';
     return '';
   }
@@ -6712,6 +6822,7 @@
       if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
       if ((m = el('[data-filter-clear]')))     { const p = m.dataset.filterClear; state[`${p}Kind`] = 'none'; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if ((m = el('[data-all-logs]')))         return openBookPriceLogsModal(m.dataset.allLogs, m.dataset.backOffer || '');
+      if ((m = el('[data-book-rentals]')))     return m.disabled ? null : openBookRentalsModal(m.dataset.bookRentals, Number(m.dataset.rpage) || 1);
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
       if ((m = el('[data-ann-tab]')))          { state.annTab = m.dataset.annTab; return renderCurrentPage(); }
