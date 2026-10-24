@@ -113,7 +113,24 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, delete: if isAdmin();
       // Kontrolcü her şeyi; kullanıcı yalnızca boştaki kitabı kendi yeni kiralamasıyla kilitler
-      allow update: if isAdmin() || isLock();
+      // ya da tarihi gelmiş planlı fiyat değişimini (Fiyat Logu) uygular
+      allow update: if isAdmin() || isLock() || isScheduledPrice();
+
+      // Planlı fiyat: logdaki yeni fiyat, logun geçerlilik anı geldiyse ve kitabın son
+      // geçerli fiyat anından daha yeniyse uygulanır (eski log yeni fiyatı ezemez)
+      function isScheduledPrice() {
+        let after = request.resource.data;
+        let log = get(path('priceLogs', after.appliedLog)).data;
+        return signedIn()
+          && changedKeys().hasOnly(['price', 'priceEffectiveAt', 'appliedLog'])
+          && after.appliedLog is string
+          && log.bookId == resource.data.id
+          && log.get('scheduled', false) == true
+          && log.effectiveAt <= request.time
+          && after.price == log.newPrice
+          && after.priceEffectiveAt == log.effectiveAt
+          && (resource.data.get('priceEffectiveAt', null) == null || log.effectiveAt > resource.data.priceEffectiveAt);
+      }
 
       // Özel kitap: kayıttaki bayrak ya da eski kayıtlarda 'ozel' türü
       function isSpecialBook() { return resource.data.get('special', resource.data.get('type', '') == 'ozel') == true; }
@@ -258,6 +275,25 @@ service cloud.firestore {
         && string(request.resource.data.bookId) == bookId
         // yalnızca Kiralık durumdaki kitap (durumu olmayan eski kayıt = Kiralık)
         && get(path('books', bookId)).data.get('status', 'kiralik') == 'kiralik';
+    }
+
+    // Geçmiş İndirimler · { bookId, source (deal|new|custom|offer), rate, startAt, endAt, label, recordedAt }
+    // Görüldükçe herhangi bir kullanıcı yazar (belge adı belirleyici → bir kez); değiştirilemez,
+    // yalnızca Kontrolcü siler (kitap silinince).
+    match /discountHistory/{historyId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && validHistory(request.resource.data);
+      allow delete: if isAdmin();
+
+      function validHistory(h) {
+        return h.keys().hasOnly(['bookId', 'source', 'rate', 'startAt', 'endAt', 'label', 'recordedAt'])
+          && h.bookId is int
+          && h.source in ['deal', 'new', 'custom', 'offer']
+          && h.rate is int && h.rate >= 1 && h.rate <= 100
+          && h.label is string && h.label.size() <= 100
+          && h.startAt is string
+          && exists(path('books', string(h.bookId)));
+      }
     }
 
     // Hediyelerim kupon mağazası (Kontrolcü ekler/düzenler/siler) · { type, value, free, name, cost, endsAt|null, createdAt, createdBy }
