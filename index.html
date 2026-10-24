@@ -4119,12 +4119,16 @@
 
     const items = couponShop.filter((s) => isShopActive(s, now))
       .sort((a, b) => a.cost - b.cost || new Date(b.createdAt) - new Date(a.createdAt));
-    const shop = items.map((s) => {
+    // Süreli kuponlar en başta, özel görünümle (en yakın bitiş önce); diğerleri türe göre gruplu
+    const timed = items.filter((s) => s.endsMs).sort((a, b) => a.endsMs - b.endsMs);
+    const regular = items.filter((s) => !s.endsMs);
+    const shopCard = (s, isTimed = false) => {
       const type = couponTypeOf(s);
       const enough = pts.available >= s.cost;
       const ok = rentOk && enough;
-      return `
-        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col">
+      const card = `
+        <div class="relative bg-white ${isTimed ? 'rounded-[14px]' : 'rounded-2xl shadow-soft'} overflow-hidden flex flex-col h-full">
+          ${isTimed ? `<span class="absolute top-2 left-2 z-[3] text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>` : ''}
           <div class="relative px-4 pt-4 pb-5 bg-gradient-to-br ${COUPON_TONES[type]} text-white">
             <span class="absolute inset-0 offer-pattern opacity-60"></span>
             ${admin ? `<div class="absolute top-2 right-2 z-[2] flex gap-1">
@@ -4133,7 +4137,7 @@
               <button type="button" data-delete-shop-coupon="${s.id}" title="Mağazadan kaldır" aria-label="Mağazadan kaldır"
                 class="w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>
             </div>` : ''}
-            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
+            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''} ${isTimed ? 'mt-4' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
             <p class="relative ${type === 'bogo' ? 'text-2xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
             ${s.name ? `<p class="relative text-[11px] font-semibold mt-1.5 truncate">${escapeHTML(s.name)}</p>` : ''}
             <span class="absolute -bottom-2 left-0 right-0 h-4 bg-[radial-gradient(circle_at_8px_0,transparent_7px,#fff_7.5px)] bg-[length:16px_16px] bg-repeat-x"></span>
@@ -4144,12 +4148,40 @@
               <span class="text-[10px] text-slate-400">${COUPON_DAYS} gün geçerli</span>
             </div>
             ${type === 'bogo' ? `<p class="text-[10px] text-slate-500 leading-snug">${bogoText(s)}.</p>` : ''}
-            ${s.endsMs ? `<p class="text-[10px] font-semibold text-rose-500">⏳ Mağazada son: ${formatDate(new Date(s.endsMs).toISOString(), true)}</p>` : ''}
+            ${s.endsMs ? `<div class="rounded-xl bg-rose-50 px-2.5 py-1.5">
+                <p class="text-[11px] font-extrabold text-rose-600 tabular-nums">⏳ ${formatRemaining(s.endsMs - now)}</p>
+                <p class="text-[9px] text-rose-400">Mağazada son: ${formatDate(new Date(s.endsMs).toISOString(), true)}</p>
+              </div>` : ''}
             <button type="button" data-buy-coupon="${s.id}" ${ok ? '' : 'disabled'} class="${BTN_PRIMARY} w-full !py-2.5 mt-auto">
               ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(s.cost - pts.available))} eksik`}
             </button>
           </div>
         </div>`;
+      // Süreli: altın çerçeve + hafif parıltı
+      return isTimed ? `<div class="vitrine-rim vitrine-sheen rounded-2xl p-[2px] shadow-soft-lg">${card}</div>` : card;
+    };
+    const grid = (list, isTimed) => `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${list.map((s) => shopCard(s, isTimed)).join('')}</div>`;
+    const timedHTML = timed.length ? `
+      <div class="vitrine-bg relative overflow-hidden rounded-3xl p-4 sm:p-5 mb-5 shadow-soft-lg">
+        <div class="vitrine-dots absolute inset-0 pointer-events-none"></div>
+        <div class="relative flex items-center justify-between gap-2 mb-4">
+          <h3 class="vitrine-gold text-base font-extrabold italic" style="font-family:'Playfair Display',Georgia,serif">⏳ Süreli Kuponlar</h3>
+          <span class="text-[10px] text-indigo-200/80">Kısa süreliğine mağazada · kaçırma!</span>
+        </div>
+        <div class="relative">${grid(timed, true)}</div>
+      </div>` : '';
+    const groupsHTML = Object.entries(COUPON_TYPES).map(([k, t]) => {
+      const list = regular.filter((s) => couponTypeOf(s) === k);
+      return list.length ? `
+        <div class="mb-5">
+          <div class="flex items-center gap-2 mb-2.5 px-1">
+            <span class="w-2.5 h-2.5 rounded-full bg-gradient-to-br ${COUPON_TONES[k]}"></span>
+            <h3 class="text-xs font-bold text-slate-700">${t.label}</h3>
+            <span class="flex-1 h-px bg-slate-200"></span>
+            <span class="text-[10px] text-slate-400">${list.length} kupon</span>
+          </div>
+          ${grid(list, false)}
+        </div>` : '';
     }).join('');
 
     $('#giftsContent').innerHTML = `
@@ -4172,7 +4204,7 @@
       <div class="mb-6">
         <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası</h2>
         ${items.length
-          ? `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${shop}</div>`
+          ? timedHTML + groupsHTML
           : emptyState(admin ? 'Mağazada kupon yok · sağ üstteki <b>Kupon Ekle</b> ile yüzde, ₺ ya da Al-Öde kuponu ekleyebilirsin.' : 'Mağazada şu an kupon yok. Yakında yeni kuponlar gelecek!')}
       </div>
 
