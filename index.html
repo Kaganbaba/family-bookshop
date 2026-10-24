@@ -190,7 +190,7 @@
 <body class="bg-gradient-to-b from-brand-50 via-white to-brand-50/60 min-h-screen flex flex-col font-sans text-slate-700 text-sm antialiased">
 
   <!-- ===================== AÇILIŞ / GİRİŞ EKRANI ===================== -->
-  <div id="authScreen" class="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-br from-brand-50 via-white to-brand-100/60">
+  <div id="authScreen" class="fixed inset-0 z-[70] overflow-y-auto bg-white bg-gradient-to-br from-brand-50 via-white to-brand-100/60">
     <div class="min-h-full flex items-center justify-center px-4 py-10">
       <div class="w-full max-w-sm">
         <div class="flex flex-col items-center text-center mb-6">
@@ -752,9 +752,12 @@
     rentTab: 'all',        // Kiralananlar: tür filtresi
     rentStatus: 'all',     // Kiralananlar: 'all' | 'active' | 'past'
     annTab: 'news',
-    newsCat: 'all',         // Haberler: tür filtresi (Duyuru · İndirim · Bilgilendirme · Etkinlik)
-    updQuery: '',
-    updYear: 'all',
+    newsFilterKind: 'none', // Haberler: filtre türü (category | year)
+    newsFilterValue: 'all',
+    newsPage: 1,            // Haberler: sayfa (1 = en yeni)
+    updFilterKind: 'none',  // Güncellemeler: filtre türü (year | series)
+    updFilterValue: 'all',
+    updPage: 1,             // Güncellemeler: sayfa (1 = en yeni)
     freshAnnIds: new Set(), // bu ziyarette "Yeni" olarak işaretlenecek duyurular
     bookDraftCover: '',     // kitap formundaki kapak (base64)
     offerDraftCovers: ['', '', ''],
@@ -1277,11 +1280,12 @@
        kendisi seçebilir (settings/deals.pinDay/pinGroup/pinAt). Sonraki günler
        o gruptan devam eder; 10:00'daki otomatik geçiş her zaman çalışır.
      ========================================================== */
+  /* Seri numarasına göre günün indirimi oranı: 1–5 %50 · 6–12 %40 · 13–15 %30 · 16–19 %25 · 20 ve sonrası %20 */
   const RATE_TIERS = [
     { max: 5,        rate: 50 },
-    { max: 10,       rate: 40 },
+    { max: 12,       rate: 40 },
     { max: 15,       rate: 30 },
-    { max: 20,       rate: 25 },
+    { max: 19,       rate: 25 },
     { max: Infinity, rate: 20 }
   ];
   /* Seri sırası: Admin'in girdiği "kaçıncı seri" numarası.
@@ -1364,8 +1368,9 @@
     const ids = list
       .slice(group * size, group * size + size)
       // silinmiş / bugün indirimden çıkarılmış / Kiralık olmayan (Kira dışı, Liste dışı) /
-      // Vitrin indirimindeki kitapları atla · sırası korunur, o gün yeri boş kalır
-      .filter((id) => getBook(id) && !removed.includes(id) && isRentableStatus(getBook(id)) && !customDiscountOf(getBook(id), now));
+      // Vitrin indirimindeki / yeni kitap indirimi süren kitapları atla · sırası korunur, o gün yeri boş kalır
+      .filter((id) => getBook(id) && !removed.includes(id) && isRentableStatus(getBook(id))
+        && !customDiscountOf(getBook(id), now) && !isNewBook(getBook(id), now));
 
     return {
       ids, group, list,
@@ -3060,6 +3065,9 @@
   /* Filtre değişince ilgili görünümü yeniden çiz (pencere içindeyse pencereyi, değilse sayfayı) */
   function rerenderFilter(prefix) {
     if (prefix === 'bookLogFilter' && state.bookLogsOpen) return openBookPriceLogsModal(state.bookLogsOpen.bookId, state.bookLogsOpen.backOfferId);
+    // Filtre değişince sayfalı listeler ilk (en yeni) sayfaya döner
+    if (prefix === 'newsFilter') state.newsPage = 1;
+    if (prefix === 'updFilter') state.updPage = 1;
     renderCurrentPage();
   }
 
@@ -3945,20 +3953,12 @@
     const all = sortedNews();
     if (!all.length) { $('#annBody').innerHTML = emptyState('Henüz haber yok.'); return; }
 
-    // Türe göre ayrım: Tümü · Duyuru · İndirim · Bilgilendirme · Etkinlik
-    if (state.newsCat !== 'all' && !NEWS_CATEGORIES[state.newsCat]) state.newsCat = 'all';
-    const countOf = (c) => (c === 'all' ? all.length : all.filter((a) => newsCategoryOf(a) === c).length);
-    const catBar = `
-      <div class="flex gap-1.5 mb-4 overflow-x-auto soft-scroll pb-1">
-        ${['all', ...Object.keys(NEWS_CATEGORIES)].map((c) => {
-          const on = state.newsCat === c;
-          return `<button type="button" data-news-cat="${c}" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition
-            ${on ? 'bg-slate-800 text-white shadow-soft' : `${c === 'all' ? 'bg-white text-slate-600' : newsChipCls(c)} hover:shadow-soft`}">
-            ${c === 'all' ? 'Tümü' : c}<span class="text-[10px] px-1.5 rounded-full ${on ? 'bg-white/20' : 'bg-white/70'}">${countOf(c)}</span></button>`;
-        }).join('')}
-      </div>`;
-    const list = state.newsCat === 'all' ? all : all.filter((a) => newsCategoryOf(a) === state.newsCat);
-    if (!list.length) { $('#annBody').innerHTML = catBar + emptyState(`${state.newsCat} türünde haber yok.`); return; }
+    // Standart filtre: solda tür (Tür · Yıl), sağda değeri · 10'arlı sayfa (1. sayfa en yeni)
+    const f = kindValueFilter('newsFilter', NEWS_FILTERS, all);
+    const catBar = f.html;
+    const filtered = f.apply(all);
+    if (!filtered.length) { $('#annBody').innerHTML = catBar + emptyState('Bu filtreye uyan haber yok.'); return; }
+    const { items: list, page, pages } = annPage(filtered, 'newsPage');
 
     const admin = isAdmin();
     // Liste görünümü: sabitlenenler en üstte, sonra gün gün (Bugün · Dün · tarih) gruplu satırlar
@@ -4012,41 +4012,78 @@
           <span class="text-[10px] text-slate-400">${items.length} haber</span>
         </div>
         <ul class="bg-white rounded-2xl shadow-soft divide-y divide-slate-100 overflow-hidden">${items.map(row).join('')}</ul>
-      </div>`).join('')}</div>`;
+      </div>`).join('')}</div>${annPagerHTML('newsPage', page, pages, filtered.length, 'haber')}`;
+  }
+
+  /* Haberler + Güncellemeler: filtreler (standart "solda tür, sağda değer") */
+  const annYearOf = (a) => String(a.year ?? new Date(a.createdAt).getFullYear());
+  const NEWS_FILTERS = {
+    category: {
+      label: '🏷️ Tür', allLabel: 'Tüm türler',
+      options: (list) => Object.keys(NEWS_CATEGORIES)
+        .map((c) => ({ value: c, label: c, count: list.filter((a) => newsCategoryOf(a) === c).length }))
+        .filter((o) => o.count),
+      match: (a, v) => newsCategoryOf(a) === v
+    },
+    year: {
+      label: '📅 Yıl', allLabel: 'Tüm yıllar',
+      options: (list) => distinctOptions(list, (a) => String(new Date(a.createdAt).getFullYear()), (x, y) => y[0].localeCompare(x[0])),
+      match: (a, v) => String(new Date(a.createdAt).getFullYear()) === v
+    }
+  };
+  const updateMajor = (a) => `v${String(a.version || '').replace(/^v/, '').split('.')[0] || '0'}.x`;
+  const UPDATE_FILTERS = {
+    year: {
+      label: '📅 Yıl', allLabel: 'Tüm yıllar',
+      options: (list) => distinctOptions(list, annYearOf, (x, y) => y[0].localeCompare(x[0])),
+      match: (a, v) => annYearOf(a) === v
+    },
+    series: {
+      label: '🔢 Sürüm', allLabel: 'Tüm sürümler',
+      options: (list) => distinctOptions(list, updateMajor, (x, y) => y[0].localeCompare(x[0], 'tr', { numeric: true })),
+      match: (a, v) => updateMajor(a) === v
+    }
+  };
+
+  /* Sayfalama: 10'arlı · 1. sayfa en yeni; sayfa sayısı küçülürse son sayfaya çekilir */
+  const ANN_PER_PAGE = 10;
+  function annPage(list, key) {
+    const pages = Math.max(1, Math.ceil(list.length / ANN_PER_PAGE));
+    const page = Math.min(Math.max(1, state[key] || 1), pages);
+    state[key] = page;
+    return { items: list.slice((page - 1) * ANN_PER_PAGE, page * ANN_PER_PAGE), page, pages };
+  }
+  function annPagerHTML(key, page, pages, total, unit) {
+    if (pages <= 1) return '';
+    const btn = (p, label, disabled = false, active = false) => `
+      <button type="button" data-ann-page="${key}:${p}" ${disabled ? 'disabled' : ''}
+        class="min-w-[2rem] h-8 px-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed
+          ${active ? 'bg-brand-600 text-white shadow-soft' : 'bg-white text-slate-600 shadow-soft hover:text-brand-600'}">${label}</button>`;
+    return `
+      <div class="flex flex-wrap items-center justify-center gap-1.5 mt-5">
+        ${btn(page - 1, '‹ Daha yeni', page <= 1)}
+        ${Array.from({ length: pages }, (_, i) => btn(i + 1, i + 1, false, i + 1 === page)).join('')}
+        ${btn(page + 1, 'Daha eski ›', page >= pages)}
+      </div>
+      <p class="text-center text-[10px] text-slate-400 mt-2">Sayfa ${page}/${pages} · toplam ${total} ${unit}</p>`;
   }
 
   function renderUpdatesTab() {
-    const years = [...new Set(announcements.filter((a) => a.type === 'update').map((a) => a.year))].sort((a, b) => b - a);
-    if (state.updYear !== 'all' && !years.includes(Number(state.updYear))) state.updYear = 'all';
-
-    $('#annBody').innerHTML = `
-      <div class="bg-white rounded-2xl shadow-soft p-3 flex flex-col sm:flex-row gap-2.5 mb-5">
-        <label class="relative flex-1">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300">${icon('search', 'w-4 h-4')}</span>
-          <input id="updQuery" type="text" value="${escapeHTML(state.updQuery)}" placeholder="Sürüme göre ara (örn. 1.1 veya v1.0.0)"
-            class="${INPUT_CLS} pl-9" />
-        </label>
-        <select id="updYearFilter" class="${INPUT_CLS} sm:w-40">
-          <option value="all">Tüm yıllar</option>
-          ${years.map((y) => `<option value="${y}" ${String(state.updYear) === String(y) ? 'selected' : ''}>${y}</option>`).join('')}
-        </select>
-      </div>
-      <div id="updList"></div>`;
-    renderUpdateList();
+    // Standart filtre: solda tür (Yıl · Sürüm), sağda değeri · 10'arlı sayfa (1. sayfa en yeni)
+    const all = sortedUpdates();
+    const f = kindValueFilter('updFilter', UPDATE_FILTERS, all);
+    $('#annBody').innerHTML = `${all.length ? f.html : ''}<div id="updList"></div>`;
+    renderUpdateList(f.apply(all), f.active);
   }
 
-  function renderUpdateList() {
-    const q = state.updQuery.trim().toLowerCase().replace(/^v/, '');
-    const list = sortedUpdates().filter((a) =>
-      (state.updYear === 'all' || String(a.year) === String(state.updYear)) &&
-      (!q || a.version.toLowerCase().replace(/^v/, '').startsWith(q)));
-
-    if (!list.length) { $('#updList').innerHTML = emptyState('Filtreye uyan sürüm notu bulunamadı.'); return; }
+  function renderUpdateList(filtered, filterActive) {
+    if (!filtered.length) { $('#updList').innerHTML = emptyState(filterActive ? 'Filtreye uyan sürüm notu bulunamadı.' : 'Henüz sürüm notu yok.'); return; }
+    const { items: list, page, pages } = annPage(filtered, 'updPage');
 
     const admin = isAdmin();
     const freshUpdate = newUpdateId();
     $('#updList').innerHTML = `
-      <p class="text-[11px] text-slate-400 mb-3 px-1">${list.length} sürüm notu</p>
+      <p class="text-[11px] text-slate-400 mb-3 px-1">${filtered.length} sürüm notu</p>
       <ol class="relative border-l-2 border-brand-100 ml-2 sm:ml-3 space-y-4">
         ${list.map((a, idx) => `
           <li class="relative pl-5 sm:pl-6">
@@ -4057,7 +4094,7 @@
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-xs font-bold text-white bg-gradient-to-r from-brand-500 to-brand-700 px-2.5 py-1 rounded-lg">${escapeHTML(a.version)}</span>
                   ${a.id === freshUpdate ? newUpdateBadge
-                    : idx === 0 && state.updYear === 'all' && !q ? '<span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Güncel</span>' : ''}
+                    : a.id === sortedUpdates()[0]?.id ? '<span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Güncel</span>' : ''}
                   <span class="text-[11px] text-slate-400">🕘 ${updateWhen(a)}</span>
                 </div>
                 ${admin ? `
@@ -4076,7 +4113,7 @@
               ${a.items.length > 3 ? `<p class="text-[11px] font-medium text-brand-600 mt-2">+${a.items.length - 3} yenilik daha</p>` : ''}
             </div>
           </li>`).join('')}
-      </ol>`;
+      </ol>${annPagerHTML('updPage', page, pages, filtered.length, 'sürüm notu')}`;
   }
 
   /* Geniş okuma modalı */
@@ -4225,7 +4262,7 @@
                 class="w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>
             </div>` : ''}
             <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''} ${isTimed ? 'mt-4' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
-            <p class="relative ${type === 'bogo' ? 'text-2xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
+            <p class="relative ${type === 'bogo' ? 'text-2xl' : isTimed ? 'text-3xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
             ${s.name ? `<p class="relative text-[11px] font-semibold mt-1.5 truncate">${escapeHTML(s.name)}</p>` : ''}
             <span class="absolute -bottom-2 left-0 right-0 h-4 bg-[radial-gradient(circle_at_8px_0,transparent_7px,#fff_7.5px)] bg-[length:16px_16px] bg-repeat-x"></span>
           </div>
@@ -4248,14 +4285,15 @@
       return isTimed ? `<div class="vitrine-rim vitrine-sheen rounded-2xl p-[2px] shadow-soft-lg">${card}</div>` : card;
     };
     const grid = (list, isTimed) => `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${list.map((s) => shopCard(s, isTimed)).join('')}</div>`;
+    // Süreli bölüm içeriği kadar geniş (tek kupon varken sayfa boyu yayılmaz) · kartlar sabit genişlikte
     const timedHTML = timed.length ? `
-      <div class="vitrine-bg relative overflow-hidden rounded-3xl p-4 sm:p-5 mb-5 shadow-soft-lg">
+      <div class="vitrine-bg relative overflow-hidden rounded-3xl p-3 sm:p-4 mb-5 shadow-soft-lg w-fit max-w-full">
         <div class="vitrine-dots absolute inset-0 pointer-events-none"></div>
-        <div class="relative flex items-center justify-between gap-2 mb-4">
-          <h3 class="vitrine-gold text-base font-extrabold italic" style="font-family:'Playfair Display',Georgia,serif">⏳ Süreli Kuponlar</h3>
-          <span class="text-[10px] text-indigo-200/80">Kısa süreliğine mağazada · kaçırma!</span>
+        <div class="relative flex items-center justify-between gap-4 mb-3">
+          <h3 class="vitrine-gold text-sm font-extrabold italic" style="font-family:'Playfair Display',Georgia,serif">⏳ Süreli Kuponlar</h3>
+          <span class="text-[10px] text-indigo-200/80">Kısa süreliğine · kaçırma!</span>
         </div>
-        <div class="relative">${grid(timed, true)}</div>
+        <div class="relative flex flex-wrap gap-3">${timed.map((s) => `<div class="w-[12.5rem]">${shopCard(s, true)}</div>`).join('')}</div>
       </div>` : '';
     const groupsHTML = Object.entries(COUPON_TYPES).map(([k, t]) => {
       const list = regular.filter((s) => couponTypeOf(s) === k);
@@ -5511,7 +5549,7 @@
       ${modalHeader('Haberleri Toplu Sil 🗑️', 'Tür ve zaman seç · sürüm notları (Güncellemeler) etkilenmez.', 'trash', 'bg-rose-50 text-rose-500')}
       <form data-form="bulkNews" class="p-5 space-y-3.5" autocomplete="off">
         ${field('Tür', `<select name="cat" id="bn-cat" class="${INPUT_CLS}">
-          ${cats.map((c) => `<option value="${c}" ${state.newsCat === c ? 'selected' : ''}>${c === 'all' ? 'Tümü (bütün türler)' : c}</option>`).join('')}
+          ${cats.map((c) => `<option value="${c}" ${(state.newsFilterKind === 'category' ? state.newsFilterValue : 'all') === c ? 'selected' : ''}>${c === 'all' ? 'Tümü (bütün türler)' : c}</option>`).join('')}
         </select>`)}
         <div class="grid grid-cols-2 gap-2">
           ${[['all', 'Tüm tarihler'], ['today', 'Sadece bugün']].map(([v, l], i) => `
@@ -6677,7 +6715,12 @@
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
       if ((m = el('[data-ann-tab]')))          { state.annTab = m.dataset.annTab; return renderCurrentPage(); }
-      if ((m = el('[data-news-cat]')))         { state.newsCat = m.dataset.newsCat; return renderCurrentPage(); }
+      if ((m = el('[data-ann-page]')))         {
+        const [key, p] = m.dataset.annPage.split(':');
+        state[key] = Number(p) || 1;
+        renderCurrentPage();
+        return $('#annBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       if ((m = el('[data-edit-update]')))      return openUpdateModal(m.dataset.editUpdate);
       if ((m = el('[data-delete-update]')))    return deleteUpdate(m.dataset.deleteUpdate);
       if ((m = el('[data-open-ann]')))         return openAnnouncementModal(m.dataset.openAnn);
@@ -6719,7 +6762,6 @@
     // Canlı form alanları ve filtreler
     document.addEventListener('input', (e) => {
       const t = e.target;
-      if (t.id === 'updQuery') { state.updQuery = t.value; renderUpdateList(); }
       if (t.id === 'bf-title') updateBookFormPreview();
       if (t.id === 'of-price') updateOfferCalc();
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
@@ -6739,7 +6781,6 @@
       if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
       if (t.id === 'bn-cat' || t.matches('[data-bn-scope]')) updateBulkNewsPreview();
-      if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
       if (t.matches('[data-filter-kind]')) { const p = t.dataset.filterKind; state[`${p}Kind`] = t.value; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if (t.matches('[data-filter-value]')) { const p = t.dataset.filterValue; state[`${p}Value`] = t.value; return rerenderFilter(p); }
       if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview(true);
