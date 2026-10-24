@@ -296,25 +296,6 @@ service cloud.firestore {
       function rentedBy(rent, bookId) { return rent.userId == uid() && rent.bookId == bookId; }
     }
 
-    // Geçmiş İndirimler · { bookId, source (deal|new|custom|offer), rate, startAt, endAt, label, recordedAt }
-    // Görüldükçe herhangi bir kullanıcı yazar (belge adı belirleyici → bir kez); değiştirilemez,
-    // yalnızca Kontrolcü siler (kitap silinince).
-    match /discountHistory/{historyId} {
-      allow read: if signedIn();
-      allow create: if signedIn() && validHistory(request.resource.data);
-      allow delete: if isAdmin();
-
-      function validHistory(h) {
-        return h.keys().hasOnly(['bookId', 'source', 'rate', 'startAt', 'endAt', 'label', 'recordedAt'])
-          && h.bookId is int
-          && h.source in ['deal', 'new', 'custom', 'offer']
-          && h.rate is int && h.rate >= 1 && h.rate <= 100
-          && h.label is string && h.label.size() <= 100
-          && h.startAt is string
-          && exists(path('books', string(h.bookId)));
-      }
-    }
-
     // Hediyelerim kupon mağazası (Kontrolcü ekler/düzenler/siler) · { type, value, free, name, cost, endsAt|null, createdAt, createdBy }
     // percent: %1–100 · amount: ₺ (0–10000] · bogo: value kitap (2–5), free tanesi bedava (1 … value-1, en ucuzlar)
     match /couponShop/{shopId} {

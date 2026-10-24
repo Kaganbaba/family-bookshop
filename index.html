@@ -542,7 +542,6 @@
   const offers = [];         // offers/{id}
   const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Admin seçer): { bookId, name, rate (1–100), endsAt, createdAt, createdBy }
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
-  const discountHistory = []; // discountHistory/{id} · kitabın geçmiş süreli indirimleri: { bookId, source, rate, startAt, endAt, label, recordedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
   const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
@@ -1484,102 +1483,6 @@
     if (before.length) return before[before.length - 1].newPrice;
     if (logs.length) return logs[0].oldPrice;
     return book.price;
-  }
-
-  /* Geçmiş İndirimler: kitabın süreli indirimleri (günün indirimi, yeni kitap, vitrin, özel teklif)
-     görüldükçe kalıcı kayda geçer. Belge adı belirleyici → aynı indirim bir kez yazılır; indirim
-     sonradan elle silinse de kayıt kalır. Fiyat logundaki kalıcı fiyat değişimleri buraya girmez.
-     Not: günün indirimi o gün uygulamayı açan biri olursa kaydedilir. */
-  const HISTORY_SOURCES = ['deal', 'new', 'custom', 'offer'];
-  /* Admin'in sildiği geçmiş kayıtları (settings/historyHidden.ids) yeniden yazılmaz */
-  const hiddenHistoryIds = () => new Set(appSettings.find((s) => s.id === 'historyHidden')?.ids || []);
-  function recordDiscountHistory(now = new Date()) {
-    if (!state.ready) return;
-    const have = new Set([...discountHistory.map((h) => h.id), ...hiddenHistoryIds()]);
-    const add = (id, rec) => {
-      if (have.has(id) || state.purgePending.has(`dh:${id}`) || !getBook(rec.bookId) || !(rec.rate > 0)) return;
-      state.purgePending.add(`dh:${id}`);
-      col('discountHistory').doc(id).set({ ...rec, recordedAt: isoAt(Date.now()) })
-        .catch(() => {}); // başka bir istemci önce yazdıysa kural reddeder; sorun değil
-    };
-    const day = discountDayNumber(now);
-    getDailyDeals(now).ids.forEach((id) => add(`deal_${day}_${id}`, {
-      bookId: id, source: 'deal', rate: getDiscountRate(id), label: '',
-      startAt: discountDayStart(day).toISOString(), endAt: discountDayStart(day + 1).toISOString()
-    }));
-    books.filter((b) => isNewBook(b, now)).forEach((b) => add(`new_${b.id}_${b.releaseDate || 'x'}`, {
-      bookId: b.id, source: 'new', rate: NEW_BOOK_DISCOUNT.rate, label: '',
-      startAt: isDateKey(b.releaseDate) ? dateFromKey(b.releaseDate).toISOString() : b.addedAt, endAt: new Date(newDiscountEnd(b)).toISOString()
-    }));
-    discounts.filter((d) => isVitrineActive(d, now)).forEach((d) => add(`custom_${d.bookId}_${new Date(d.createdAt).getTime()}`, {
-      bookId: d.bookId, source: 'custom', rate: d.rate, label: d.name || '',
-      startAt: d.createdAt || isoAt(now.getTime()), endAt: d.endsMs ? new Date(d.endsMs).toISOString() : null
-    }));
-    offers.filter((o) => isOfferActive(o, now)).forEach((o) => {
-      const rate = offerRate(o);
-      o.items.forEach((it) => add(`offer_${o.id}_${it.bookId}_${rate}`, {
-        bookId: it.bookId, source: 'offer', rate, label: o.title || '',
-        startAt: o.createdAt || isoAt(now.getTime()), endAt: offerEnd(o).toISOString()
-      }));
-    });
-  }
-  const bookDiscountHistory = (bookId) => discountHistory
-    .filter((h) => h.bookId === Number(bookId) && HISTORY_SOURCES.includes(h.source))
-    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
-
-  /* Geçmiş İndirimler penceresi (kitap detayından) */
-  function openDiscountHistoryModal(bookId) {
-    const b = getBook(bookId);
-    if (!b) return;
-    const list = bookDiscountHistory(b.id);
-    const tone = { deal: 'bg-rose-50 text-rose-600', new: 'bg-amber-50 text-amber-600', custom: 'bg-indigo-50 text-indigo-600', offer: 'bg-violet-50 text-violet-600' };
-    const admin = isAdmin();
-    openModal(`
-      ${modalHeader(`Geçmiş İndirimler · ${escapeHTML(b.title)}`, `${list.length} süreli indirim · fiyat logundaki kalıcı değişimler burada yer almaz.`, 'tag', 'bg-rose-50 text-rose-500')}
-      <div class="p-5 space-y-3">
-        ${admin && list.length ? `<div class="flex justify-end"><button type="button" data-delete-history="all" data-book="${b.id}"
-          class="text-[11px] font-semibold text-rose-500 hover:text-rose-600 flex items-center gap-1">${icon('trash', 'w-3.5 h-3.5')}Tümünü sil</button></div>` : ''}
-        ${list.length ? `<ol class="relative border-l-2 border-rose-100 ml-1.5 space-y-2.5">${list.map((h) => `
-          <li class="relative pl-5">
-            <span class="absolute -left-[7px] top-3 w-3 h-3 rounded-full bg-white border-2 border-rose-300"></span>
-            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50/80">
-              <span class="text-lg font-black text-rose-500 tabular-nums shrink-0 w-14 text-center">%${h.rate}</span>
-              <div class="flex-1 min-w-0">
-                <p class="flex items-center gap-1.5 flex-wrap">
-                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${tone[h.source]}">${discountSourceLabel(h.source)}</span>
-                  ${h.label ? `<span class="text-[11px] font-semibold text-slate-700 truncate">${escapeHTML(h.label)}</span>` : ''}
-                </p>
-                <p class="text-[10px] text-slate-400 mt-1">${formatLongDate(h.startAt)}${h.endAt && h.source !== 'deal' ? ` → ${formatLongDate(h.endAt)}` : ''}</p>
-              </div>
-              ${admin ? `<button type="button" data-delete-history="${h.id}" data-book="${b.id}" title="Bu kaydı sil" aria-label="Bu kaydı sil"
-                class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
-            </div>
-          </li>`).join('')}</ol>`
-          : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitap henüz süreli bir indirime girmedi.</p>'}
-        <div class="grid grid-cols-2 gap-2.5 pt-1">
-          <button type="button" data-open-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('back', 'w-3.5 h-3.5')}Kitaba dön</button>
-          <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
-        </div>
-      </div>`);
-  }
-
-  /* Admin: geçmiş indirim kaydını (ya da kitabın tümünü) sil · silinenler bir daha yazılmaz */
-  function deleteDiscountHistory(id, bookId) {
-    if (!requireAdmin()) return;
-    const b = getBook(bookId);
-    const list = id === 'all' ? bookDiscountHistory(bookId) : discountHistory.filter((h) => h.id === id);
-    if (!list.length) return;
-    openConfirm({
-      title: id === 'all' ? 'Tüm geçmiş indirimler silinsin mi?' : 'Kayıt silinsin mi?',
-      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabının ${list.length > 1 ? `<b>${list.length}</b> geçmiş indirim kaydı` : 'bu geçmiş indirim kaydı'} kalıcı olarak silinecek. Kitabın fiyatı ve şu anki indirimleri etkilenmez.`,
-      onConfirm: async () => {
-        const ids = list.map((h) => h.id);
-        const ops = ids.map((hid) => (bt) => bt.delete(col('discountHistory').doc(hid)));
-        ops.push((bt) => bt.set(col('settings').doc('historyHidden'), { ids: FieldValue.arrayUnion(...ids) }, { merge: true }));
-        await run(commitOps(ops), `${ids.length} geçmiş indirim kaydı silindi.`, 'info');
-        openDiscountHistoryModal(bookId);
-      }
-    });
   }
 
   /* Gelecek tarihli (planlanan) log: tarihi gelene kadar fiyatı değiştirmez; tarihi gelince
@@ -2930,12 +2833,7 @@
             ${info('Yazar', escapeHTML(authorName(b)), 'pencil')}
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-2.5">
-          ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`, 'books')}
-          <button type="button" data-discount-history="${b.id}" class="text-left rounded-xl hover:ring-2 hover:ring-rose-100 transition">
-            ${info('Geçmiş İndirimler', `${bookDiscountHistory(b.id).length} indirim · gör →`, 'tag')}
-          </button>
-        </div>
+        ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`, 'books')}
 
         <div id="ratingBox">${ratingBoxHTML(b)}</div>
 
@@ -3212,7 +3110,6 @@
         rs.forEach((r) => ops.push((bt) => bt.delete(col('rentals').doc(r.id))));
         logs.forEach((l) => ops.push((bt) => bt.delete(col('priceLogs').doc(l.id))));
         if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));
-        bookDiscountHistory(b.id).forEach((h) => ops.push((bt) => bt.delete(col('discountHistory').doc(h.id))));
         bookRatings(b.id).forEach((x) => ops.push((bt) => bt.delete(col('ratings').doc(x.id))));
         // Teklif paketinden çıkarılır; paket boşalırsa teklif silinir
         inOffers.forEach((o) => {
@@ -6149,8 +6046,8 @@
   function tick() {
     if (!state.ready) return;
     const now = new Date();
-    // Tarihi gelen planlı fiyat değişimleri (dakikada bir) · geçmiş indirim kayıtları
-    if (now.getSeconds() === 0) { applyDuePrices(now.getTime()); recordDiscountHistory(now); }
+    // Tarihi gelen planlı fiyat değişimleri (dakikada bir)
+    if (now.getSeconds() === 0) applyDuePrices(now.getTime());
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
     if (purgeExpiredOffers(now) && state.route === 'offers' && !state.modalOpen) renderCurrentPage();
     if (!['dashboard', 'rentals'].includes(state.route) || document.hidden) return;
@@ -6234,13 +6131,11 @@
       if ((m = el('[data-delete-shop-coupon]'))) return deleteShopCoupon(m.dataset.deleteShopCoupon);
       if ((m = el('[data-edit-shop-coupon]'))) return openShopCouponModal(m.dataset.editShopCoupon);
       if ((m = el('[data-use-bogo]')))         return openBogoModal(m.dataset.useBogo);
-      if ((m = el('[data-discount-history]'))) return openDiscountHistoryModal(m.dataset.discountHistory);
       if ((m = el('[data-bulk-news]')))        return openBulkNewsModal();
       if ((m = el('[data-rate-book]')))        return rateBook(m.dataset.rateBook, m.dataset.score);
       if ((m = el('[data-unrate-book]')))      return unrateBook(m.dataset.unrateBook);
       if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
       if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
-      if ((m = el('[data-delete-history]')))   return deleteDiscountHistory(m.dataset.deleteHistory, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
@@ -6371,7 +6266,6 @@
     ['offers', offers],
     ['discounts', discounts, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['ratings', ratings, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
-    ['discountHistory', discountHistory, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['couponShop', couponShop, null, (d) => ({ id: d.id, ...d.data(), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],
     ['settings', appSettings]
@@ -6387,7 +6281,6 @@
       renderQueued = false;
       if (!state.ready || !currentUser()) return;
       applyDuePrices();
-      recordDiscountHistory();
       renderProfile();
       renderCurrentPage();
     });
