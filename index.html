@@ -483,15 +483,19 @@
         <div>
           <h3 class="text-sm font-bold text-sky-400 mb-3">Geri Bildirim</h3>
           <form id="footerFeedback" autocomplete="off">
-            <input type="hidden" name="type" value="other" />
             <textarea name="message" rows="2" required minlength="3" maxlength="1000"
               class="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50"
               placeholder="Görüş, öneri veya şikayetinizi yazın..."></textarea>
             <div class="flex items-center gap-3 mt-2">
               <button type="submit" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 transition">Gönder</button>
-              <button type="button" data-open-feedback class="text-[11px] text-slate-400 hover:text-sky-400 transition">Gönderdiklerim ve cevaplar →</button>
+              <button type="button" data-open-feedback="list" class="text-[11px] text-slate-400 hover:text-sky-400 transition">Gönderdiklerim ve cevaplar →</button>
             </div>
           </form>
+          <!-- Adminler geri bildirim yazmaz: okur ve cevaplar -->
+          <div id="footerFeedbackAdmin" class="hidden">
+            <p class="text-xs text-slate-400 leading-relaxed">Adminler geri bildirim göndermez; üyelerin geri bildirimlerini okuyup cevaplar.</p>
+            <button type="button" data-open-feedback="list" class="mt-3 px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 transition">Geri bildirimleri gör →</button>
+          </div>
         </div>
         <!-- Hakkında -->
         <div>
@@ -724,6 +728,7 @@
     feedbackOpen: false,   // Geri Bildirim penceresi açık mı (canlı liste yenilemesi için)
     fbFilter: 'open',      // Admin: 'open' | 'answered' | 'all'
     fbFresh: null,         // pencere açılırken "yeni" olan geri bildirimler
+    fbListOnly: false,     // "Gönderdiklerim ve cevaplar": yazma kutusu olmadan yalnızca liste
     memberView: (() => { try { return localStorage.getItem('fb.memberView') === '1'; } catch { return false; } })(), // Admin: Üye Görünümü
     bookTab: 'all',
     bookFilterKind: 'none', // Kitaplar: filtre türü (place | year | status | rating)
@@ -840,17 +845,29 @@
   }
 
   /* Haber türleri (Duyurular → Haberler)
-     Duyuru: Admin'in genel yazısı · İndirim: indirim / özel teklif / yeni kitap indirimi
-     Bilgilendirme: kitap durumu değişti, kitap silindi · Etkinlik: kupon eklendi */
+     Duyuru: Admin'in genel yazısı · Yeni Kitap: yeni kitap eklendi / yayına girdi
+     İndirim: vitrin indirimi, özel teklif · Bilgilendirme: kitap durumu değişti, kitap silindi
+     Etkinlik: kupon eklendi */
   const NEWS_CATEGORIES = {
     'Duyuru':        'bg-brand-50 text-brand-600',
+    'Yeni Kitap':    'bg-emerald-50 text-emerald-600',
     'İndirim':       'bg-rose-50 text-rose-600',
     'Bilgilendirme': 'bg-sky-50 text-sky-600',
     'Etkinlik':      'bg-amber-50 text-amber-700'
   };
-  /* Eski türler yeni dörtlüye eşlenir */
-  const newsCategoryOf = (a) => ({ 'Yeni Kitap': 'İndirim', 'Kitap Durumu': 'Bilgilendirme' }[a?.category]
-    || (NEWS_CATEGORIES[a?.category] ? a.category : 'Duyuru'));
+  /* Liste satırındaki tür simgesi ve renk zemini */
+  const NEWS_ICONS = {
+    'Duyuru':        { emoji: '📣', bg: 'from-brand-100 to-brand-50' },
+    'Yeni Kitap':    { emoji: '📚', bg: 'from-emerald-100 to-emerald-50' },
+    'İndirim':       { emoji: '🏷️', bg: 'from-rose-100 to-rose-50' },
+    'Bilgilendirme': { emoji: 'ℹ️', bg: 'from-sky-100 to-sky-50' },
+    'Etkinlik':      { emoji: '🎉', bg: 'from-amber-100 to-amber-50' }
+  };
+  /* Eski türler güncel türlere eşlenir · bir dönem "İndirim" olarak kaydedilen yeni kitap haberleri → Yeni Kitap */
+  const newsCategoryOf = (a) => {
+    if (a?.category === 'İndirim' && /^Yeni kitap:/.test(a.title || '')) return 'Yeni Kitap';
+    return { 'Kitap Durumu': 'Bilgilendirme' }[a?.category] || (NEWS_CATEGORIES[a?.category] ? a.category : 'Duyuru');
+  };
   const newsChipCls = (c) => NEWS_CATEGORIES[c] || 'bg-slate-100 text-slate-600';
   /* Otomatik haberler yalnızca Admin işaretlerse atılır */
   const announceCheckHTML = (id, cat, checked = false) => `
@@ -1468,7 +1485,7 @@
   /* Haber robotunun duyuru belgesi */
   const newBookAnnouncement = (book) => ({
     type: 'news',
-    category: 'İndirim',
+    category: 'Yeni Kitap',
     title: `Yeni kitap: ${book.title}`,
     body: newBookNewsBody(book),
     bookId: book.id,
@@ -3932,33 +3949,58 @@
     if (!list.length) { $('#annBody').innerHTML = catBar + emptyState(`${state.newsCat} türünde haber yok.`); return; }
 
     const admin = isAdmin();
-    $('#annBody').innerHTML = catBar + `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${list.map((a) => {
+    // Liste görünümü: sabitlenenler en üstte, sonra gün gün (Bugün · Dün · tarih) gruplu satırlar
+    const row = (a) => {
+      const cat = newsCategoryOf(a);
       const book = a.bookId ? getBook(a.bookId) : null;
       const author = getUser(a.authorId);
+      const ic = NEWS_ICONS[cat] || NEWS_ICONS.Duyuru;
       return `
-        <div data-open-ann="${a.id}" role="button" tabindex="0"
-          class="relative cursor-pointer text-left bg-white rounded-2xl shadow-soft p-4 sm:p-5 flex gap-4 border border-transparent hover:border-brand-100 hover:shadow-soft-lg hover:-translate-y-0.5 transition duration-200 focus:outline-none focus:ring-2 focus:ring-brand-200">
+        <li data-open-ann="${a.id}" role="button" tabindex="0"
+          class="group flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 cursor-pointer hover:bg-brand-50/40 focus:bg-brand-50/60 focus:outline-none transition">
+          ${book ? coverHTML(book, 'sm')
+            : `<span class="w-10 h-10 rounded-xl bg-gradient-to-br ${ic.bg} flex items-center justify-center text-lg shrink-0">${ic.emoji}</span>`}
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${newsChipCls(cat)}">${escapeHTML(cat)}</span>
+              ${a.pinned ? '<span class="shrink-0 text-[10px]" title="Sabitlenmiş">📌</span>' : ''}
+              ${freshChip(a.id)}
+              <p class="text-sm font-semibold text-slate-800 truncate">${escapeHTML(a.title)}</p>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5 truncate">${escapeHTML(a.body.replace(/\s+/g, ' '))}</p>
+          </div>
+          <div class="hidden sm:flex items-center gap-1.5 shrink-0 text-[11px] text-slate-400">
+            ${author ? avatarHTML(author, 'w-5 h-5 text-[8px]') : ''}
+          </div>
+          <span class="shrink-0 text-[11px] font-medium text-slate-400 tabular-nums">${formatTime(a.createdAt)}</span>
           ${admin ? `
-            <div class="absolute top-2 right-2 flex gap-0.5">
+            <div class="shrink-0 flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition">
               <button type="button" data-edit-news="${a.id}" title="Düzenle" aria-label="Düzenle" class="${BTN_ICON} text-slate-300 hover:text-brand-600 hover:bg-brand-50">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
               <button type="button" data-delete-news="${a.id}" title="Sil" aria-label="Sil" class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>
             </div>` : ''}
-          ${book ? coverHTML(book, 'md') : `<span class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 flex items-center justify-center shrink-0">${icon('announcements', 'w-6 h-6')}</span>`}
-          <div class="flex-1 min-w-0 ${admin ? 'pr-14' : ''}">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${newsChipCls(newsCategoryOf(a))}">${escapeHTML(newsCategoryOf(a))}</span>
-              ${a.pinned ? '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">📌 Sabit</span>' : ''}
-              ${freshChip(a.id)}
-            </div>
-            <p class="text-sm font-semibold text-slate-800 mt-1.5 line-clamp-2">${escapeHTML(a.title)}</p>
-            <p class="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">${escapeHTML(a.body)}</p>
-            <div class="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-400">
-              ${author ? avatarHTML(author, 'w-4 h-4 text-[8px]') + escapeHTML(author.name) + ' ·' : ''}
-              <span>${relativeDay(a.createdAt)} · Saat ${formatTime(a.createdAt)}</span>
-            </div>
-          </div>
-        </div>`;
-    }).join('')}</div>`;
+          <span class="hidden sm:block text-slate-300 shrink-0">${icon('chevron', 'w-4 h-4')}</span>
+        </li>`;
+    };
+    const groups = new Map();
+    list.forEach((a) => {
+      const key = a.pinned ? 'pinned' : localDateKey(a.createdAt);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(a);
+    });
+    const groupTitle = (key) => {
+      if (key === 'pinned') return '📌 Sabitlenenler';
+      const rel = relativeDay(dateFromKey(key));
+      return rel === 'Bugün' || rel === 'Dün' ? `${rel} · ${formatLongDate(dateFromKey(key))}` : formatLongDate(dateFromKey(key));
+    };
+    $('#annBody').innerHTML = catBar + `<div class="space-y-5">${[...groups.entries()].map(([key, items]) => `
+      <div>
+        <div class="flex items-center gap-2.5 mb-2 px-1">
+          <span class="text-xs font-bold text-slate-700">${groupTitle(key)}</span>
+          <span class="flex-1 h-px bg-brand-100"></span>
+          <span class="text-[10px] text-slate-400">${items.length} haber</span>
+        </div>
+        <ul class="bg-white rounded-2xl shadow-soft divide-y divide-slate-100 overflow-hidden">${items.map(row).join('')}</ul>
+      </div>`).join('')}</div>`;
   }
 
   function renderUpdatesTab() {
@@ -4979,7 +5021,7 @@
         <p class="text-[10px] text-slate-400 -mt-1.5">Planlanıyor / Yakında durumunda yalnızca ad ve tür zorunludur; diğer bilgiler boş kalabilir. Kiralık olmayan kitaplarda çıkış tarihi boş kalabilir.</p>
         <label class="flex items-center gap-2 text-[11px] text-slate-600">
           <input type="checkbox" name="announce" class="rounded border-slate-300 text-brand-600" />
-          📣 Duyuruya at <span class="text-[10px] text-slate-400">(yeni kitap indirimi → İndirim · durum değişikliği → Bilgilendirme)</span>
+          📣 Duyuruya at <span class="text-[10px] text-slate-400">(yeni kitap → Yeni Kitap · durum değişikliği → Bilgilendirme)</span>
         </label>
         <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : currentUser().name)}</b></p>
         ${formFooter(b ? 'Değişiklikleri Kaydet' : `${icon('plus', 'w-3.5 h-3.5')}Kitabı Ekle`)}
@@ -5758,6 +5800,9 @@
     fbBadge.classList.toggle('hidden', !fbCount);
     fbBadge.classList.toggle('flex', !!fbCount);
     $('#fbDot').classList.toggle('hidden', !fbCount);
+    // Alt bilgideki geri bildirim kutusu yalnızca üyelerde (Admin, Üye Görünümü'nde de yazamaz)
+    $('#footerFeedback').classList.toggle('hidden', !canSendFeedback());
+    $('#footerFeedbackAdmin').classList.toggle('hidden', canSendFeedback());
     // Üye Görünümü şeridi yalnızca gerçek Admin'de ve mod açıkken
     const banner = $('#memberViewBanner');
     const showBanner = isRealAdmin() && state.memberView;
@@ -5938,11 +5983,8 @@
   /* ==========================================================
      17.05) GERİ BİLDİRİM · üye yazar, Admin okur ve cevaplar; üye cevabı görür
      ========================================================== */
-  const FEEDBACK_TYPES = {
-    idea:  { label: '💡 Öneri', chip: 'bg-amber-50 text-amber-700' },
-    bug:   { label: '🐞 Hata',  chip: 'bg-rose-50 text-rose-600' },
-    other: { label: '💬 Diğer', chip: 'bg-slate-100 text-slate-600' }
-  };
+  /* Geri bildirimi yalnızca üyeler yazar · Adminler (Üye Görünümü'nde de) yazamaz, okur ve cevaplar */
+  const canSendFeedback = () => !!currentUser() && !isRealAdmin();
   const isoMs = (iso) => (iso ? new Date(iso).getTime() : 0);
   const fbReplyUnread = (f) => !!f.lastReplyAt && isoMs(f.lastReplyAt) > isoMs(f.userSeenAt);
   /* Rozet: Admin → okunmamış geri bildirim · üye → cevabı okunmamış kendi geri bildirimi */
@@ -5950,37 +5992,35 @@
     ? feedbacks.filter((f) => !f.adminSeen).length
     : feedbacks.filter((f) => f.userId === state.currentUserId && fbReplyUnread(f)).length);
 
-  function openFeedbackModal() {
+  /* listOnly: "Gönderdiklerim ve cevaplar" → yalnızca gönderilenler ve cevaplar (yazma kutusu yok) */
+  function openFeedbackModal(listOnly = state.fbListOnly) {
     const admin = isAdmin();
     state.feedbackOpen = true;
+    state.fbListOnly = !!listOnly;
     // Pencere açıldığında "yeni" olanlar vurgulanır (görüldü işareti hemen yazılsa da vurgu kalır)
     state.fbFresh = new Set((admin ? feedbacks.filter((f) => !f.adminSeen)
       : feedbacks.filter((f) => f.userId === state.currentUserId && fbReplyUnread(f))).map((f) => f.id));
-    const compose = `
+    const compose = canSendFeedback() && !listOnly ? `
       <form data-form="sendFeedback" class="p-4 rounded-2xl bg-brand-50/40 border border-brand-100 space-y-3" autocomplete="off">
-        <div class="flex gap-1.5 flex-wrap">
-          ${Object.entries(FEEDBACK_TYPES).map(([k, t], i) => `
-            <label class="cursor-pointer">
-              <input type="radio" name="type" value="${k}" ${i === 0 ? 'checked' : ''} class="peer sr-only" />
-              <span class="inline-block px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white border border-brand-100 text-slate-600 peer-checked:bg-brand-600 peer-checked:text-white peer-checked:border-brand-600 transition">${t.label}</span>
-            </label>`).join('')}
-        </div>
         <textarea name="message" id="fbMessage" rows="4" required minlength="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed"
-          placeholder="Öneri, hata ya da aklına gelen her şeyi yaz…"></textarea>
+          placeholder="Görüş, öneri veya şikayetini yaz…"></textarea>
         <button type="submit" class="${BTN_PRIMARY} w-full !py-2.5">Gönder</button>
-      </form>`;
+      </form>`
+      : !canSendFeedback() && !admin
+        ? '<p class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2.5">👁️ Üye görünümündesin · Adminler geri bildirim gönderemez.</p>' : '';
     const filterBtn = (k, label, n) => `
       <button type="button" data-fb-filter="${k}" class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${state.fbFilter === k ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}">
         ${label} <span class="opacity-70">${n}</span></button>`;
     const count = (s) => feedbacks.filter((f) => (f.status || 'open') === s).length;
     openModal(`
-      ${modalHeader(admin ? 'Geri Bildirimler 💬' : 'Geri Bildirim 💬',
-        admin ? 'Üyelerin geri bildirimlerini oku ve cevapla.' : 'Öneri, hata ya da aklına gelen her şeyi yaz · Admin cevaplayınca burada görürsün.', 'announcements')}
+      ${modalHeader(admin ? 'Geri Bildirimler 💬' : listOnly ? 'Gönderdiklerim ve Cevaplar 💬' : 'Geri Bildirim 💬',
+        admin ? 'Üyelerin geri bildirimlerini oku ve cevapla.'
+          : listOnly ? 'Gönderdiğin geri bildirimler ve Admin\'in cevapları.' : 'Görüş, öneri ya da şikayetini yaz · Admin cevaplayınca burada görürsün.', 'announcements')}
       <div class="p-5 space-y-4">
         ${admin ? `<div class="flex gap-1.5 flex-wrap">
             ${filterBtn('open', '⏳ Bekleyen', count('open'))}${filterBtn('answered', '✓ Cevaplanan', count('answered'))}${filterBtn('all', 'Tümü', feedbacks.length)}
           </div>` : compose}
-        ${admin ? '' : '<p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Gönderdiklerin</p>'}
+        ${admin || listOnly ? '' : '<p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Gönderdiklerin</p>'}
         <div id="fbList"></div>
         <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
       </div>`, 'lg');
@@ -6000,14 +6040,12 @@
 
     const card = (f) => {
       const usr = getUser(f.userId);
-      const t = FEEDBACK_TYPES[f.type] || FEEDBACK_TYPES.other;
       const answered = (f.status || 'open') === 'answered';
       const fresh = state.fbFresh?.has(f.id);
       return `
         <li class="rounded-2xl border p-3.5 ${fresh ? 'border-brand-200 bg-brand-50/40' : 'border-slate-100 bg-white'}">
           <div class="flex items-center gap-2 flex-wrap">
             ${admin && usr ? `<span class="flex items-center gap-1.5 text-xs font-semibold text-slate-700">${avatarHTML(usr, 'w-5 h-5 text-[9px]')}${escapeHTML(usr.name)}</span>` : ''}
-            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${t.chip}">${t.label}</span>
             <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${answered ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">${answered ? '✓ Cevaplandı' : '⏳ Bekliyor'}</span>
             ${fresh ? '<span class="text-[9px] font-bold text-white bg-rose-500 px-1.5 py-px rounded-full">YENİ</span>' : ''}
             <span class="ml-auto text-[10px] text-slate-400">${relativeDay(f.createdAt)} · ${formatTime(f.createdAt)}</span>
@@ -6053,10 +6091,10 @@
     const u = currentUser();
     const message = (fd.message || '').trim();
     if (!u) return;
+    if (!canSendFeedback()) return toast('Adminler geri bildirim gönderemez.', 'info');
     if (message.length < 3) return toast('Biraz daha yazar mısın? (en az 3 karakter)', 'error');
-    const type = FEEDBACK_TYPES[fd.type] ? fd.type : 'other';
     run(col('feedback').add({
-      userId: u.id, type, message, createdAt: isoAt(Date.now()),
+      userId: u.id, message, createdAt: isoAt(Date.now()),
       status: 'open', replies: [], adminSeen: false, lastReplyAt: null, userSeenAt: null
     }), 'Geri bildirimin gönderildi, teşekkürler! 💬').then((ok) => {
       if (!ok) return;
@@ -6373,7 +6411,7 @@
       if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction, m.dataset.user);
       if ((m = t.closest('[data-set-role]')))        return setRole(m.dataset.user, m.dataset.setRole);
       if ((m = t.closest('[data-toggle-member-view]'))) return setMemberView(!state.memberView);
-      if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(); }
+      if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(m.dataset.openFeedback === 'list'); }
       if ((m = t.closest('[data-quick-amount]')))    { const i = $('#bmAmount'); if (i) { i.value = m.dataset.quickAmount; i.focus(); } return; }
       if ((m = t.closest('[data-panel-user]')))      { state.panelUser = state.panelUser === m.dataset.panelUser ? null : m.dataset.panelUser; return renderAdminPanel(); }
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
@@ -6390,7 +6428,7 @@
       if ((m = el('#coverLightbox')))          return closeCoverLightbox();
       if ((m = el('[data-zoom-cover]')))       return openCoverLightbox(m.querySelector('img'));
       if ((m = el('[data-exit-member-view]'))) return setMemberView(false);
-      if ((m = el('[data-open-feedback]')))    return openFeedbackModal();
+      if ((m = el('[data-open-feedback]')))    return openFeedbackModal(m.dataset.openFeedback === 'list');
       if ((m = el('[data-fb-filter]')))        { state.fbFilter = m.dataset.fbFilter; return openFeedbackModal(); }
       if ((m = el('[data-send-reply]')))       return sendFeedbackReply(m.dataset.sendReply);
       if ((m = el('[data-delete-feedback]')))  return deleteFeedback(m.dataset.deleteFeedback);
@@ -6513,7 +6551,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !$('#coverLightbox').classList.contains('hidden')) return closeCoverLightbox();
       if (e.key === 'Escape') { closeModal(); toggleProfile(false); toggleMobileMenu(false); }
-      const card = e.target.closest?.('div[data-open-ann]');
+      const card = e.target.closest?.('[data-open-ann]');
       if (card && (e.key === 'Enter' || e.key === ' ') && e.target === card) {
         e.preventDefault();
         openAnnouncementModal(card.dataset.openAnn);
