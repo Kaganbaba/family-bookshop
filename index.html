@@ -501,7 +501,7 @@
   const priceLogs = [];      // priceLogs/{id}
   const announcements = [];  // announcements/{id}
   const offers = [];         // offers/{id}
-  const appSettings = [];    // settings/{id} · 'deals': { refreshedAt }
+  const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
 
   /* ==========================================================
      1.1) ÖRNEK KATALOG (Kontrolcü panelinden bir kez Firestore'a yüklenir)
@@ -539,7 +539,7 @@
     { id: 11, title: 'Yıldız Tozu',                    type: 'seri', seriesNo: 7,  price: 22, pages: 176, rentalDays: 14, place: 'Bolu – Abant',            releaseDate: '2025-01-10', authorId: 'u1', cover: '', addedAt: '2026-09-15T12:00:00', newDiscountUntil: null },
     { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  special: true, period: 'bayram günlerinde', description: 'Ailemizin kuşaklar boyu anlatılan hikâyesi.', price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
     { id: 13, title: 'Sessiz Kütüphane',               type: 'seri', seriesNo: 8,  price: 16, pages: 160, rentalDays: 14, place: 'İstanbul – Kadıköy',      releaseDate: '2026-03-01', authorId: 'u1', cover: '', addedAt: '2026-09-20T12:00:00', newDiscountUntil: null },
-    { id: 14, title: 'Kış Masalları',                  type: 'seri', seriesNo: 9,  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → sonraki döngüye kalır
+    { id: 14, title: 'Kış Masalları',                  type: 'seri', seriesNo: 9,  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → ertesi günden itibaren listeye girer
   ];
 
   /* Kiralamalar (rentals) — örnek veri yok, gerçek kullanıcılar oluşturur
@@ -619,6 +619,8 @@
     confirmAction: null,
     panelTab: 'balance',   // profil panelindeki Kontrolcü sekmesi: 'balance' | 'roles'
     bookTab: 'all',
+    bookPlace: 'all',      // Kitaplar: yazıldığı mekan filtresi
+    bookYear: 'all',       // Kitaplar: çıkış yılı filtresi
     rentTab: 'all',        // Kiralananlar: tür filtresi
     rentStatus: 'all',     // Kiralananlar: 'all' | 'active' | 'past'
     annTab: 'news',
@@ -910,6 +912,8 @@
   const isExpiredRental = (r, now = Date.now()) => new Date(r.dueAt).getTime() <= now;
   const activeRentalOf  = (book, now = Date.now()) => rentals.find((r) => r.bookId === book.id && isActiveRental(r, now));
   const isBookRented    = (book, now = Date.now()) => !!activeRentalOf(book, now);
+  /* Kiralanma sayısı: kayıtlardan sayılır · Kontrolcü bir kiralamayı silince kendiliğinden düşer */
+  const bookRentCount   = (bookId) => rentals.filter((r) => r.bookId === Number(bookId)).length;
 
   function rentalProgress(r, now = Date.now()) {
     const start = new Date(r.rentedAt).getTime();
@@ -953,12 +957,13 @@
      4) GÜNÜN İNDİRİMLERİ — SIRALI DÖNGÜ MOTORU
      ----------------------------------------------------------
      • Bir "indirim günü" saat 10:00'da başlar, ertesi gün 09:59'da biter.
-     • Her döngünün başında, o an mevcut olan Seri kitapların (inDeals türler) ID
-       sıralı anlık görüntüsü (snapshot) alınır. Döngü süresince eklenen
-       kitaplar bu listeye girmez → sıra bozulmaz, sonraki döngüye kalır.
-     • Gün N'de snapshot'tan [N*3, N*3+3) aralığı gösterilir; son gün
-       kalanlar (1 veya 2 kitap) listelenir, ertesi gün döngü baştan başlar.
-     • Firebase aşamasında snapshot Firestore'a kaydedilecek.
+     • Liste: o günün 10:00'ında mevcut Seri kitaplar (inDeals türler), seri
+       numarasına göre sıralı. Gün içinde eklenen kitap ertesi gün listeye girer.
+     • Her gün bir sonraki 3'lü grup gelir (1-2-3 → 4-5-6 → …). Son grup eksik
+       kalırsa (22-23) o şekilde gösterilir, ertesi gün yine 1-2-3'ten başlar.
+     • Kontrolcü "Sonraki 3'lü" ile istediği kadar ilerletebilir ya da grubu
+       kendisi seçebilir (settings/deals.pinDay/pinGroup/pinAt). Sonraki günler
+       o gruptan devam eder; 10:00'daki otomatik geçiş her zaman çalışır.
      ========================================================== */
   const RATE_TIERS = [
     { max: 5,        rate: 50 },
@@ -998,21 +1003,18 @@
     return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
   }
 
-  /* cutoffMs verilirse snapshot o andaki kitaplarla alınır (Kontrolcü "Yenile") */
-  function cycleSnapshot(cycleStartDay, cutoffMs = null) {
-    const startTime = cutoffMs ?? discountDayStart(cycleStartDay).getTime();
+  /* Günün sıralı listesi · cutoffMs verilirse o andaki kitaplarla (Kontrolcü seçimi) */
+  function dealList(dayNum, cutoffMs = null) {
+    const startTime = cutoffMs ?? discountDayStart(dayNum).getTime();
     return books
       .filter((b) => isDiscountEligible(b) && new Date(b.addedAt).getTime() <= startTime)
       .sort((a, b) => seriesRank(a) - seriesRank(b) || a.id - b.id)
       .map((b) => b.id);
   }
+  const dealGroupCount = (list) => Math.ceil(list.length / DISCOUNT_SETTINGS.groupSize);
 
-  /* settings/deals.refreshedAt: Kontrolcünün indirimleri en son yenilediği an */
+  /* settings/deals.pinDay + pinGroup + pinAt: Kontrolcünün en son seçtiği grup (o günden itibaren geçerli) */
   const dealsDoc = () => appSettings.find((s) => s.id === 'deals') || {};
-  const dealsRefreshMs = () => {
-    const iso = dealsDoc().refreshedAt;
-    return iso ? new Date(iso).getTime() : null;
-  };
   /* settings/deals.removedDay + removedIds: Kontrolcünün bugünkü indirimden çıkardığı kitaplar
      (yalnızca o indirim günü geçerli; 10:00'da yeni gün başlayınca kendiliğinden düşer) */
   const dealsRemovedToday = (now = new Date()) => {
@@ -1023,50 +1025,42 @@
   function getDailyDeals(now = new Date()) {
     const size = DISCOUNT_SETTINGS.groupSize;
     const today = discountDayNumber(now);
-    let cycleStart = anchorDayNumber();
-    let cycleNo = 1;
-    let snapshot = [];
-    let totalDays = 0;
-    let guard = 0;
+    let day = anchorDayNumber();
+    if (today < day) return { ids: [], group: 0, groupCount: 0, listSize: 0, pinned: false };
 
-    if (today < cycleStart) return { ids: [], cycleNo: 0, dayIndex: 0, totalDays: 0, snapshotSize: 0 };
+    // Başlangıç: Kontrolcünün en son seçimi (bugün veya önce yapıldıysa), yoksa ilk gün 1. grup
+    const d = dealsDoc();
+    let group = 0;
+    let list;
+    if (Number.isInteger(d.pinDay) && d.pinDay >= day && d.pinDay <= today) {
+      day = d.pinDay;
+      group = Number(d.pinGroup) || 0;
+      list = dealList(day, d.pinAt ? new Date(d.pinAt).getTime() : null);
+    } else {
+      list = dealList(day);
+    }
+    if (group >= dealGroupCount(list)) group = 0;
 
-    const refreshMs = dealsRefreshMs();
-    let refreshed = false;
-    while (guard++ < 100000) {
-      snapshot = cycleSnapshot(cycleStart);
-      totalDays = Math.ceil(snapshot.length / size);
-      // Bu döngü içinde "Yenile"ye basıldıysa liste o andaki güncel kitaplarla yeniden alınır;
-      // günün sırası (dayIndex) korunur, sonraki geçiş yine 10:00'da olur
-      refreshed = false;
-      if (refreshMs && refreshMs >= discountDayStart(cycleStart).getTime()
-          && refreshMs < discountDayStart(cycleStart + Math.max(totalDays, 1)).getTime()) {
-        snapshot = cycleSnapshot(cycleStart, refreshMs);
-        totalDays = Math.ceil(snapshot.length / size);
-        refreshed = true;
-      }
-      if (totalDays === 0) {            // o gün hiç uygun kitap yoksa ertesi güne kaydır
-        if (cycleStart >= today) break;
-        cycleStart++;
-        continue;
-      }
-      if (today - cycleStart < totalDays) break;
-      cycleStart += totalDays;          // döngü bitti → yeni döngü, yeni snapshot
-      cycleNo++;
+    // Her 10:00'da bir sonraki gruba geç; son grubun ardından baştan başla
+    while (day < today) {
+      day++;
+      list = dealList(day);
+      group = group + 1 < dealGroupCount(list) ? group + 1 : 0;
     }
 
-    const dayIndex = Math.max(0, today - cycleStart);
     const removed = dealsRemovedToday(now);
-    const ids = snapshot
-      .slice(dayIndex * size, dayIndex * size + size)
+    const ids = list
+      .slice(group * size, group * size + size)
       // silinmiş / bugün indirimden çıkarılmış / Kiralık olmayan (Kira dışı, Liste dışı) kitapları atla
       .filter((id) => getBook(id) && !removed.includes(id) && isRentableStatus(getBook(id)));
 
     return {
-      ids, cycleNo, dayIndex, totalDays, refreshed,
-      snapshotSize: snapshot.length,
-      fromPos: dayIndex * size + 1,
-      toPos: Math.min(dayIndex * size + size, snapshot.length)
+      ids, group, list,
+      groupCount: dealGroupCount(list),
+      listSize: list.length,
+      pinned: d.pinDay === today,
+      fromPos: group * size + 1,
+      toPos: Math.min(group * size + size, list.length)
     };
   }
 
@@ -1613,12 +1607,21 @@
   function renderDeals(now) {
     const deals = getDailyDeals(now);
 
-    $('#dealsMeta').textContent = deals.snapshotSize
-      ? `Döngü ${deals.cycleNo} · Gün ${deals.dayIndex + 1}/${deals.totalDays} · Sıra ${deals.fromPos}–${deals.toPos} / ${deals.snapshotSize}${deals.refreshed ? ' · ↻ yenilendi' : ''}`
+    $('#dealsMeta').textContent = deals.listSize
+      ? `Grup ${deals.group + 1}/${deals.groupCount} · Sıra ${deals.fromPos}–${deals.toPos} / ${deals.listSize}${deals.pinned ? ' · ↻ Kontrolcü seçti' : ''}`
       : 'Henüz indirime uygun kitap yok';
-    $('#dealsActions').innerHTML = isAdmin()
-      ? `<button type="button" data-refresh-deals title="Güncel kitaplara göre şimdi yenile (sonraki yenilenme yine ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00)"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 transition">↻ Şimdi Yenile</button>`
+    const size = DISCOUNT_SETTINGS.groupSize;
+    const groupOptions = Array.from({ length: deals.groupCount }, (_, g) => {
+      const from = g * size + 1, to = Math.min(g * size + size, deals.listSize);
+      return `<option value="${g}" ${g === deals.group ? 'selected' : ''}>Sıra ${from === to ? from : `${from}–${to}`}</option>`;
+    }).join('');
+    $('#dealsActions').innerHTML = isAdmin() && deals.listSize
+      ? `<span class="flex items-center gap-1.5 flex-wrap">
+          <button type="button" data-refresh-deals title="Sıradaki 3'lüye geç (sonraki otomatik geçiş yine ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00)"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 transition">↻ Sonraki 3'lü</button>
+          <select data-deal-group aria-label="İndirim grubunu seç" title="Gösterilecek grubu seç"
+            class="px-2.5 py-1.5 rounded-full text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-200">${groupOptions}</select>
+        </span>`
       : '';
     updateCountdown(now);
 
@@ -1679,12 +1682,23 @@
     ? '<span class="rate-pop text-[9px] font-extrabold text-white bg-gradient-to-r from-rose-500 via-fuchsia-500 to-amber-500 px-2 py-0.5 rounded-full shadow-soft">🎉 MEGA FIRSAT</span>'
     : tier === 'hot' ? '<span class="text-[9px] font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 px-2 py-0.5 rounded-full shadow-soft">🔥 SÜPER FIRSAT</span>' : '';
 
-  /* Kontrolcü: günün indirimlerini o anki güncel kitaplarla yenile (sonraki geçiş yine 10:00) */
-  function refreshDeals() {
+  /* Kontrolcü: bugünkü grubu belirle (o anki güncel kitaplarla) · sonraki günler buradan devam eder,
+     10:00'daki otomatik geçiş değişmez. Bugün indirimden çıkarılanlar sıfırlanır. */
+  function setDealGroup(group) {
     if (!requireAdmin()) return;
-    run(col('settings').doc('deals').set({ refreshedAt: new Date().toISOString(), refreshedBy: state.currentUserId }, { merge: true }),
-      `Günün indirimleri güncel kitaplara göre yenilendi · sonraki yenilenme ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00`);
+    const now = new Date();
+    const list = dealList(discountDayNumber(now), now.getTime());
+    const count = dealGroupCount(list);
+    if (!count) return;
+    const g = ((Number(group) % count) + count) % count;
+    const size = DISCOUNT_SETTINGS.groupSize;
+    const from = g * size + 1, to = Math.min(g * size + size, list.length);
+    run(col('settings').doc('deals').set({
+      pinDay: discountDayNumber(now), pinGroup: g, pinAt: now.toISOString(), pinBy: state.currentUserId, removedIds: []
+    }, { merge: true }), `Günün indirimleri güncellendi · Sıra ${from === to ? from : `${from}–${to}`}`);
   }
+  /* Kontrolcü: sıradaki 3'lüye geç (son gruptan sonra baştan) */
+  const refreshDeals = () => setDealGroup(getDailyDeals().group + 1);
 
   /* Kontrolcü: kitabı yalnızca bugünkü indirimden çıkar (kitap kitaplıkta kalır) */
   function removeFromDeals(bookId) {
@@ -1858,15 +1872,39 @@
     const countOf = (k) => shown.filter((b) => b.type === k).length;
     // Sıra: Planlanıyor → Yakında → diğerleri (çıkış tarihi yeni → eski)
     const statusRank = (b) => ({ planlaniyor: 0, yakinda: 1 }[bookStatus(b)] ?? 2);
-    const list = shown
-      .filter((b) => b.type === state.bookTab)
+    const inTab = shown.filter((b) => b.type === state.bookTab);
+
+    // Filtreler: yazıldığı mekan + çıkış yılı (seçenekler bu kategorideki kitaplardan)
+    const placeOf = (b) => (b.place || '').trim();
+    const yearOf = (b) => (b.releaseDate || '').slice(0, 4);
+    const places = [...new Set(inTab.map(placeOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+    const years = [...new Set(inTab.map(yearOf).filter(Boolean))].sort((a, b) => b.localeCompare(a));
+    if (!places.includes(state.bookPlace)) state.bookPlace = 'all';
+    if (!years.includes(state.bookYear)) state.bookYear = 'all';
+    const filtered = state.bookPlace !== 'all' || state.bookYear !== 'all';
+
+    const list = inTab
+      .filter((b) => (state.bookPlace === 'all' || placeOf(b) === state.bookPlace) && (state.bookYear === 'all' || yearOf(b) === state.bookYear))
       .sort((a, b) => statusRank(a) - statusRank(b) || (b.releaseDate || '').localeCompare(a.releaseDate || '') || b.id - a.id);
     const rentableCount = list.filter((b) => isRentableStatus(b) && !isBookRented(b, now)).length;
 
     const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf, 'mb-5', false);
+    const filterBar = inTab.length ? `
+      <div class="bg-white rounded-2xl shadow-soft p-3 grid grid-cols-2 sm:flex sm:items-center gap-2.5 mb-5">
+        <select id="bookPlaceFilter" aria-label="Yazıldığı mekana göre filtrele" class="${INPUT_CLS} min-w-0 sm:flex-1">
+          <option value="all">📍 Tüm mekanlar</option>
+          ${places.map((p) => `<option value="${escapeHTML(p)}" ${state.bookPlace === p ? 'selected' : ''}>${escapeHTML(p)}</option>`).join('')}
+        </select>
+        <select id="bookYearFilter" aria-label="Çıkış yılına göre filtrele" class="${INPUT_CLS} min-w-0 sm:w-40">
+          <option value="all">📅 Tüm yıllar</option>
+          ${years.map((y) => `<option value="${y}" ${state.bookYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+        </select>
+        ${filtered ? `<button type="button" data-clear-book-filters class="${BTN_SOFT} col-span-2 sm:col-span-1 shrink-0">Filtreyi Temizle</button>` : ''}
+      </div>` : '';
 
     if (!list.length) {
-      $('#booksContent').innerHTML = tabBar + emptyState('Bu kategoride henüz kitap yok.');
+      $('#booksContent').innerHTML = tabBar + filterBar
+        + emptyState(filtered ? 'Bu filtreye uyan kitap yok.' : 'Bu kategoride henüz kitap yok.');
       return;
     }
 
@@ -1911,7 +1949,7 @@
         </li>`;
     }).join('');
 
-    $('#booksContent').innerHTML = tabBar + `
+    $('#booksContent').innerHTML = tabBar + filterBar + `
       <div class="bg-white rounded-2xl shadow-soft overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-400">
           <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${rentableCount} kiralık</span></span>
@@ -2128,6 +2166,7 @@
             ${info('Yazar', escapeHTML(authorName(b)), 'pencil')}
           </div>
         </div>
+        ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`, 'books')}
 
         ${active && holder ? `
           <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-[11px] text-amber-700">
@@ -4363,10 +4402,10 @@
           <div>
             <h4 class="text-xs font-bold text-slate-700">${hasPassword ? 'Şifreyi Değiştir' : 'Şifre Belirle'}</h4>
             <p class="text-[10px] text-slate-400 mt-0.5">${hasPassword
-              ? 'Yeni şifren en az 6 karakter olmalı.'
+              ? 'Güvenlik için önce eski şifreni gir. Yeni şifren en az 6 karakter olmalı. Eski şifreni unuttuysan aşağıdan sıfırlama bağlantısı iste.'
               : 'Şifre belirlersen giriş ekranında e-posta + şifre ile de girebilirsin. Google girişin aynen kalır.'}</p>
           </div>
-          ${hasPassword && !hasGoogle ? pwInput('current', 'Mevcut Şifre', 'current-password') : ''}
+          ${hasPassword ? pwInput('current', 'Eski Şifre', 'current-password') : ''}
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             ${pwInput('password', 'Yeni Şifre', 'new-password')}
             ${pwInput('repeat', 'Yeni Şifre (tekrar)', 'new-password')}
@@ -4405,12 +4444,20 @@
   async function handleSetPassword(fd) {
     const user = auth.currentUser;
     if (!user) return;
+    const hasPassword = authProviders().includes('password');
+    if (hasPassword && !fd.current) return toast('Eski şifreni girmelisin.', 'error');
     if ((fd.password || '').length < 6) return toast('Şifre en az 6 karakter olmalı.', 'error');
     if (fd.password !== fd.repeat) return toast('Şifreler birbiriyle aynı değil.', 'error');
-    const hasPassword = authProviders().includes('password');
+    if (hasPassword && fd.password === fd.current) return toast('Yeni şifre eskisiyle aynı olamaz.', 'error');
     try {
-      if (hasPassword && fd.current) {
-        await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, fd.current));
+      // Şifre zaten varsa değişiklik yalnızca eski şifre doğrulanınca yapılır
+      if (hasPassword) {
+        try {
+          await user.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, fd.current));
+        } catch (e) {
+          if (['auth/invalid-credential', 'auth/wrong-password'].includes(e?.code)) return toast('Eski şifre hatalı.', 'error');
+          throw e;
+        }
       }
       if (hasPassword) await withRecentLogin(() => user.updatePassword(fd.password));
       else await withRecentLogin(() => user.linkWithCredential(firebase.auth.EmailAuthProvider.credential(user.email, fd.password)));
@@ -4573,6 +4620,7 @@
       if ((m = el('[data-delete-news]')))      return deleteNews(m.dataset.deleteNews);
       if ((m = el('[data-edit-news]')))        return openNewsModal(m.dataset.editNews);
       if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
+      if ((m = el('[data-clear-book-filters]'))) { state.bookPlace = 'all'; state.bookYear = 'all'; return renderCurrentPage(); }
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
       if ((m = el('[data-ann-tab]')))          { state.annTab = m.dataset.annTab; return renderCurrentPage(); }
@@ -4621,9 +4669,12 @@
       if (t.matches('[data-cover-input]')) return handleCoverInput(t);
       if (t.matches('[data-role-user]')) return setRole(t.dataset.roleUser, t.value);
       if (t.matches('[data-quick-status]')) return setBookStatus(t.dataset.quickStatus, t.value);
+      if (t.matches('[data-deal-group]')) return setDealGroup(t.value);
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
+      if (t.id === 'bookPlaceFilter') { state.bookPlace = t.value; return renderCurrentPage(); }
+      if (t.id === 'bookYearFilter') { state.bookYear = t.value; return renderCurrentPage(); }
       if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview(true);
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
     });
