@@ -1,0 +1,171 @@
+    html { scroll-behavior: smooth; }
+    body { -webkit-tap-highlight-color: transparent; }
+    /* Sayfa geçiş animasyonu */
+    .page-enter { animation: pageIn .28s ease-out; }
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    /* Kaydırma çubuğu */
+    .soft-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .soft-scroll::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 999px; }
+    /* Sayı inputlarındaki okları gizle */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+    /* İndirim kartındaki hafif parıltı */
+    .deal-shine { position: relative; overflow: hidden; }
+    .deal-shine::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,.55) 50%, transparent 60%);
+      transform: translateX(-120%); transition: transform .8s ease;
+    }
+    .deal-shine:hover::after { transform: translateX(120%); }
+    /* Bildirim rozeti giriş animasyonu */
+    .badge-pop { animation: badgePop .35s cubic-bezier(.34,1.56,.64,1); }
+    @keyframes badgePop {
+      from { transform: scale(.4); opacity: 0; }
+      to   { transform: scale(1);  opacity: 1; }
+    }
+    /* Özel Teklif vitrini — 3 kapak, 3D derinlik */
+    .showcase { perspective: 900px; }
+    .sc-stage { transform-style: preserve-3d; }
+    .sc { position: absolute; inset: 0; transition: transform .55s cubic-bezier(.2,.8,.2,1), box-shadow .55s; will-change: transform; }
+    .sc-0 { transform: translateX(-62%) rotateY(28deg) scale(.86); z-index: 1; }
+    .sc-1 { transform: translateZ(30px); z-index: 3; }
+    .sc-2 { transform: translateX(62%) rotateY(-28deg) scale(.86); z-index: 2; }
+    .showcase-host:hover .sc-0 { transform: translateX(-86%) rotateY(18deg) scale(.9); }
+    .showcase-host:hover .sc-1 { transform: translateZ(50px) translateY(-6px) scale(1.04); }
+    .showcase-host:hover .sc-2 { transform: translateX(86%) rotateY(-18deg) scale(.9); }
+    /* Yeni Kitap vitrini — altın, sürekli akan parıltı + yanıp sönen yıldızlar */
+    .new-glow { position: relative; overflow: hidden; }
+    .new-glow::before {
+      content: ''; position: absolute; inset: -2px; border-radius: inherit; z-index: 0;
+      background: linear-gradient(120deg, #fde68a, #f59e0b, #fbbf24, #fef3c7, #f59e0b);
+      background-size: 300% 300%; animation: goldFlow 5s ease infinite;
+    }
+    .new-glow > * { position: relative; z-index: 1; }
+    .new-glow::after {
+      content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+      background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.7) 50%, transparent 65%);
+      transform: translateX(-130%); animation: goldSweep 3.2s ease-in-out infinite;
+    }
+    @keyframes goldFlow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    @keyframes goldSweep { 0%, 55% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+    .twinkle { animation: twinkle 1.8s ease-in-out infinite; }
+    .twinkle-d1 { animation-delay: .6s; }
+    .twinkle-d2 { animation-delay: 1.2s; }
+    @keyframes twinkle { 0%, 100% { opacity: .25; transform: scale(.7) rotate(0deg); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+    /* Yüksek indirim kutlaması · %35+ "sıcak" nabız, %50+ "mega" renkli çerçeve + konfeti */
+    .deal-hot { animation: hotPulse 1.8s ease-in-out infinite; }
+    @keyframes hotPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, .35); } 50% { box-shadow: 0 0 0 7px rgba(244, 63, 94, 0); } }
+    .deal-mega {
+      border: 2px solid transparent !important;
+      background: linear-gradient(135deg, #fff, #fff1f2) padding-box,
+                  linear-gradient(120deg, #f43f5e, #f59e0b, #d946ef, #3b82f6, #f43f5e) border-box !important;
+      background-size: 100% 100%, 300% 300% !important;
+      animation: megaFlow 4s ease infinite, hotPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes megaFlow { 0%, 100% { background-position: 0 0, 0% 50%; } 50% { background-position: 0 0, 100% 50%; } }
+    .rate-pop { display: inline-block; animation: ratePop 1.3s ease-in-out infinite; transform-origin: left bottom; }
+    @keyframes ratePop { 0%, 100% { transform: scale(1) rotate(0); } 40% { transform: scale(1.12) rotate(-3deg); } 60% { transform: scale(1.06) rotate(2deg); } }
+    .confetti-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+    .confetti-layer i { position: absolute; top: -12px; width: 6px; height: 10px; border-radius: 2px; opacity: 0; animation: confettiFall linear infinite; }
+    .confetti-layer i:nth-child(3n) { width: 7px; height: 7px; border-radius: 999px; }
+    @keyframes confettiFall {
+      0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+      10% { opacity: .9; }
+      100% { transform: translateY(300px) rotate(560deg); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .new-glow::before, .new-glow::after, .twinkle, .deal-hot, .deal-mega, .rate-pop, .confetti-layer i { animation: none; }
+      .confetti-layer { display: none; }
+    }
+    /* Kitaplar listesi: satır ortasında şeffaf, eğik, parıldayan kitap adı */
+    .ghost-title {
+      font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+      font-style: italic; font-weight: 800; letter-spacing: .01em;
+      transform: skewX(-10deg);
+      background: linear-gradient(105deg, rgba(100, 116, 139, .16) 30%, rgba(59, 130, 246, .55) 47%, rgba(255, 255, 255, .9) 50%, rgba(59, 130, 246, .55) 53%, rgba(100, 116, 139, .16) 70%);
+      background-size: 280% 100%;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: ghostShine 5.5s ease-in-out infinite;
+    }
+    .ghost-title.is-new { background-image: linear-gradient(105deg, rgba(217, 119, 6, .18) 30%, rgba(245, 158, 11, .65) 47%, rgba(255, 255, 255, .95) 50%, rgba(245, 158, 11, .65) 53%, rgba(217, 119, 6, .18) 70%); }
+    @keyframes ghostShine { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
+    @media (prefers-reduced-motion: reduce) { .ghost-title { animation: none; background-position: 50% 0; } }
+    /* Özel teklif vitrini · arka plan indirim yüzdesine göre, yıldız rozet, nokta deseni */
+    .offer-pattern { background-image: radial-gradient(rgba(255, 255, 255, .2) 1.2px, transparent 1.4px); background-size: 14px 14px; }
+    .offer-mega-bg {
+      background: linear-gradient(120deg, #4c1d95, #7c3aed, #db2777, #f59e0b, #db2777, #4c1d95);
+      background-size: 300% 300%; animation: offerFlow 6s ease infinite;
+    }
+    @keyframes offerFlow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    .offer-burst {
+      clip-path: polygon(50% 0%, 61% 11%, 75% 6%, 79% 21%, 94% 25%, 89% 39%, 100% 50%, 89% 61%, 94% 75%, 79% 79%, 75% 94%,
+        61% 89%, 50% 100%, 39% 89%, 25% 94%, 21% 79%, 6% 75%, 11% 61%, 0% 50%, 11% 39%, 6% 25%, 21% 21%, 25% 6%, 39% 11%);
+    }
+    .burst-spin { animation: burstSpin 14s linear infinite; }
+    @keyframes burstSpin { to { transform: rotate(360deg); } }
+    .offer-sheen::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+      background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .35) 50%, transparent 65%);
+      transform: translateX(-130%); animation: goldSweep 4.5s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) { .offer-mega-bg, .burst-spin, .offer-sheen::after { animation: none; } }
+    /* 1 veya 2 kitaplı teklif vitrinleri */
+    .sc-solo { transform: translateZ(30px); z-index: 3; }
+    .showcase-host:hover .sc-solo { transform: translateZ(50px) translateY(-6px) scale(1.06); }
+    .sc-duo-0 { transform: translateX(-34%) rotateY(18deg) scale(.94); z-index: 2; }
+    .sc-duo-1 { transform: translateX(34%) rotateY(-18deg) scale(.94); z-index: 1; }
+    .showcase-host:hover .sc-duo-0 { transform: translateX(-52%) rotateY(12deg) scale(.98); }
+    .showcase-host:hover .sc-duo-1 { transform: translateX(52%) rotateY(-12deg) scale(.98); }
+    /* Vitrin İndirimi (Admin'in seçtikleri) · gece mavisi zemin, altın çerçeve, asılı etiket */
+    .vitrine-bg { background: radial-gradient(120% 140% at 0% 0%, #3730a3 0%, #1e1b4b 42%, #0f172a 100%); }
+    .vitrine-dots { background-image: radial-gradient(rgba(255, 255, 255, .07) 1px, transparent 1.2px); background-size: 16px 16px; }
+    .vitrine-rim { background: linear-gradient(135deg, #fde68a, #b45309 30%, #fcd34d 55%, #92400e 80%, #fde68a); }
+    .vitrine-card {
+      background: linear-gradient(160deg, rgba(255, 255, 255, .11), rgba(255, 255, 255, .03));
+      border: 1px solid rgba(251, 191, 36, .22);
+    }
+    .vitrine-card:hover { border-color: rgba(251, 191, 36, .6); box-shadow: 0 18px 40px -18px rgba(251, 191, 36, .45); }
+    .vitrine-tag { clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); }
+    .vitrine-gold { background: linear-gradient(180deg, #fef3c7, #fbbf24 55%, #d97706); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .vitrine-sheen { position: relative; overflow: hidden; }
+    .vitrine-sheen::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(115deg, transparent 40%, rgba(253, 230, 138, .16) 50%, transparent 60%);
+      transform: translateX(-130%); animation: goldSweep 6s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) { .vitrine-sheen::after { animation: none; } }
+    /* %70+ özel teklif · ŞİMŞEK FIRSAT: fırtına zemini, dallanan beyaz şimşekler (gerçek gibi titreyerek çakar), gökyüzü parlaması */
+    .offer-ultra-bg { background: radial-gradient(120% 90% at 50% 0%, #334155 0%, #1e1b4b 45%, #020617 100%); }
+    .ultra-bolts { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+    .ultra-bolts svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .ultra-bolts g {
+      opacity: 0; animation: boltStrike 4.6s infinite;
+      filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 7px #bfdbfe) drop-shadow(0 0 16px #93c5fd);
+    }
+    .ultra-bolts .b2 { animation-duration: 5.9s; animation-delay: 2.1s; }
+    .ultra-bolts path { fill: none; stroke: #fff; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+    .ultra-bolts .main { stroke-width: 2.2; }
+    .ultra-bolts .branch { stroke-width: 1.1; opacity: .85; }
+    /* Gerçek şimşek: çok kısa çakma → sönme → tekrar 1-2 kez titreme */
+    @keyframes boltStrike {
+      0%, 78%, 100% { opacity: 0; }
+      79% { opacity: 1; } 80% { opacity: .15; } 81% { opacity: 1; } 82.5% { opacity: 0; }
+      84% { opacity: .75; } 85% { opacity: 0; }
+    }
+    .ultra-flash { position: absolute; inset: 0; pointer-events: none; z-index: 1; animation: skyFlash 4.6s infinite; }
+    .ultra-flash.f2 { animation-duration: 5.9s; animation-delay: 2.1s; }
+    @keyframes skyFlash {
+      0%, 78%, 100% { background: rgba(255, 255, 255, 0); }
+      79% { background: rgba(241, 245, 255, .28); } 80% { background: rgba(241, 245, 255, .05); }
+      81% { background: rgba(241, 245, 255, .22); } 82.5% { background: rgba(241, 245, 255, 0); }
+      84% { background: rgba(241, 245, 255, .12); } 85% { background: rgba(241, 245, 255, 0); }
+    }
+    .ultra-glow { box-shadow: 0 0 0 2px rgba(255, 255, 255, .7), 0 0 26px rgba(191, 219, 254, .55), 0 12px 32px -12px rgba(30, 27, 75, .6); }
+    @media (prefers-reduced-motion: reduce) {
+      .ultra-bolts g { animation: none; opacity: .6; }
+      .ultra-flash { animation: none; }
+    }
