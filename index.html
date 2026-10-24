@@ -534,8 +534,8 @@
   const announcements = [];  // announcements/{id}
   const offers = [];         // offers/{id}
   const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Kontrolcü seçer): { bookId, name, rate (1–100), endsAt, createdAt, createdBy }
-  const couponShop = [];     // couponShop/{id} · Kontrolcünün mağaza kuponu: { type, value, name, cost, endsAt|null, createdAt, createdBy }
-  const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookId, paidTotal }
+  const couponShop = [];     // couponShop/{id} · Kontrolcünün mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
+  const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
   const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
 
   /* ==========================================================
@@ -635,11 +635,12 @@
   };
   const NEW_BOOK_DISCOUNT = { rate: 15, days: 7 }; // yeni eklenen kitap indirimi
   /* Hediyelerim kupon türleri (mağazayı Kontrolcü doldurur)
-     percent: %1–100 · amount: ₺ indirim (fiyat 0'ın altına inmez) · bogo: N Al N-1 Öde (en ucuz kitap bedava) */
+     percent: %1–100 · amount: ₺ indirim (fiyat 0'ın altına inmez)
+     bogo: value kitap alınır, free tanesi bedava (en düşük fiyatlılar) · ör. 3 Al 2 Öde = value 3, free 1 */
   const COUPON_TYPES = {
     percent: { label: 'Yüzde Kuponu', hint: 'İndirim yüzdesi (1–100)', min: 1, max: 100, step: 1 },
     amount:  { label: '₺ Kuponu',      hint: 'İndirim tutarı (₺)',      min: 0.01, max: 10000, step: 0.01 },
-    bogo:    { label: 'Al-Öde Kuponu', hint: 'Kaç kitap alınacak (2–5) · en ucuzu bedava', min: 2, max: 5, step: 1 }
+    bogo:    { label: 'Al-Öde Kuponu', hint: 'Kaç kitap alınacak (2–5)', min: 2, max: 5, step: 1 }
   };
   const COUPON_DAYS = 7; // alınan kupon 1 hafta içinde kullanılmalı
   const DEFAULT_RENTAL_DAYS = 7;
@@ -1471,16 +1472,20 @@
   /* Kupon türü ve değeri (eski kayıtlar: yalnızca rate → yüzde kuponu) */
   const couponTypeOf = (c) => (COUPON_TYPES[c?.type] ? c.type : 'percent');
   const couponValueOf = (c) => Number(c?.value ?? c?.rate ?? 0);
+  /* Al-Öde: bedava kitap sayısı (eski kayıtlar 1) */
+  const couponFreeOf = (c) => Math.max(1, Number(c?.free ?? 1));
   /* Kısa rozet (%10 · ₺20 · 3 Al 2 Öde) ve uzun ad */
   function couponBadge(c) {
     const v = couponValueOf(c);
-    return { percent: `%${v}`, amount: formatMoney(v), bogo: `${v} Al ${v - 1} Öde` }[couponTypeOf(c)];
+    return { percent: `%${v}`, amount: formatMoney(v), bogo: `${v} Al ${v - couponFreeOf(c)} Öde` }[couponTypeOf(c)];
   }
   function couponTitle(c) {
     const v = couponValueOf(c);
-    const auto = { percent: `%${v} İndirim Kuponu`, amount: `${formatMoney(v)} İndirim Kuponu`, bogo: `${v} Al ${v - 1} Öde Kuponu` }[couponTypeOf(c)];
+    const auto = { percent: `%${v} İndirim Kuponu`, amount: `${formatMoney(v)} İndirim Kuponu`, bogo: `${v} Al ${v - couponFreeOf(c)} Öde Kuponu` }[couponTypeOf(c)];
     return c?.name ? `${c.name} · ${auto}` : auto;
   }
+  /* Al-Öde açıklaması: "3 kitap seç, en düşük fiyatlı 1 tanesi bedava" */
+  const bogoText = (c) => `${couponValueOf(c)} kiralık kitap seç, en düşük fiyatlı ${couponFreeOf(c) > 1 ? `${couponFreeOf(c)} tanesi` : 'olan'} bedava`;
   /* Tek kitaplık kuponun (yüzde / ₺) uygulandığı fiyat */
   function couponPrice(c, price) {
     const v = couponValueOf(c);
@@ -3621,9 +3626,13 @@
         <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col">
           <div class="relative px-4 pt-4 pb-5 bg-gradient-to-br ${COUPON_TONES[type]} text-white">
             <span class="absolute inset-0 offer-pattern opacity-60"></span>
-            ${admin ? `<button type="button" data-delete-shop-coupon="${s.id}" title="Mağazadan kaldır" aria-label="Mağazadan kaldır"
-              class="absolute top-2 right-2 z-[2] w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
-            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 pr-8">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
+            ${admin ? `<div class="absolute top-2 right-2 z-[2] flex gap-1">
+              <button type="button" data-edit-shop-coupon="${s.id}" title="Düzenle" aria-label="Kuponu düzenle"
+                class="w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-brand-600 flex items-center justify-center transition">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
+              <button type="button" data-delete-shop-coupon="${s.id}" title="Mağazadan kaldır" aria-label="Mağazadan kaldır"
+                class="w-7 h-7 rounded-full bg-white/20 hover:bg-white hover:text-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>
+            </div>` : ''}
+            <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
             <p class="relative ${type === 'bogo' ? 'text-2xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
             ${s.name ? `<p class="relative text-[11px] font-semibold mt-1.5 truncate">${escapeHTML(s.name)}</p>` : ''}
             <span class="absolute -bottom-2 left-0 right-0 h-4 bg-[radial-gradient(circle_at_8px_0,transparent_7px,#fff_7.5px)] bg-[length:16px_16px] bg-repeat-x"></span>
@@ -3633,7 +3642,7 @@
               <span class="text-sm font-bold text-amber-600">⭐ ${formatPoints(s.cost)}</span>
               <span class="text-[10px] text-slate-400">${COUPON_DAYS} gün geçerli</span>
             </div>
-            ${type === 'bogo' ? `<p class="text-[10px] text-slate-500 leading-snug">${s.value} kiralık kitap seç, en düşük fiyatlı olan bedava.</p>` : ''}
+            ${type === 'bogo' ? `<p class="text-[10px] text-slate-500 leading-snug">${bogoText(s)}.</p>` : ''}
             ${s.endsMs ? `<p class="text-[10px] font-semibold text-rose-500">⏳ Mağazada son: ${formatDate(new Date(s.endsMs).toISOString(), true)}</p>` : ''}
             <button type="button" data-buy-coupon="${s.id}" ${ok ? '' : 'disabled'} class="${BTN_PRIMARY} w-full !py-2.5 mt-auto">
               ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(s.cost - pts.available))} eksik`}
@@ -3696,40 +3705,47 @@
         closeModal();
         const now = Date.now();
         run(col('coupons').add({
-          userId: u.id, shopId: s.id, type: couponTypeOf(s), value: couponValueOf(s), name: s.name || '', cost: s.cost,
+          userId: u.id, shopId: s.id, type: couponTypeOf(s), value: couponValueOf(s), free: s.free ?? null, name: s.name || '', cost: s.cost,
           boughtAt: isoAt(now),
           expiresAt: Timestamp.fromMillis(now + COUPON_DAYS * DAY_MS),
-          usedAt: null, rentalIds: null, bookIds: null, freeBookId: null, paidTotal: null
+          usedAt: null, rentalIds: null, bookIds: null, freeBookIds: null, paidTotal: null
         }), `🎟️ ${couponBadge(s)} kuponu alındı · ${COUPON_DAYS} gün içinde kullan`);
       }
     });
   }
 
-  /* Kontrolcü: mağazaya kupon ekle (yüzde / ₺ / Al-Öde · isteğe bağlı mağaza bitişi) */
-  function openShopCouponModal() {
+  /* Kontrolcü: mağazaya kupon ekle / düzenle (yüzde / ₺ / Al-Öde · isteğe bağlı mağaza bitişi).
+     Düzenleme yalnızca bundan sonra alınacak kuponları etkiler; önceden alınanlar kendi kopyasını korur. */
+  function openShopCouponModal(editId = null) {
     if (!requireAdmin()) return;
-    const defaultEnd = localDateKey(new Date(Date.now() + 7 * DAY_MS));
+    const s = editId ? couponShop.find((x) => x.id === editId) : null;
+    if (editId && !s) return toast('Kupon bulunamadı.', 'error');
+    const type = s ? couponTypeOf(s) : 'percent';
+    const end = s?.endsMs ? new Date(s.endsMs) : new Date(Date.now() + 7 * DAY_MS);
+    const pad = (n) => String(n).padStart(2, '0');
     openModal(`
-      ${modalHeader('Mağazaya Kupon Ekle 🎟️', 'Kullanıcılar puanlarıyla alır · eklenince Duyurulara "Etkinlik" haberi düşer.', 'gifts', 'bg-amber-50 text-amber-600')}
-      <form data-form="saveShopCoupon" class="p-5 space-y-3.5" autocomplete="off">
+      ${modalHeader(s ? 'Kuponu Düzenle ✏️' : 'Mağazaya Kupon Ekle 🎟️',
+        s ? 'Değişiklik bundan sonra alınacak kuponlara uygulanır · önceden alınanlar aynen kalır.' : 'Kullanıcılar puanlarıyla alır · eklenince Duyurulara "Etkinlik" haberi düşer.', 'gifts', 'bg-amber-50 text-amber-600')}
+      <form data-form="saveShopCoupon" data-edit-id="${s ? s.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
         ${field('Kupon Türü', `<select name="type" id="sc-type" class="${INPUT_CLS}">
-          ${Object.entries(COUPON_TYPES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
+          ${Object.entries(COUPON_TYPES).map(([k, t]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${t.label}</option>`).join('')}
         </select>`)}
         <div class="grid grid-cols-2 gap-3">
-          <div id="sc-value-wrap">${field(COUPON_TYPES.percent.hint, `<input name="value" id="sc-value" type="number" min="1" max="100" step="1" required class="${INPUT_CLS}" placeholder="Örn. 20" />`)}</div>
-          ${field('Bedeli (puan)', `<input name="cost" id="sc-cost" type="number" min="0.01" step="0.01" required class="${INPUT_CLS}" placeholder="Örn. 10" />`)}
+          <div id="sc-value-wrap">${field(COUPON_TYPES[type].hint, `<input name="value" id="sc-value" type="number" required value="${s ? couponValueOf(s) : ''}" class="${INPUT_CLS}" />`)}</div>
+          <div id="sc-free-wrap" class="${type === 'bogo' ? '' : 'hidden'}">${field('Kaçı bedava', `<input name="free" id="sc-free" type="number" min="1" max="4" step="1" value="${s && type === 'bogo' ? couponFreeOf(s) : 1}" class="${INPUT_CLS}" />`)}</div>
+          ${field('Bedeli (puan)', `<input name="cost" id="sc-cost" type="number" min="0.01" step="0.01" required value="${s ? s.cost : ''}" class="${INPUT_CLS}" placeholder="Örn. 10" />`)}
         </div>
-        ${field('Kupon Adı (isteğe bağlı)', `<input name="name" maxlength="60" class="${INPUT_CLS}" placeholder="Örn. Bayram Kuponu 🎉" />`)}
+        ${field('Kupon Adı (isteğe bağlı)', `<input name="name" maxlength="60" value="${escapeHTML(s?.name || '')}" class="${INPUT_CLS}" placeholder="Örn. Bayram Kuponu 🎉" />`)}
         <label class="flex items-center gap-2 text-[11px] text-slate-600">
-          <input type="checkbox" name="timed" id="sc-timed" class="rounded border-slate-300 text-brand-600" /> ⏳ Süreli kupon (mağazadan belirli bir anda kalksın)
+          <input type="checkbox" name="timed" id="sc-timed" ${s?.endsMs ? 'checked' : ''} class="rounded border-slate-300 text-brand-600" /> ⏳ Süreli kupon (mağazadan belirli bir anda kalksın)
         </label>
         <div id="sc-end-wrap" class="hidden grid grid-cols-[1fr_auto] gap-3">
-          ${field('Mağazada Son Gün', `<input name="endDate" type="date" min="${localDateKey()}" value="${defaultEnd}" class="${INPUT_CLS} min-w-0" />`)}
-          ${field('Saat', `<input name="endTime" type="time" value="23:59" class="${INPUT_CLS} w-[6.5rem]" />`)}
+          ${field('Mağazada Son Gün', `<input name="endDate" type="date" min="${localDateKey()}" value="${localDateKey(end)}" class="${INPUT_CLS} min-w-0" />`)}
+          ${field('Saat', `<input name="endTime" type="time" value="${s?.endsMs ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
         </div>
         <div id="sc-preview" class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2"></div>
         <p class="text-[10px] text-slate-400">Alınan her kupon ${COUPON_DAYS} gün geçerlidir; yalnızca Kiralık ve indirimsiz kitaplara uygulanır.</p>
-        ${formFooter('Mağazaya Ekle')}
+        ${formFooter(s ? 'Değişiklikleri Kaydet' : 'Mağazaya Ekle')}
       </form>`);
     updateShopCouponForm();
   }
@@ -3743,20 +3759,35 @@
     if (label) label.textContent = t.hint;
     Object.assign(input, { min: t.min, max: t.max, step: t.step });
     input.placeholder = { percent: 'Örn. 20', amount: 'Örn. 15', bogo: 'Örn. 3' }[type];
-    $('#sc-end-wrap').classList.toggle('hidden', !$('#sc-timed').checked);
+    // Al-Öde: bedava sayısı 1 … (alınacak − 1)
+    const bogo = type === 'bogo';
+    $('#sc-free-wrap').classList.toggle('hidden', !bogo);
+    const freeInput = $('#sc-free');
+    freeInput.required = bogo;
     const v = Number(input.value);
-    $('#sc-preview').innerHTML = v >= t.min && v <= t.max
-      ? `Mağazada: <b class="text-slate-700">${escapeHTML(couponTitle({ type, value: type === 'amount' ? round2(v) : Math.round(v) }))}</b>`
-      : 'Değeri girince kuponun mağazadaki adı burada görünür.';
+    if (bogo && v >= 2) freeInput.max = v - 1;
+    $('#sc-end-wrap').classList.toggle('hidden', !$('#sc-timed').checked);
+    const free = Number(freeInput.value);
+    const valid = v >= t.min && v <= t.max && (!bogo || (free >= 1 && free < v));
+    $('#sc-preview').innerHTML = valid
+      ? `Mağazada: <b class="text-slate-700">${escapeHTML(couponTitle({ type, value: type === 'amount' ? round2(v) : Math.round(v), free }))}</b>${bogo ? ` · ${bogoText({ value: v, free })}` : ''}`
+      : bogo && v >= 2 ? `Bedava sayısı 1–${v - 1} arası olmalı.` : 'Değeri girince kuponun mağazadaki adı burada görünür.';
   }
 
-  function handleSaveShopCoupon(fd) {
+  function handleSaveShopCoupon(fd, editId) {
     if (!requireAdmin()) return;
+    const prev = editId ? couponShop.find((x) => x.id === editId) : null;
+    if (editId && !prev) return toast('Kupon bulunamadı.', 'error');
     const type = COUPON_TYPES[fd.type] ? fd.type : null;
     if (!type) return toast('Kupon türü seçin.', 'error');
     const t = COUPON_TYPES[type];
     const value = type === 'amount' ? round2(parseFloat(fd.value)) : parseInt(fd.value, 10);
     if (!(value >= t.min && value <= t.max)) return toast(`${t.hint}: ${t.min}–${t.max} arası olmalı.`, 'error');
+    let free = null;
+    if (type === 'bogo') {
+      free = parseInt(fd.free, 10);
+      if (!(free >= 1 && free < value)) return toast(`Bedava kitap sayısı 1–${value - 1} arası olmalı.`, 'error');
+    }
     const cost = round2(parseFloat(fd.cost));
     if (!(cost > 0)) return toast('Kupon bedeli (puan) 0\'dan büyük olmalı.', 'error');
     const name = (fd.name || '').trim();
@@ -3768,7 +3799,15 @@
       if (end.getTime() <= Date.now()) return toast('Bitiş anı geçmiş olamaz.', 'error');
       endsAt = Timestamp.fromDate(end);
     }
-    const s = { type, value, name, cost };
+    const s = { type, value, free, name, cost };
+
+    if (prev) {
+      closeModal();
+      run(col('couponShop').doc(prev.id).update({ ...s, endsAt, updatedAt: isoAt(Date.now()) }),
+        `🎟️ Kupon güncellendi · ${couponBadge(s)} (önceden alınanlar aynen kalır)`);
+      return;
+    }
+
     const batch = db.batch();
     batch.set(col('couponShop').doc(), { ...s, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
     // Otomatik "Etkinlik" duyurusu
@@ -3776,7 +3815,7 @@
       type: 'news', category: 'Etkinlik',
       title: `Yeni kupon: ${couponBadge(s)}${name ? ` · ${name}` : ''} 🎟️`,
       body: `Hediyelerim mağazasına yeni kupon geldi! 🎉\n🎟️ ${couponTitle(s)}\n⭐ Bedeli: ${formatPoints(cost)} · alındıktan sonra ${COUPON_DAYS} gün geçerli`
-        + (type === 'bogo' ? `\n📚 ${value} kiralık kitap seç, en düşük fiyatlı olan bedava!` : '')
+        + (type === 'bogo' ? `\n📚 ${bogoText(s)}!` : '')
         + (endsAt ? `\n⏳ Mağazada son: ${formatDate(endsAt.toDate().toISOString(), true)}` : '')
         + '\nPuanların yetiyorsa Hediyelerim sayfasından hemen al!',
       bookId: null, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
@@ -3819,15 +3858,15 @@
       batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     });
     const paidTotal = round2(sum(lines, (l) => l.price));
-    const free = lines.find((l) => l.free);
     batch.update(col('coupons').doc(coupon.id), {
-      usedAt: isoAt(now), rentalIds, bookIds: lines.map((l) => l.book.id), freeBookId: free ? free.book.id : null, paidTotal
+      usedAt: isoAt(now), rentalIds, bookIds: lines.map((l) => l.book.id),
+      freeBookIds: lines.filter((l) => l.free).map((l) => l.book.id), paidTotal
     });
     batch.update(col('users').doc(u.id), { balance: round2(u.balance - paidTotal), lastTx: coupon.id, lastTxType: 'coupon' });
     return paidTotal;
   }
 
-  /* Al-Öde: N kitap seçilir, en düşük fiyatlı olan bedava */
+  /* Al-Öde: N kitap seçilir, en düşük fiyatlı F tanesi bedava */
   function openBogoModal(couponId) {
     const u = currentUser();
     const c = coupons.find((x) => x.id === couponId);
@@ -3838,7 +3877,7 @@
     if (pool.length < n) return toast(`Bu kupon için ${n} uygun kitap gerekiyor; şu an ${pool.length} kiralık ve indirimsiz boşta kitap var.`, 'info');
     const opts = pool.map((b) => `<option value="${b.id}">${escapeHTML(b.title)} · ${formatMoney(b.price)}</option>`).join('');
     openModal(`
-      ${modalHeader(`${escapeHTML(couponBadge(c))} Kuponu 🎟️`, `${n} kiralık kitap seç · en düşük fiyatlı olan bedava.`, 'gifts', 'bg-fuchsia-50 text-fuchsia-600')}
+      ${modalHeader(`${escapeHTML(couponBadge(c))} Kuponu 🎟️`, `${bogoText(c)}.`, 'gifts', 'bg-fuchsia-50 text-fuchsia-600')}
       <form data-form="useBogo" data-coupon-id="${c.id}" class="p-5 space-y-3" autocomplete="off">
         ${Array.from({ length: n }, (_, i) => field(`${i + 1}. kitap`, `<select name="b${i}" data-bogo-slot class="${INPUT_CLS}" required>
           <option value="">Kitap seç…</option>${opts}</select>`)).join('')}
@@ -3848,20 +3887,21 @@
     updateBogoSummary();
   }
 
-  /* Seçili kitaplar → satırlar (en ucuzu bedava; eşitse ilk seçilen) */
-  function bogoLines(ids) {
+  /* Seçili kitaplar → satırlar: en düşük fiyatlı freeCount tanesi bedava (eşitse önce seçilen) */
+  function bogoLines(ids, freeCount = 1) {
     const bs = ids.map(getBook).filter(Boolean);
-    const cheapest = bs.reduce((m, b, i) => (b.price < bs[m].price ? i : m), 0);
-    return bs.map((b, i) => ({ book: b, price: i === cheapest ? 0 : b.price, free: i === cheapest }));
+    const freeIdx = new Set(bs.map((b, i) => i).sort((a, b) => bs[a].price - bs[b].price || a - b).slice(0, freeCount));
+    return bs.map((b, i) => ({ book: b, price: freeIdx.has(i) ? 0 : b.price, free: freeIdx.has(i) }));
   }
 
   function updateBogoSummary() {
     const box = $('#bogoSummary');
     if (!box) return;
+    const c = coupons.find((x) => x.id === box.closest('form')?.dataset.couponId);
     const ids = [...$$('[data-bogo-slot]')].map((s) => s.value).filter(Boolean).map(Number);
     if (!ids.length) { box.innerHTML = '<span class="text-slate-400">Kitapları seçince ödenecek tutar burada görünür.</span>'; return; }
     if (new Set(ids).size !== ids.length) { box.innerHTML = '<span class="text-rose-500">Aynı kitap iki kez seçilemez.</span>'; return; }
-    const lines = bogoLines(ids);
+    const lines = bogoLines(ids, Math.min(couponFreeOf(c), ids.length));
     const total = sum(lines, (l) => l.price);
     const u = currentUser();
     box.innerHTML = `${lines.map((l) => `<p class="flex justify-between gap-2"><span class="truncate">${escapeHTML(l.book.title)}</span>
@@ -3881,14 +3921,15 @@
     const nowD = new Date();
     const bad = ids.map(getBook).find((b) => !b || !couponEligible(b, nowD));
     if (bad) return toast(`"${bad?.title || 'Kitap'}" artık uygun değil (kirada, indirimde ya da kiralık değil).`, 'error');
-    const lines = bogoLines(ids);
+    const lines = bogoLines(ids, couponFreeOf(c));
     const total = round2(sum(lines, (l) => l.price));
     if (!canRent(u)) return toast('Gözlemci rolündeki kullanıcılar kiralama yapamaz.', 'error');
     if (u.balance < total) return toast(`Yetersiz bakiye. ${formatMoney(round2(total - u.balance))} eksik.`, 'error');
     const batch = db.batch();
     couponRentOps(batch, u, c, lines);
     closeModal();
-    await run(batch.commit(), `🎟️ ${couponBadge(c)}: ${n} kitap kiralandı · "${lines.find((l) => l.free).book.title}" bedava · ${formatMoney(total)}`);
+    const freeTitles = lines.filter((l) => l.free).map((l) => `"${l.book.title}"`).join(', ');
+    await run(batch.commit(), `🎟️ ${couponBadge(c)}: ${n} kitap kiralandı · ${freeTitles} bedava · ${formatMoney(total)}`);
   }
 
   /* ==========================================================
@@ -5489,6 +5530,7 @@
       if ((m = el('[data-buy-coupon]')))       return m.disabled ? null : buyCoupon(m.dataset.buyCoupon);
       if ((m = el('[data-add-shop-coupon]')))  return openShopCouponModal();
       if ((m = el('[data-delete-shop-coupon]'))) return deleteShopCoupon(m.dataset.deleteShopCoupon);
+      if ((m = el('[data-edit-shop-coupon]'))) return openShopCouponModal(m.dataset.editShopCoupon);
       if ((m = el('[data-use-bogo]')))         return openBogoModal(m.dataset.useBogo);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
@@ -5533,7 +5575,7 @@
         case 'resetStats':  return handleResetStats(form);
         case 'setPassword': return handleSetPassword(fd);
         case 'saveVitrine': return handleSaveVitrine(fd);
-        case 'saveShopCoupon': return handleSaveShopCoupon(fd);
+        case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
         case 'useBogo':     return handleUseBogo(form);
       }
     });
@@ -5546,7 +5588,7 @@
       if (t.id === 'of-price') updateOfferCalc();
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
       if (t.id === 'vd-rate') updateVitrinePreview();
-      if (t.id === 'sc-value') updateShopCouponForm();
+      if (t.id === 'sc-value' || t.id === 'sc-free') updateShopCouponForm();
     });
     document.addEventListener('change', (e) => {
       const t = e.target;

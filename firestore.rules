@@ -43,6 +43,8 @@ service cloud.firestore {
     // Kupon türü / değeri (eski kayıtlar: yalnızca rate → yüzde kuponu)
     function couponType(c) { return c.get('type', 'percent'); }
     function couponValue(c) { return c.get('value', c.get('rate', 0)); }
+    // Al-Öde bedava kitap sayısı (eski kayıtlar 1)
+    function couponFree(c) { return c.get('free', null) == null ? 1 : c.free; }
 
     // ---------- Kullanıcılar ----------
     match /users/{userId} {
@@ -177,9 +179,9 @@ service cloud.firestore {
           && getAfter(path('users', uid())).data.lastTx == r.couponId
           && ((t == 'percent' && a.rentalIds.size() == 1 && r.price >= r.listPrice * (100 - v) / 100 - 0.01)
             || (t == 'amount' && a.rentalIds.size() == 1 && r.price >= r.listPrice - v - 0.01)
-            // Al-Öde: biri (en ucuz) bedava, diğerleri tam fiyat
+            // Al-Öde: bedava seçilenler (en ucuzlar) 0, diğerleri tam fiyat
             || (t == 'bogo' && a.rentalIds.size() == v
-              && (r.price == r.listPrice || (r.price == 0 && r.bookId == a.freeBookId))));
+              && (r.price == r.listPrice || (r.price == 0 && r.bookId in a.freeBookIds))));
       }
       // Günün İndirimi / Yeni Kitap: en fazla %50
       function standardDiscount(r) {
@@ -258,24 +260,26 @@ service cloud.firestore {
         && get(path('books', bookId)).data.get('status', 'kiralik') == 'kiralik';
     }
 
-    // Hediyelerim kupon mağazası (Kontrolcü ekler/siler) · { type, value, name, cost, endsAt|null, createdAt, createdBy }
-    // percent: %1–100 · amount: ₺ (0–10000] · bogo: N Al N-1 Öde (2–5, en ucuz kitap bedava)
+    // Hediyelerim kupon mağazası (Kontrolcü ekler/düzenler/siler) · { type, value, free, name, cost, endsAt|null, createdAt, createdBy }
+    // percent: %1–100 · amount: ₺ (0–10000] · bogo: value kitap (2–5), free tanesi bedava (1 … value-1, en ucuzlar)
     match /couponShop/{shopId} {
       allow read: if signedIn();
       allow delete: if isAdmin();
-      allow create: if isAdmin() && validShop(request.resource.data);
+      allow create, update: if isAdmin() && validShop(request.resource.data);
 
       function validShop(s) {
         return ((s.type == 'percent' && s.value is int && s.value >= 1 && s.value <= 100)
             || (s.type == 'amount' && s.value is number && s.value > 0 && s.value <= 10000)
-            || (s.type == 'bogo' && s.value is int && s.value >= 2 && s.value <= 5))
+            || (s.type == 'bogo' && s.value is int && s.value >= 2 && s.value <= 5
+              && s.free is int && s.free >= 1 && s.free < s.value))
+          && (s.type == 'bogo' || s.get('free', null) == null)
           && s.cost is number && s.cost > 0
           && s.name is string && s.name.size() <= 60
           && (s.endsAt == null || s.endsAt is timestamp);
       }
     }
 
-    // Alınan kupon · { userId, shopId, type, value, name, cost, boughtAt, expiresAt (7 gün), usedAt, rentalIds, bookIds, freeBookId, paidTotal }
+    // Alınan kupon · { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt (7 gün), usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
     // Puan yeterliliği istemcide hesaplanır (puan kiralama kayıtlarından türetilir).
     match /coupons/{couponId} {
       allow read: if signedIn();
@@ -285,16 +289,17 @@ service cloud.firestore {
 
       // Alım: mağazadaki kuponun birebir kopyası (mağaza süresi dolmamış), 7 gün geçerli, kullanılmamış
       function validCoupon(c) {
-        return c.keys().hasOnly(['userId', 'shopId', 'type', 'value', 'name', 'cost', 'boughtAt', 'expiresAt', 'usedAt', 'rentalIds', 'bookIds', 'freeBookId', 'paidTotal'])
+        return c.keys().hasOnly(['userId', 'shopId', 'type', 'value', 'free', 'name', 'cost', 'boughtAt', 'expiresAt', 'usedAt', 'rentalIds', 'bookIds', 'freeBookIds', 'paidTotal'])
           && c.userId == uid() && c.shopId is string
           && shopMatches(c, get(path('couponShop', c.shopId)).data)
           && c.expiresAt is timestamp
           && c.expiresAt > request.time + duration.value(6, 'd')
           && c.expiresAt <= request.time + duration.value(7, 'd') + duration.value(10, 'm')
-          && c.usedAt == null && c.rentalIds == null && c.bookIds == null && c.freeBookId == null && c.paidTotal == null;
+          && c.usedAt == null && c.rentalIds == null && c.bookIds == null && c.freeBookIds == null && c.paidTotal == null;
       }
       function shopMatches(c, s) {
         return c.type == s.type && c.value == s.value && c.cost == s.cost && c.name == s.name
+          && c.get('free', null) == s.get('free', null)
           && (s.endsAt == null || request.time < s.endsAt);
       }
 
@@ -305,13 +310,13 @@ service cloud.firestore {
         let a = request.resource.data;
         let n = couponType(c) == 'bogo' ? couponValue(c) : 1;
         return c.userId == uid() && c.usedAt == null && request.time < c.expiresAt
-          && changedKeys().hasOnly(['usedAt', 'rentalIds', 'bookIds', 'freeBookId', 'paidTotal'])
+          && changedKeys().hasOnly(['usedAt', 'rentalIds', 'bookIds', 'freeBookIds', 'paidTotal'])
           && a.usedAt is string
           && a.rentalIds is list && a.rentalIds.size() == n
           && a.bookIds is list && a.bookIds.size() == n
           && newRentals(a.rentalIds)
           && a.paidTotal is number && near(a.paidTotal, rentalsTotal(a.rentalIds))
-          && (couponType(c) != 'bogo' || cheapestFree(a.bookIds, a.freeBookId))
+          && (couponType(c) != 'bogo' || validFree(a.bookIds, a.freeBookIds, couponFree(c)))
           && getAfter(path('users', uid())).data.lastTx == couponId
           && getAfter(path('users', uid())).data.lastTxType == 'coupon';
       }
@@ -327,14 +332,23 @@ service cloud.firestore {
       function rentalsTotal(ids) {
         return priceAt(ids, 0) + priceAt(ids, 1) + priceAt(ids, 2) + priceAt(ids, 3) + priceAt(ids, 4);
       }
+      // Al-Öde: tam f farklı bedava kitap, hepsi seçilenler arasında ve hiçbir ücretli kitap bedavalardan ucuz değil
+      function validFree(ids, free, f) {
+        return free is list && free.size() == f && free.toSet().size() == f
+          && ids.toSet().hasAll(free)
+          && cheapestFree(ids, free, maxFreePrice(free));
+      }
       function bookPrice(id) { return get(path('books', string(id))).data.price; }
-      function cheapestFree(ids, free) {
-        return free in ids
-          && (ids.size() <= 0 || bookPrice(free) <= bookPrice(ids[0]))
-          && (ids.size() <= 1 || bookPrice(free) <= bookPrice(ids[1]))
-          && (ids.size() <= 2 || bookPrice(free) <= bookPrice(ids[2]))
-          && (ids.size() <= 3 || bookPrice(free) <= bookPrice(ids[3]))
-          && (ids.size() <= 4 || bookPrice(free) <= bookPrice(ids[4]));
+      function bigger(a, b) { return a > b ? a : b; }
+      function freePriceAt(free, i) { return free.size() > i ? bookPrice(free[i]) : 0; }
+      // bedava en fazla 4 kitap (Al-Öde en fazla 5 kitap)
+      function maxFreePrice(free) {
+        return bigger(bigger(freePriceAt(free, 0), freePriceAt(free, 1)), bigger(freePriceAt(free, 2), freePriceAt(free, 3)));
+      }
+      function paidNotCheaper(ids, free, i, m) { return ids.size() <= i || ids[i] in free || bookPrice(ids[i]) >= m; }
+      function cheapestFree(ids, free, m) {
+        return paidNotCheaper(ids, free, 0, m) && paidNotCheaper(ids, free, 1, m) && paidNotCheaper(ids, free, 2, m)
+          && paidNotCheaper(ids, free, 3, m) && paidNotCheaper(ids, free, 4, m);
       }
     }
     // Uygulama ayarları · settings/deals.refreshedAt: Kontrolcünün "Şimdi Yenile" anı
