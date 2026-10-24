@@ -166,7 +166,7 @@
     .sc-duo-1 { transform: translateX(34%) rotateY(-18deg) scale(.94); z-index: 1; }
     .showcase-host:hover .sc-duo-0 { transform: translateX(-52%) rotateY(12deg) scale(.98); }
     .showcase-host:hover .sc-duo-1 { transform: translateX(52%) rotateY(-12deg) scale(.98); }
-    /* Vitrin İndirimi (Kontrolcünün seçtikleri) · gece mavisi zemin, altın çerçeve, asılı etiket */
+    /* Vitrin İndirimi (Admin'in seçtikleri) · gece mavisi zemin, altın çerçeve, asılı etiket */
     .vitrine-bg { background: radial-gradient(120% 140% at 0% 0%, #3730a3 0%, #1e1b4b 42%, #0f172a 100%); }
     .vitrine-dots { background-image: radial-gradient(rgba(255, 255, 255, .07) 1px, transparent 1.2px); background-size: 16px 16px; }
     .vitrine-rim { background: linear-gradient(135deg, #fde68a, #b45309 30%, #fcd34d 55%, #92400e 80%, #fde68a); }
@@ -263,7 +263,7 @@
           <p id="authError" class="hidden mt-3 text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2"></p>
         </div>
 
-        <p class="text-[10px] text-slate-400 text-center mt-4 leading-relaxed">Giriş yapan her aile üyesi kendi hesabıyla kiralama yapar.<br/>Bakiye ve yönetim işlemleri Kontrolcüye aittir.</p>
+        <p class="text-[10px] text-slate-400 text-center mt-4 leading-relaxed">Giriş yapan her aile üyesi kendi hesabıyla kiralama yapar.<br/>Bakiye ve yönetim işlemleri Admin'e aittir.</p>
       </div>
     </div>
   </div>
@@ -301,21 +301,22 @@
 
           <!-- Profil Paneli (Dropdown) -->
           <div id="profilePanel"
-            class="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-[4.25rem] sm:top-auto sm:mt-2 sm:w-[22rem]
+            class="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-[4.25rem] sm:top-auto sm:mt-2 sm:w-[23rem]
                    max-h-[calc(100vh-5.5rem)] overflow-y-auto soft-scroll
-                   bg-white rounded-2xl shadow-soft-lg border border-brand-100
+                   bg-slate-50 rounded-3xl shadow-soft-lg border border-brand-100
                    origin-top-right transition duration-200 ease-out
                    opacity-0 scale-95 -translate-y-1 pointer-events-none">
 
             <!-- Kimlik kartı -->
-            <div class="relative p-4 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
-              <span class="absolute -right-8 -top-10 w-32 h-32 rounded-full bg-white/10"></span>
+            <div class="relative p-4 bg-gradient-to-br from-brand-500 via-brand-600 to-indigo-600 text-white overflow-hidden">
+              <span class="absolute -right-10 -top-12 w-36 h-36 rounded-full bg-white/10"></span>
+              <span class="absolute right-20 -bottom-12 w-24 h-24 rounded-full bg-white/5"></span>
               <div class="relative flex items-center gap-3">
-                <span id="panelAvatar" class="w-12 h-12 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold shrink-0"></span>
+                <span id="panelAvatar" class="w-12 h-12 rounded-2xl ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold shrink-0"></span>
                 <div class="min-w-0 flex-1">
-                  <p id="panelName" class="font-semibold text-sm truncate"></p>
-                  <p id="panelRole" class="text-[11px] text-brand-100"></p>
-                  <p id="panelEmail" class="text-[10px] text-brand-100/90 truncate"></p>
+                  <p id="panelName" class="font-bold text-sm truncate"></p>
+                  <p id="panelRole" class="inline-flex mt-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/20"></p>
+                  <p id="panelEmail" class="text-[10px] text-brand-100/90 truncate mt-0.5"></p>
                 </div>
               </div>
               <!-- Hızlı özet: bakiye · aktif kiralama · harcama -->
@@ -326,19 +327,19 @@
                   👤 Profilim
                 </button>
                 <button id="panelStatsBtn" type="button" data-user-stats=""
-                  class="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-[11px] font-semibold transition">
+                  class="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
                   📊 İstatistiklerim
                 </button>
               </div>
             </div>
 
-            <!-- Kullanıcı: aktif kiralamalar · Kontrolcü: Bakiye + Rol & Yetki -->
+            <!-- Kullanıcı: aktif kiralamalar · Admin: Kullanıcı Yönetimi (bakiye + rol) -->
             <div id="adminPanel" class="p-3"></div>
 
             <!-- Çıkış -->
             <div class="p-3 pt-0">
               <button type="button" data-sign-out
-                class="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-semibold text-rose-500 bg-rose-50/60 border border-rose-100 hover:bg-rose-50 transition">
+                class="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-semibold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 transition">
                 Çıkış Yap
               </button>
             </div>
@@ -374,7 +375,7 @@
       <!-- 1.5) Yeni Kitap vitrini (1 haftalık yeni kitap indirimi) -->
       <div id="newBooksSection"></div>
 
-      <!-- 1.7) Vitrin İndirimleri (Kontrolcünün seçtiği kitap + yüzde) -->
+      <!-- 1.7) Vitrin İndirimleri (Admin'in seçtiği kitap + yüzde) -->
       <div id="vitrineSection"></div>
 
       <!-- 2) Günün İndirimleri -->
@@ -474,6 +475,12 @@
     <button type="button" aria-label="Kapat" class="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/90 text-slate-600 hover:bg-white flex items-center justify-center shadow-soft">✕</button>
   </div>
 
+  <!-- Admin · Üye Görünümü şeridi (mod açıkken her sayfada) -->
+  <div id="memberViewBanner" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[55] items-center gap-2.5 pl-4 pr-1.5 py-1.5 rounded-full bg-slate-900/90 backdrop-blur text-white shadow-soft-lg text-[11px] font-semibold whitespace-nowrap">
+    <span>👁️ Üye görünümündesin</span>
+    <button type="button" data-exit-member-view class="px-3 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-600 transition">Admin'e dön</button>
+  </div>
+
   <!-- Toast bildirim alanı -->
   <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 items-end pointer-events-none"></div>
 
@@ -482,7 +489,7 @@
      0) FIREBASE (Auth + Firestore · compat SDK)
      ----------------------------------------------------------
      • Web yapılandırması gizli değildir; güvenliği firestore.rules sağlar.
-     • OWNER_EMAIL: ilk girişte otomatik Kontrolcü olan hesap.
+     • OWNER_EMAIL: ilk girişte otomatik Admin olan hesap.
        firestore.rules içindeki isOwner() ile aynı olmalı.
      ========================================================== */
   const firebaseConfig = {
@@ -523,7 +530,7 @@
   const NOW_MS = Date.now();
   const isoAt = (ms) => new Date(ms).toISOString();
 
-  /* users/{uid} · role: 'admin' (Kontrolcü) | 'member' (Kullanıcı) | 'observer' (Gözlemci)
+  /* users/{uid} · role: 'admin' (Admin) | 'member' (Kullanıcı) | 'observer' (Gözlemci)
      lastTx / lastTxType ('rental' | 'package'): son ödeme · güvenlik kuralı bakiye düşüşünü bununla doğrular */
   const users = [];
   const bookTypes = [];      // bookTypes/{id}  · order alanına göre sıralı
@@ -533,15 +540,15 @@
   const priceLogs = [];      // priceLogs/{id}
   const announcements = [];  // announcements/{id}
   const offers = [];         // offers/{id}
-  const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Kontrolcü seçer): { bookId, name, rate (1–100), endsAt, createdAt, createdBy }
+  const discounts = [];      // discounts/{bookId} · Vitrin İndirimi (Admin seçer): { bookId, name, rate (1–100), endsAt, createdAt, createdBy }
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const discountHistory = []; // discountHistory/{id} · kitabın geçmiş süreli indirimleri: { bookId, source, rate, startAt, endAt, label, recordedAt }
-  const couponShop = [];     // couponShop/{id} · Kontrolcünün mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
+  const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
   const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
 
   /* ==========================================================
-     1.1) ÖRNEK KATALOG (Kontrolcü panelinden bir kez Firestore'a yüklenir)
+     1.1) ÖRNEK KATALOG (Admin panelinden bir kez Firestore'a yüklenir)
      ========================================================== */
 
   /* Kitap türleri · palette: TYPE_PALETTES anahtarı
@@ -553,7 +560,7 @@
     { id: 'album', label: 'Albüm', palette: 'violet', inDeals: false }
   ];
 
-  /* Kitaplar (yazarı Kontrolcü · authorId yüklenirken Kontrolcünün uid'si olur)
+  /* Kitaplar (yazarı Admin · authorId yüklenirken Admin'in uid'si olur)
      type: bookTypes[].id
      id: sayısal ve artan (belge adı)
      seriesNo: kaçıncı seri · Günün İndirimleri sırası ve oranı buna göre (yalnızca indirim türlerinde)
@@ -586,7 +593,7 @@
      Özel teklif satın alımları (offerPurchases) harcama istatistiğine paket fiyatı olarak yansır. */
 
   /* Fiyat logları: changeBookPrice() her çağrıldığında otomatik eklenir
-     changedBy yüklenirken Kontrolcünün uid'si olur */
+     changedBy yüklenirken Admin'in uid'si olur */
   const SEED_PRICE_LOGS = [
     { id: 'p1', bookId: 3,  oldPrice: 35,   newPrice: 40, changedBy: 'u1', changedAt: isoAt(NOW_MS - 22 * DAY_MS) },
     { id: 'p6', bookId: 3,  oldPrice: 30,   newPrice: 35, changedBy: 'u1', changedAt: isoAt(NOW_MS - 50 * DAY_MS) },
@@ -636,7 +643,7 @@
     groupSize: 3              // günde kaç kitap
   };
   const NEW_BOOK_DISCOUNT = { rate: 15, days: 7 }; // yeni eklenen kitap indirimi
-  /* Hediyelerim kupon türleri (mağazayı Kontrolcü doldurur)
+  /* Hediyelerim kupon türleri (mağazayı Admin doldurur)
      percent: %1–100 · amount: ₺ indirim (fiyat 0'ın altına inmez)
      bogo: value kitap alınır, free tanesi bedava (en düşük fiyatlılar) · ör. 3 Al 2 Öde = value 3, free 1 */
   const COUPON_TYPES = {
@@ -654,7 +661,7 @@
     ready: false,          // ilk veriler geldi mi
     pendingName: '',       // e-posta ile kayıtta girilen ad (profil belgesine yazılır)
     readPending: new Set(), // okundu olarak yazılmakta olan duyurular
-    purgePending: new Set(), // Kontrolcünün sildiği süresi dolmuş teklifler
+    purgePending: new Set(), // Admin'in sildiği süresi dolmuş teklifler
     route: 'dashboard',
     profileOpen: false,
     mobileMenuOpen: false,
@@ -664,7 +671,8 @@
     statsUserId: null,     // açık istatistik modalındaki kullanıcı
     statsPage: { rentals: 1, purchases: 1 },
     confirmAction: null,
-    panelTab: 'balance',   // profil panelindeki Kontrolcü sekmesi: 'balance' | 'roles'
+    panelUser: null,       // profil panelindeki Kullanıcı Yönetimi: açık olan kullanıcı
+    memberView: (() => { try { return localStorage.getItem('fb.memberView') === '1'; } catch { return false; } })(), // Admin: Üye Görünümü
     bookTab: 'all',
     bookFilterKind: 'none', // Kitaplar: filtre türü (place | year | status | rating)
     bookFilterValue: 'all', // Kitaplar: seçili türün değeri
@@ -748,11 +756,11 @@
   /* Döneme özel tür (Özel kitaplar): dönem metni + açıklama alanları, kiralanınca kendiliğinden Kira dışı */
   const isSpecialType = (typeId) => { const t = getType(typeId); return !!(t?.special ?? typeId === 'ozel'); };
 
-  /* Kitap durumları (Kontrolcü ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
+  /* Kitap durumları (Admin ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
   const BOOK_STATUSES = {
     kiralik:     { label: 'Kiralık',     chip: 'bg-emerald-50 text-emerald-600', dot: 'bg-emerald-400', desc: 'Kiralanabilir' },
     kiradisi:    { label: 'Kira dışı',   chip: 'bg-slate-100 text-slate-500',    dot: 'bg-slate-400',   desc: 'Görünür ama kiralanamaz' },
-    listedisi:   { label: 'Liste dışı',  chip: 'bg-rose-50 text-rose-500',       dot: 'bg-rose-400',    desc: 'Yalnızca Kontrolcüler görür' },
+    listedisi:   { label: 'Liste dışı',  chip: 'bg-rose-50 text-rose-500',       dot: 'bg-rose-400',    desc: 'Yalnızca Adminler görür' },
     planlaniyor: { label: 'Planlanıyor', chip: 'bg-violet-50 text-violet-600',   dot: 'bg-violet-400',  desc: 'Gelmesi planlanıyor · bilgiler eksik olabilir · kiralanamaz' },
     yakinda:     { label: 'Yakında',     chip: 'bg-sky-50 text-sky-600',         dot: 'bg-sky-400',     desc: 'Yazılmaya başlandı · bilgiler eksik olabilir · kiralanamaz' }
   };
@@ -780,7 +788,7 @@
   }
 
   /* Haber türleri (Duyurular → Haberler)
-     Duyuru: Kontrolcünün genel yazısı · İndirim: indirim / özel teklif / yeni kitap indirimi
+     Duyuru: Admin'in genel yazısı · İndirim: indirim / özel teklif / yeni kitap indirimi
      Bilgilendirme: kitap durumu değişti, kitap silindi · Etkinlik: kupon eklendi */
   const NEWS_CATEGORIES = {
     'Duyuru':        'bg-brand-50 text-brand-600',
@@ -792,17 +800,18 @@
   const newsCategoryOf = (a) => ({ 'Yeni Kitap': 'İndirim', 'Kitap Durumu': 'Bilgilendirme' }[a?.category]
     || (NEWS_CATEGORIES[a?.category] ? a.category : 'Duyuru'));
   const newsChipCls = (c) => NEWS_CATEGORIES[c] || 'bg-slate-100 text-slate-600';
-  /* Otomatik haberler yalnızca Kontrolcü işaretlerse atılır */
+  /* Otomatik haberler yalnızca Admin işaretlerse atılır */
   const announceCheckHTML = (id, cat, checked = false) => `
     <label class="flex items-center justify-center gap-2 mt-3 text-[11px] text-slate-600">
       <input type="checkbox" id="${id}" name="announce" ${checked ? 'checked' : ''} class="rounded border-slate-300 text-brand-600" />
       📣 Duyuruya at <span class="text-[10px] font-semibold px-1.5 py-px rounded-full ${newsChipCls(cat)}">${cat}</span>
     </label>`;
 
+  /* Roller · renkler: Admin yeşil, Üye mavi, Gözlemci sarı */
   const ROLES = {
-    admin:    { label: 'Kontrolcü', chip: 'bg-amber-50 text-amber-700',  desc: 'Tüm yönetim yetkileri' },
-    member:   { label: 'Kullanıcı', chip: 'bg-brand-50 text-brand-600',  desc: 'Kiralama yapabilir' },
-    observer: { label: 'Gözlemci',  chip: 'bg-slate-100 text-slate-600', desc: 'Sadece görüntüler' }
+    admin:    { label: 'Admin',    chip: 'bg-emerald-50 text-emerald-600', desc: 'Tüm yönetim yetkileri' },
+    member:   { label: 'Üye',      chip: 'bg-brand-50 text-brand-600',     desc: 'Kiralama yapabilir' },
+    observer: { label: 'Gözlemci', chip: 'bg-amber-50 text-amber-600',     desc: 'Sadece görüntüler' }
   };
 
   const MEDALS = ['🥇', '🥈', '🥉'];
@@ -882,7 +891,9 @@
   const getAnn = (id) => announcements.find((a) => a.id === id);
   const getOffer = (id) => offers.find((o) => o.id === id);
   const currentUser = () => getUser(state.currentUserId);
-  const isAdmin = () => currentUser()?.role === 'admin';
+  /* Gerçek Admin rolü · Üye Görünümü açıkken arayüz Admin'i üye gibi gösterir (isAdmin false) */
+  const isRealAdmin = () => currentUser()?.role === 'admin';
+  const isAdmin = () => isRealAdmin() && !state.memberView;
   const canRent = (user = currentUser()) => user && user.role !== 'observer';
   const canViewStats = (userId) => isAdmin() || userId === state.currentUserId;
   const authorName = (book) => getUser(book?.authorId)?.name || 'Kağan Durak';
@@ -1116,7 +1127,7 @@
       </div>`);
   }
 
-  /* Kontrolcü: oy(lar)ı sil · silinen oyun sahibi yeniden oy verebilir */
+  /* Admin: oy(lar)ı sil · silinen oyun sahibi yeniden oy verebilir */
   function deleteRating(id, bookId) {
     if (!requireAdmin()) return;
     const b = getBook(bookId);
@@ -1133,7 +1144,7 @@
     });
   }
 
-  /* Kiralanma sayısı: kayıtlardan sayılır · Kontrolcü bir kiralamayı silince kendiliğinden düşer */
+  /* Kiralanma sayısı: kayıtlardan sayılır · Admin bir kiralamayı silince kendiliğinden düşer */
   const bookRentCount   = (bookId) => rentals.filter((r) => r.bookId === Number(bookId)).length;
 
   function rentalProgress(r, now = Date.now()) {
@@ -1182,7 +1193,7 @@
        numarasına göre sıralı. Gün içinde eklenen kitap ertesi gün listeye girer.
      • Her gün bir sonraki 3'lü grup gelir (1-2-3 → 4-5-6 → …). Son grup eksik
        kalırsa (22-23) o şekilde gösterilir, ertesi gün yine 1-2-3'ten başlar.
-     • Kontrolcü "Sonraki 3'lü" ile istediği kadar ilerletebilir ya da grubu
+     • Admin "Sonraki 3'lü" ile istediği kadar ilerletebilir ya da grubu
        kendisi seçebilir (settings/deals.pinDay/pinGroup/pinAt). Sonraki günler
        o gruptan devam eder; 10:00'daki otomatik geçiş her zaman çalışır.
      ========================================================== */
@@ -1193,7 +1204,7 @@
     { max: 20,       rate: 25 },
     { max: Infinity, rate: 20 }
   ];
-  /* Seri sırası: Kontrolcünün girdiği "kaçıncı seri" numarası.
+  /* Seri sırası: Admin'in girdiği "kaçıncı seri" numarası.
      Numarası olmayan (eski) kayıtlar sıranın sonuna, kitap numarasına göre dizilir. */
   const seriesRank = (book) => (Number.isInteger(book?.seriesNo) && book.seriesNo > 0 ? book.seriesNo : 1e6 + (book?.id || 0));
   const getDiscountRate = (bookId) => {
@@ -1224,7 +1235,7 @@
     return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
   }
 
-  /* Günün sıralı listesi · cutoffMs verilirse o andaki kitaplarla (Kontrolcü seçimi) */
+  /* Günün sıralı listesi · cutoffMs verilirse o andaki kitaplarla (Admin seçimi) */
   function dealList(dayNum, cutoffMs = null) {
     const startTime = cutoffMs ?? discountDayStart(dayNum).getTime();
     return books
@@ -1234,9 +1245,9 @@
   }
   const dealGroupCount = (list) => Math.ceil(list.length / DISCOUNT_SETTINGS.groupSize);
 
-  /* settings/deals.pinDay + pinGroup + pinAt: Kontrolcünün en son seçtiği grup (o günden itibaren geçerli) */
+  /* settings/deals.pinDay + pinGroup + pinAt: Admin'in en son seçtiği grup (o günden itibaren geçerli) */
   const dealsDoc = () => appSettings.find((s) => s.id === 'deals') || {};
-  /* settings/deals.removedDay + removedIds: Kontrolcünün bugünkü indirimden çıkardığı kitaplar
+  /* settings/deals.removedDay + removedIds: Admin'in bugünkü indirimden çıkardığı kitaplar
      (yalnızca o indirim günü geçerli; 10:00'da yeni gün başlayınca kendiliğinden düşer) */
   const dealsRemovedToday = (now = new Date()) => {
     const d = dealsDoc();
@@ -1249,7 +1260,7 @@
     let day = anchorDayNumber();
     if (today < day) return { ids: [], group: 0, groupCount: 0, listSize: 0, pinned: false };
 
-    // Başlangıç: Kontrolcünün en son seçimi (bugün veya önce yapıldıysa), yoksa ilk gün 1. grup
+    // Başlangıç: Admin'in en son seçimi (bugün veya önce yapıldıysa), yoksa ilk gün 1. grup
     const d = dealsDoc();
     let group = 0;
     let list;
@@ -1301,7 +1312,7 @@
     }
     return { rate, source };
   }
-  /* Vitrin İndirimi: Kontrolcünün kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek).
+  /* Vitrin İndirimi: Admin'in kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek).
      %100 = bedava · bitiş anı (endsAt) geçince kendiliğinden düşer. */
   const CUSTOM_DISCOUNT_MAX = 100;
   const isVitrineActive = (d, now = new Date()) => Number.isInteger(d.rate) && d.rate > 0 && (d.endsMs == null || d.endsMs > now.getTime());
@@ -1415,7 +1426,7 @@
     readBy: []
   });
 
-  /* Haber robotu: Kontrolcü kitabın durumunu değiştirince otomatik duyuru.
+  /* Haber robotu: Admin kitabın durumunu değiştirince otomatik duyuru.
      Liste dışı kitap üyelere görünmediği için duyuruya kitap bağlanmaz. */
   function statusAnnouncement(book, status) {
     const name = `"${book.title}"`;
@@ -1480,7 +1491,7 @@
      sonradan elle silinse de kayıt kalır. Fiyat logundaki kalıcı fiyat değişimleri buraya girmez.
      Not: günün indirimi o gün uygulamayı açan biri olursa kaydedilir. */
   const HISTORY_SOURCES = ['deal', 'new', 'custom', 'offer'];
-  /* Kontrolcünün sildiği geçmiş kayıtları (settings/historyHidden.ids) yeniden yazılmaz */
+  /* Admin'in sildiği geçmiş kayıtları (settings/historyHidden.ids) yeniden yazılmaz */
   const hiddenHistoryIds = () => new Set(appSettings.find((s) => s.id === 'historyHidden')?.ids || []);
   function recordDiscountHistory(now = new Date()) {
     if (!state.ready) return;
@@ -1552,7 +1563,7 @@
       </div>`);
   }
 
-  /* Kontrolcü: geçmiş indirim kaydını (ya da kitabın tümünü) sil · silinenler bir daha yazılmaz */
+  /* Admin: geçmiş indirim kaydını (ya da kitabın tümünü) sil · silinenler bir daha yazılmaz */
   function deleteDiscountHistory(id, bookId) {
     if (!requireAdmin()) return;
     const b = getBook(bookId);
@@ -1627,7 +1638,7 @@
     const { at } = moment;
     const isNow = moment.kind === 'now';
     const isFuture = moment.kind === 'future';
-    // Geçmiş tarihte o günkü fiyatı Kontrolcü girebilir (zam/indirim buna göre hesaplanır)
+    // Geçmiş tarihte o günkü fiyatı Admin girebilir (zam/indirim buna göre hesaplanır)
     const override = round2(parseFloat(oldPriceOverride));
     const oldPrice = isNow ? book.price : isFuture ? priceAt(book, at.getTime()) : (override > 0 ? override : priceAt(book, at.getTime()));
     if (newPrice === oldPrice) return { ok: false, reason: `${isNow ? 'Yeni fiyat mevcut fiyatla' : 'Yeni fiyat o tarihteki fiyatla'} aynı.` };
@@ -1647,7 +1658,7 @@
     return { ok: true, book, oldPrice, newPrice, at, isToday: isNow, isFuture, updatesCurrent, pct: pricePct(oldPrice, newPrice), done: batch.commit() };
   }
 
-  /* Kiralamayı tamamen siler (Kontrolcü). Paket (özel teklif) kiralamasında paketin
+  /* Kiralamayı tamamen siler (Admin). Paket (özel teklif) kiralamasında paketin
      tüm kitapları ve satın alım kaydı birlikte silinir; kitap kilitleri açılır.
      Bakiye iade edilmez. */
   function removeRental(rentalId) {
@@ -2086,8 +2097,8 @@
       </div>`;
   }
 
-  /* --- 8.1.7 Vitrin İndirimleri (gece mavisi + altın) · Kontrolcü ekler/siler --- */
-  /* Süresi biten vitrin indirimleri: herkes için gizlenir, Kontrolcü açıksa Firestore'dan da silinir */
+  /* --- 8.1.7 Vitrin İndirimleri (gece mavisi + altın) · Admin ekler/siler --- */
+  /* Süresi biten vitrin indirimleri: herkes için gizlenir, Admin açıksa Firestore'dan da silinir */
   function purgeExpiredVitrine(now = new Date()) {
     if (!isAdmin()) return;
     discounts.filter((d) => d.endsMs != null && d.endsMs <= now.getTime()).forEach((d) => {
@@ -2154,7 +2165,7 @@
               </span>
               <div>
                 <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Vitrin İndirimleri</h2>
-                <p class="text-[11px] text-indigo-200/70">Kontrolcünün seçtiği özel fırsatlar · süreleri dolunca kendiliğinden kalkar</p>
+                <p class="text-[11px] text-indigo-200/70">Admin'in seçtiği özel fırsatlar · süreleri dolunca kendiliğinden kalkar</p>
               </div>
             </div>
             ${admin ? `<button type="button" data-add-vitrine
@@ -2162,12 +2173,12 @@
           </div>
           ${list.length
             ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`
-            : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz vitrin indirimi yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Kontrolcüler görür.</span></p>`}
+            : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz vitrin indirimi yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Adminler görür.</span></p>`}
         </div>
       </div>`;
   }
 
-  /* Kontrolcü: vitrin indirimi ekle (aynı kitaba yeniden eklemek indirimi günceller).
+  /* Admin: vitrin indirimi ekle (aynı kitaba yeniden eklemek indirimi günceller).
      Başka bir indirimdeki kitap (günün indirimi, yeni kitap, aktif özel teklif) seçilemez. */
   function openVitrineModal() {
     if (!requireAdmin()) return;
@@ -2270,7 +2281,7 @@
     const deals = getDailyDeals(now);
 
     $('#dealsMeta').textContent = deals.listSize
-      ? `Grup ${deals.group + 1}/${deals.groupCount} · Sıra ${deals.fromPos}–${deals.toPos} / ${deals.listSize}${deals.pinned ? ' · ↻ Kontrolcü seçti' : ''}`
+      ? `Grup ${deals.group + 1}/${deals.groupCount} · Sıra ${deals.fromPos}–${deals.toPos} / ${deals.listSize}${deals.pinned ? ' · ↻ Admin seçti' : ''}`
       : 'Henüz indirime uygun kitap yok';
     const size = DISCOUNT_SETTINGS.groupSize;
     const groupOptions = Array.from({ length: deals.groupCount }, (_, g) => {
@@ -2344,7 +2355,7 @@
     ? '<span class="rate-pop text-[9px] font-extrabold text-white bg-gradient-to-r from-rose-500 via-fuchsia-500 to-amber-500 px-2 py-0.5 rounded-full shadow-soft">🎉 MEGA FIRSAT</span>'
     : tier === 'hot' ? '<span class="text-[9px] font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 px-2 py-0.5 rounded-full shadow-soft">🔥 SÜPER FIRSAT</span>' : '';
 
-  /* Kontrolcü: bugünkü grubu belirle (o anki güncel kitaplarla) · sonraki günler buradan devam eder,
+  /* Admin: bugünkü grubu belirle (o anki güncel kitaplarla) · sonraki günler buradan devam eder,
      10:00'daki otomatik geçiş değişmez. Bugün indirimden çıkarılanlar sıfırlanır. */
   function setDealGroup(group) {
     if (!requireAdmin()) return;
@@ -2359,10 +2370,10 @@
       pinDay: discountDayNumber(now), pinGroup: g, pinAt: now.toISOString(), pinBy: state.currentUserId, removedIds: []
     }, { merge: true }), `Günün indirimleri güncellendi · Sıra ${from === to ? from : `${from}–${to}`}`);
   }
-  /* Kontrolcü: sıradaki 3'lüye geç (son gruptan sonra baştan) */
+  /* Admin: sıradaki 3'lüye geç (son gruptan sonra baştan) */
   const refreshDeals = () => setDealGroup(getDailyDeals().group + 1);
 
-  /* Kontrolcü: kitabı yalnızca bugünkü indirimden çıkar (kitap kitaplıkta kalır) */
+  /* Admin: kitabı yalnızca bugünkü indirimden çıkar (kitap kitaplıkta kalır) */
   function removeFromDeals(bookId) {
     if (!requireAdmin()) return;
     const b = getBook(bookId);
@@ -2415,7 +2426,7 @@
             ${r.discount ? `<p class="text-[10px] font-bold text-rose-500">%${r.discount} indirimli</p>` : ''}`;
   }
 
-  /* Kontrolcüye özel kırmızı "Kiralamayı İptal Et / Sil" butonu */
+  /* Admin'e özel kırmızı "Kiralamayı İptal Et / Sil" butonu */
   const rentalDeleteBtn = (r) => isAdmin() ? `
     <button type="button" data-delete-rental="${r.id}" title="Kiralamayı iptal et / sil"
       class="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-500 hover:text-white hover:border-rose-500 px-2.5 py-1 rounded-full whitespace-nowrap transition">
@@ -2607,7 +2618,7 @@
     const now = Date.now();
     // "Tümü" sekmesi yok: yalnızca kategoriler (varsayılan ilk kategori)
     if (!getType(state.bookTab)) state.bookTab = defaultTypeId();
-    const shown = visibleBooks(); // Liste dışı kitapları yalnızca Kontrolcüler görür
+    const shown = visibleBooks(); // Liste dışı kitapları yalnızca Adminler görür
     const countOf = (k) => shown.filter((b) => b.type === k).length;
     // Sıra: Planlanıyor → Yakında → diğerleri (çıkış tarihi yeni → eski)
     const statusRank = (b) => ({ planlaniyor: 0, yakinda: 1 }[bookStatus(b)] ?? 2);
@@ -2780,7 +2791,7 @@
   /* Kitap detay modalı (iki sütun + fiyat geçmişi zaman çizelgesi) */
   function openBookModal(bookId, opts = {}) {
     const b = getBook(bookId);
-    if (!isVisibleBook(b)) return; // Liste dışı: yalnızca Kontrolcü açabilir
+    if (!isVisibleBook(b)) return; // Liste dışı: yalnızca Admin açabilir
     const u = currentUser();
     const now = new Date();
     const { rate, source } = getEffectiveDiscount(b, now);
@@ -3046,7 +3057,7 @@
       </div>`, 'lg');
   }
 
-  /* Kontrolcü: kitap durumunu hızlı değiştir (kitap detayındaki seçimden) */
+  /* Admin: kitap durumunu hızlı değiştir (kitap detayındaki seçimden) */
   async function setBookStatus(bookId, status) {
     if (!requireAdmin()) return;
     const b = getBook(bookId);
@@ -3061,7 +3072,7 @@
       toast('Kiralık yapmadan önce çıkış tarihini girin → Düzenle.', 'error');
       return openBookModal(b.id);
     }
-    // Duyuru yalnızca Kontrolcü "Duyuruya at"ı işaretlediyse
+    // Duyuru yalnızca Admin "Duyuruya at"ı işaretlediyse
     const announce = !!$('#statusAnnounce')?.checked;
     const batch = db.batch();
     const patch = { status };
@@ -3165,7 +3176,7 @@
     await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}`);
   }
 
-  /* Kitabı sil (Kontrolcü) · her yerden temizlenir: duyurular, kiralamalar (ana sayfa +
+  /* Kitabı sil (Admin) · her yerden temizlenir: duyurular, kiralamalar (ana sayfa +
      Kiralananlar + istatistikler), fiyat logu ve özel teklifler. Bakiye iade edilmez. */
   function deleteBook(bookId) {
     if (!requireAdmin()) return;
@@ -3478,12 +3489,12 @@
     return `<ul class="space-y-2">${rows}</ul>${pagerHTML('purchases', page, pages, list.length)}`;
   }
 
-  /* Kontrolcüye özel kayıt silme butonu (istatistik modalı) */
+  /* Admin'e özel kayıt silme butonu (istatistik modalı) */
   const statsDeleteBtn = (attr, id) => isAdmin()
     ? `<button type="button" ${attr}="${id}" title="Kaydı sil" aria-label="Kaydı sil" class="${BTN_ICON} shrink-0 text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>`
     : '';
 
-  /* İstatistik kaydı sil (Kontrolcü) · onaydan sonra aynı kullanıcının istatistiklerine dönülür */
+  /* İstatistik kaydı sil (Admin) · onaydan sonra aynı kullanıcının istatistiklerine dönülür */
   function deleteStatsRecord(kind, id) {
     if (!requireAdmin()) return;
     const userId = state.statsUserId;
@@ -3507,7 +3518,7 @@
     });
   }
 
-  /* Kullanıcının tüm istatistiklerini sıfırla (Kontrolcü) · kiralamalar + satın alımlar silinir */
+  /* Kullanıcının tüm istatistiklerini sıfırla (Admin) · kiralamalar + satın alımlar silinir */
   /* Kategori özetleri: kayıt sayısı + harcama (sıfırlama penceresi) */
   function statCatSummary(userId) {
     const mine = rentals.filter((r) => r.userId === userId);
@@ -3527,7 +3538,7 @@
     return out;
   }
 
-  /* İstatistik sıfırlama penceresi (Kontrolcü): kategori kategori ya da tümü */
+  /* İstatistik sıfırlama penceresi (Admin): kategori kategori ya da tümü */
   function resetUserStats(userId) {
     if (!requireAdmin()) return;
     const u = getUser(userId);
@@ -4109,7 +4120,7 @@
      ========================================================== */
   const isShopActive = (s, now = Date.now()) => s.endsMs == null || s.endsMs > now;
 
-  /* Süresi biten mağaza kuponları: herkes için gizlenir, Kontrolcü açıksa Firestore'dan da silinir
+  /* Süresi biten mağaza kuponları: herkes için gizlenir, Admin açıksa Firestore'dan da silinir
      (önceden alınmış kuponlar etkilenmez) */
   function purgeExpiredShop(now = Date.now()) {
     if (!isAdmin()) return;
@@ -4263,7 +4274,7 @@
     });
   }
 
-  /* Kontrolcü: mağazaya kupon ekle / düzenle (yüzde / ₺ / Al-Öde · isteğe bağlı mağaza bitişi).
+  /* Admin: mağazaya kupon ekle / düzenle (yüzde / ₺ / Al-Öde · isteğe bağlı mağaza bitişi).
      Düzenleme yalnızca bundan sonra alınacak kuponları etkiler; önceden alınanlar kendi kopyasını korur. */
   function openShopCouponModal(editId = null) {
     if (!requireAdmin()) return;
@@ -4502,7 +4513,7 @@
   const offerPurchaseCount = (o) => offerPurchases.filter((p) => p.offerId === o.id).length;
 
   /* Süresi biten teklifler vitrinden direkt silinir (kiralamalar ve istatistikler korunur).
-     Herkes için yerel listeden çıkarılır; Kontrolcü açıksa Firestore'dan da silinir. */
+     Herkes için yerel listeden çıkarılır; Admin açıksa Firestore'dan da silinir. */
   function purgeExpiredOffers(now = new Date()) {
     const before = offers.length;
     for (let i = offers.length - 1; i >= 0; i--) {
@@ -4589,7 +4600,7 @@
       <div class="flex items-start gap-2.5 bg-white/70 border border-brand-100 rounded-2xl px-4 py-3 mb-5 text-xs text-slate-500">
         <span class="text-brand-500 shrink-0 mt-px">${icon('info')}</span>
         <span>${admin
-          ? 'Kontrolcü olarak 1–3 kitaplık paketler ekleyip düzenleyebilir ve silebilirsin. Süresi biten teklifler otomatik olarak silinir. Bir üye teklifi kiraladığında paketteki kitapların hepsi birden kiralık olur.'
+          ? 'Admin olarak 1–3 kitaplık paketler ekleyip düzenleyebilir ve silebilirsin. Süresi biten teklifler otomatik olarak silinir. Bir üye teklifi kiraladığında paketteki kitapların hepsi birden kiralık olur.'
           : 'Bir teklifi kiraladığında paketteki kitapların hepsi birden senin olur; bakiyenden sadece paket fiyatı düşer.'}</span>
       </div>`;
 
@@ -4881,7 +4892,7 @@
 
   const requireAdmin = () => {
     if (isAdmin()) return true;
-    toast('Bu işlem yalnızca Kontrolcü tarafından yapılabilir.', 'error');
+    toast('Bu işlem yalnızca Admin tarafından yapılabilir.', 'error');
     return false;
   };
 
@@ -5282,7 +5293,7 @@
       : `Kiralama ve istatistikleri silindi · "${getBook(r.bookId)?.title || 'Kitap'}".`, 'info');
   }
 
-  /* Biten kiralamanın etiketi: Kontrolcü iptal ettiyse "İptal Edildi", yoksa "Süresi Doldu" */
+  /* Biten kiralamanın etiketi: Admin iptal ettiyse "İptal Edildi", yoksa "Süresi Doldu" */
   const endedLabel = (r) => (r.cancelledAt ? 'İptal Edildi' : 'Süresi Doldu');
 
   /* --- Kategorileri (kitap türlerini) yönet --- */
@@ -5411,7 +5422,7 @@
     run(done, editId ? 'Haber güncellendi.' : 'Duyuru yayınlandı 📣');
   }
 
-  /* Kontrolcü: haberleri toplu sil · tür (Tümü / Duyuru / İndirim / Bilgilendirme / Etkinlik) + zaman (tümü / bugün) */
+  /* Admin: haberleri toplu sil · tür (Tümü / Duyuru / İndirim / Bilgilendirme / Etkinlik) + zaman (tümü / bugün) */
   const bulkNewsTargets = (cat, scope) => {
     const today = localDateKey();
     return announcements.filter((a) => a.type === 'news'
@@ -5674,10 +5685,10 @@
   async function setRole(userId, role) {
     const u = getUser(userId);
     if (!u || !ROLES[role]) return;
-    if (!isAdmin()) { toast('Rol değiştirme yalnızca Kontrolcü yetkisindedir.', 'error'); return renderProfile(); }
+    if (!isAdmin()) { toast('Rol değiştirme yalnızca Admin yetkisindedir.', 'error'); return renderProfile(); }
     if (u.role === role) return;
     if (isOwnerUser(u) && role !== 'admin') {
-      toast('Ana Kontrolcü hesabının rolü değiştirilemez.', 'error');
+      toast('Ana Admin hesabının rolü değiştirilemez.', 'error');
       return renderProfile();
     }
     const ok = await run(col('users').doc(u.id).update({ role }), `${u.name} artık ${ROLES[role].label}.`);
@@ -5700,10 +5711,10 @@
 
     // Kimlik kartı
     const pa = $('#panelAvatar');
-    pa.className = `w-12 h-12 rounded-full ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold shrink-0 bg-gradient-to-br ${u.color}`;
+    pa.className = `w-12 h-12 rounded-2xl ring-2 ring-white/40 flex items-center justify-center text-sm font-semibold shrink-0 shadow-soft bg-gradient-to-br ${u.color}`;
     pa.textContent = initials(u.name);
     $('#panelName').textContent = u.name;
-    $('#panelRole').textContent = (u.role === 'admin' ? '★ ' : '') + ROLES[u.role].label;
+    $('#panelRole').textContent = state.memberView && isRealAdmin() ? '👁️ Üye görünümü' : (u.role === 'admin' ? '★ ' : '') + ROLES[u.role].label;
     $('#panelEmail').textContent = u.email || state.authUser?.email || '';
     $('#panelStatsBtn').dataset.userStats = u.id;
 
@@ -5711,19 +5722,37 @@
     const s = userStats(u.id);
     const activeCount = rentals.filter((r) => r.userId === u.id && isActiveRental(r)).length;
     $('#panelQuick').innerHTML = [
-      { label: 'Bakiye', value: formatMoney(u.balance) },
-      { label: 'Aktif Kiralık', value: `${activeCount} kitap` },
-      { label: 'Harcama', value: formatMoney(s.spent) }
+      { icon: '💰', label: 'Bakiye', value: formatMoney(u.balance) },
+      { icon: '📖', label: 'Aktif Kiralık', value: `${activeCount} kitap` },
+      { icon: '🧾', label: 'Harcama', value: formatMoney(s.spent) }
     ].map((c) => `
-      <div class="rounded-xl bg-white/15 px-2.5 py-2 min-w-0">
-        <p class="text-[9px] uppercase tracking-wider text-brand-100">${c.label}</p>
-        <p class="text-xs font-bold truncate">${c.value}</p>
+      <div class="rounded-2xl bg-white/15 ring-1 ring-white/10 px-2.5 py-2 min-w-0">
+        <p class="text-[9px] uppercase tracking-wider text-brand-100">${c.icon} ${c.label}</p>
+        <p class="text-xs font-bold truncate mt-0.5">${c.value}</p>
       </div>`).join('');
 
     renderAdminPanel();
+    // Üye Görünümü şeridi yalnızca gerçek Admin'de ve mod açıkken
+    const banner = $('#memberViewBanner');
+    const showBanner = isRealAdmin() && state.memberView;
+    banner.classList.toggle('hidden', !showBanner);
+    banner.classList.toggle('flex', showBanner);
   }
 
-  /* Kullanıcı (Kontrolcü olmayan) için panel: aktif kiralamalar + bilgi */
+  /* Admin: Üye Görünümü aç / kapat · siteyi bir üyenin gözünden görür (Admin araçları gizlenir).
+     Yalnızca arayüzü etkiler; yetkiler ve veriler değişmez. Bu cihazda hatırlanır. */
+  function setMemberView(on) {
+    if (!isRealAdmin()) return;
+    state.memberView = !!on;
+    try { localStorage.setItem('fb.memberView', on ? '1' : '0'); } catch { /* gizli sekme vb. */ }
+    closeModal();
+    state.panelUser = null;
+    renderProfile();
+    renderCurrentPage();
+    toast(on ? '👁️ Üye görünümüne geçtin · siteyi bir üyenin gözünden görüyorsun.' : '🛡️ Admin görünümüne döndün.', 'info');
+  }
+
+  /* Kullanıcı (Admin olmayan) için panel: aktif kiralamalar + bilgi */
   function memberPanelHTML(u) {
     const nowMs = Date.now();
     const active = rentals.filter((r) => r.userId === u.id && isActiveRental(r, nowMs))
@@ -5732,7 +5761,7 @@
       const b = getBook(r.bookId);
       const { remainingMs, ratio } = rentalProgress(r, nowMs);
       return `
-        <li class="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50/80">
+        <li class="flex items-center gap-2.5 p-2 rounded-2xl bg-white border border-slate-100">
           ${coverHTML(b, 'xs')}
           <div class="flex-1 min-w-0">
             <p class="text-[11px] font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
@@ -5747,76 +5776,91 @@
       </div>
       ${active.length
         ? `<ul class="space-y-1.5">${rows}</ul>${active.length > 4 ? `<p class="text-[10px] text-slate-400 mt-1.5 px-1">+${active.length - 4} kiralama daha</p>` : ''}`
-        : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Şu an kiraladığın kitap yok. Günün İndirimleri\'ne göz at! 📚</p>'}
+        : '<p class="text-[11px] text-slate-400 bg-white border border-dashed border-slate-200 rounded-2xl px-3 py-2.5">Şu an kiraladığın kitap yok. Günün İndirimleri\'ne göz at! 📚</p>'}
       <p class="text-[10px] text-slate-400 flex items-center gap-1.5 px-1 mt-2.5">
-        <span class="text-brand-300">${icon('lock', 'w-3 h-3')}</span>Bakiye yükleme ve yönetim işlemleri Kontrolcüye aittir.
+        <span class="text-brand-300">${icon('lock', 'w-3 h-3')}</span>Bakiye yükleme ve yönetim işlemleri Admin'e aittir.
       </p>`;
   }
 
   function renderAdminPanel() {
     const box = $('#adminPanel');
 
+    // Gerçek Admin: Üye Görünümü anahtarı (iki modda da görünür)
+    const viewSwitch = isRealAdmin() ? `
+      <button type="button" data-toggle-member-view
+        class="w-full mb-3 flex items-center gap-3 p-2.5 rounded-2xl border transition text-left ${state.memberView
+          ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' : 'bg-white border-slate-100 hover:border-brand-200'}">
+        <span class="w-9 h-9 rounded-xl ${state.memberView ? 'bg-emerald-500 text-white' : 'bg-brand-50 text-brand-600'} flex items-center justify-center text-base shrink-0">${state.memberView ? '🛡️' : '👁️'}</span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-xs font-bold text-slate-700">${state.memberView ? "Admin'e dön" : 'Üye Görünümü'}</span>
+          <span class="block text-[10px] text-slate-400">${state.memberView ? 'Şu an siteyi bir üyenin gözünden görüyorsun' : 'Siteyi bir üyenin gözünden gör · Admin araçları gizlenir'}</span>
+        </span>
+        <span class="relative w-9 h-5 rounded-full shrink-0 transition ${state.memberView ? 'bg-emerald-500' : 'bg-slate-200'}">
+          <span class="absolute top-0.5 ${state.memberView ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+        </span>
+      </button>` : '';
+
     if (!isAdmin()) {
-      box.innerHTML = memberPanelHTML(currentUser());
+      box.innerHTML = viewSwitch + memberPanelHTML(currentUser());
       return;
     }
 
-    const tab = (key, label) => `
-      <button type="button" data-panel-tab="${key}"
-        class="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${state.panelTab === key ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600'}">${label}</button>`;
+    // Canlı güncellemede yazılmakta olan tutar kaybolmasın (aynı kullanıcı açıkken)
+    const prevAmount = $('#bmAmount')?.dataset.user === state.panelUser ? $('#bmAmount').value : '';
+    if (state.panelUser && !getUser(state.panelUser)) state.panelUser = null;
 
-    // Canlı güncellemede yazılmakta olan değerler kaybolmasın
-    const prevTarget = $('#bmUser')?.value;
-    const prevAmount = $('#bmAmount')?.value;
-    let body;
-
-    if (state.panelTab === 'roles') {
-      body = `
-        <p class="px-1 mb-2 text-[11px] font-semibold text-slate-600">Kullanıcı Rol & Yetki Yönetimi ⚙️</p>
-        <ul class="space-y-2">
-          ${users.map((u) => `
-            <li class="bg-white rounded-xl border border-brand-100 p-2.5">
-              <div class="flex items-center gap-2.5">
-                ${avatarHTML(u, 'w-7 h-7 text-[10px]')}
-                <div class="min-w-0 flex-1">
-                  <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</p>
-                  <p class="text-[10px] truncate text-slate-400">${escapeHTML(u.email || '—')}</p>
+    // Tek liste: her kullanıcı bir satır · dokununca bakiye + rol ayarı aynı yerde açılır
+    const row = (u) => {
+      const open = state.panelUser === u.id;
+      const owner = isOwnerUser(u);
+      return `
+        <li class="rounded-2xl border transition ${open ? 'border-brand-200 bg-brand-50/50 shadow-soft' : 'border-slate-100 bg-white hover:border-brand-100'}">
+          <button type="button" data-panel-user="${u.id}" aria-expanded="${open}" class="w-full flex items-center gap-2.5 p-2.5 text-left">
+            ${avatarHTML(u, 'w-8 h-8 text-[11px]')}
+            <span class="min-w-0 flex-1">
+              <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</span>
+              <span class="inline-flex mt-0.5 text-[9px] font-semibold px-1.5 py-px rounded-full ${ROLES[u.role]?.chip || ''}">${owner ? '★ ' : ''}${ROLES[u.role]?.label || u.role}</span>
+            </span>
+            <span class="text-xs font-bold text-emerald-600 tabular-nums shrink-0">${formatMoney(u.balance)}</span>
+            <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+          </button>
+          ${open ? `
+            <div class="px-2.5 pb-3 space-y-3">
+              <div>
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">💰 Bakiye</p>
+                <div class="flex gap-1.5 mb-1.5">
+                  ${[10, 25, 50, 100].map((v) => `<button type="button" data-quick-amount="${v}" class="flex-1 py-1 rounded-lg text-[10px] font-semibold bg-white border border-brand-100 text-brand-600 hover:bg-brand-50 transition">₺${v}</button>`).join('')}
+                </div>
+                <input id="bmAmount" data-user="${u.id}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Tutar (₺)" value="${escapeHTML(prevAmount)}"
+                  class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+                <div class="grid grid-cols-3 gap-1.5 mt-1.5">
+                  <button type="button" data-balance-action="add" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition">+ Ekle</button>
+                  <button type="button" data-balance-action="subtract" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-rose-50 text-rose-500 hover:bg-rose-100 transition">− Azalt</button>
+                  <button type="button" data-balance-action="set" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 transition">Eşitle</button>
                 </div>
               </div>
-              <div class="flex gap-1.5 mt-2">
-                <select data-role-user="${u.id}" aria-label="${escapeHTML(u.name)} rolü" ${isOwnerUser(u) ? 'disabled title="Ana Kontrolcü"' : ''}
-                  class="flex-1 min-w-0 text-[11px] rounded-lg border border-brand-100 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:bg-slate-50 disabled:text-slate-400">
-                  ${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${r.label}</option>`).join('')}
-                </select>
+              <div>
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">⚙️ Rol & Yetki</p>
+                ${owner
+                  ? '<p class="text-[10px] text-slate-500 bg-white rounded-xl border border-slate-100 px-3 py-2">★ Ana Admin · rolü değiştirilemez.</p>'
+                  : `<div class="grid grid-cols-${Object.keys(ROLES).length} gap-1 p-1 bg-white rounded-xl border border-brand-100">
+                      ${Object.entries(ROLES).map(([k, r]) => `
+                        <button type="button" data-set-role="${k}" data-user="${u.id}" title="${escapeHTML(r.desc)}"
+                          class="py-1.5 rounded-lg text-[10px] font-semibold transition ${u.role === k ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600 hover:bg-brand-50'}">${r.label}</button>`).join('')}
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-1 px-1">${ROLES[u.role]?.desc || ''}</p>`}
               </div>
-            </li>`).join('')}
-        </ul>
-        ${(() => {
-          const waiting = ALLOWED_EMAILS.filter((e) => !users.some((u) => (u.email || '').toLowerCase() === e));
-          return waiting.length ? `
-            <p class="px-1 mt-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">İzinli · henüz giriş yapmadı</p>
-            <ul class="space-y-1">
-              ${waiting.map((e) => `<li class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-dashed border-brand-100 text-[11px] text-slate-500 truncate">⏳ ${escapeHTML(e)}</li>`).join('')}
-            </ul>` : '';
-        })()}
-        <div class="mt-2.5 px-1 space-y-0.5 text-[10px] text-slate-400">
-          ${Object.values(ROLES).map((r) => `<p><b class="text-slate-500">${r.label}:</b> ${r.desc}</p>`).join('')}
-        </div>`;
-    } else {
-      body = `
-        <div class="space-y-2">
-          <select id="bmUser" class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200">
-            ${users.map((u) => `<option value="${u.id}">${escapeHTML(u.name)} — ${formatMoney(u.balance)}</option>`).join('')}
-          </select>
-          <input id="bmAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Tutar (₺)"
-            class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-          <div class="grid grid-cols-3 gap-2">
-            <button type="button" data-balance-action="add" class="py-2 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition">+ Ekle</button>
-            <button type="button" data-balance-action="subtract" class="py-2 rounded-xl text-xs font-semibold bg-rose-50 text-rose-500 hover:bg-rose-100 transition">− Azalt</button>
-            <button type="button" data-balance-action="set" class="py-2 rounded-xl text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition">Eşitle</button>
-          </div>
-        </div>`;
-    }
+            </div>` : ''}
+        </li>`;
+    };
+    const waiting = ALLOWED_EMAILS.filter((e) => !users.some((u) => (u.email || '').toLowerCase() === e));
+    const body = `
+      <ul class="space-y-1.5">${users.map(row).join('')}</ul>
+      ${waiting.length ? `
+        <p class="px-1 mt-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">İzinli · henüz giriş yapmadı</p>
+        <ul class="space-y-1">
+          ${waiting.map((e) => `<li class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white border border-dashed border-brand-100 text-[11px] text-slate-500 truncate">⏳ ${escapeHTML(e)}</li>`).join('')}
+        </ul>` : ''}`;
 
     // Firestore boşsa (ilk kurulum): örnek kataloğu taşıma kartı
     const seedCard = !bookTypes.length && !books.length ? `
@@ -5830,24 +5874,23 @@
       </div>` : '';
 
     box.innerHTML = `
+      ${viewSwitch}
       ${seedCard}
-      <div class="rounded-2xl bg-brand-50/50 border border-brand-100 p-3">
-        <p class="flex items-center gap-1.5 px-1 mb-2.5 text-[11px] font-bold text-slate-700">🛡️ Kontrolcü Paneli</p>
-        <div class="flex gap-1 p-1 bg-white rounded-xl border border-brand-100 mb-3">
-          ${tab('balance', '💰 Bakiye Yönetimi')}
-          ${tab('roles', '⚙️ Rol & Yetki')}
+      <div class="rounded-3xl bg-white border border-brand-100 shadow-soft p-3">
+        <div class="flex items-center justify-between gap-2 px-1 mb-2.5">
+          <p class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">🛡️ Kullanıcı Yönetimi</p>
+          <span class="text-[10px] text-slate-400">${users.length} kişi · toplam ${formatMoney(sum(users, (u) => u.balance))}</span>
         </div>
+        <p class="px-1 mb-2 text-[10px] text-slate-400">Bakiye ve rolü ayarlamak için kullanıcıya dokun.</p>
         ${body}
       </div>`;
-    if (prevTarget && $('#bmUser')) $('#bmUser').value = prevTarget;
-    if (prevAmount && $('#bmAmount')) $('#bmAmount').value = prevAmount;
   }
 
-  async function handleBalanceAction(action) {
+  async function handleBalanceAction(action, userId) {
     if (!isAdmin()) return toast('Bu işlem için yetkiniz yok.', 'error');
 
-    const target = getUser($('#bmUser').value);
-    const amount = parseFloat($('#bmAmount').value);
+    const target = getUser(userId);
+    const amount = parseFloat($('#bmAmount')?.value);
 
     if (!target) return toast('Kullanıcı bulunamadı.', 'error');
     if (isNaN(amount) || amount < 0) return toast('Lütfen geçerli bir tutar girin.', 'error');
@@ -6057,7 +6100,7 @@
   }
 
   /* ==========================================================
-     17.1) İLK KURULUM: ÖRNEK KATALOĞU FIRESTORE'A TAŞI (Kontrolcü)
+     17.1) İLK KURULUM: ÖRNEK KATALOĞU FIRESTORE'A TAŞI (Admin)
      ========================================================== */
   async function seedCatalog(mode) {
     if (!requireAdmin()) return;
@@ -6145,8 +6188,11 @@
       if ((m = t.closest('[data-open-profile]')))    return openProfileModal();
       if (t.closest('a[href^="#"]'))                 return toggleProfile(false);
       if ((m = t.closest('[data-seed]')))            return seedCatalog(m.dataset.seed);
-      if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction);
-      if ((m = t.closest('[data-panel-tab]')))       { state.panelTab = m.dataset.panelTab; return renderAdminPanel(); }
+      if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction, m.dataset.user);
+      if ((m = t.closest('[data-set-role]')))        return setRole(m.dataset.user, m.dataset.setRole);
+      if ((m = t.closest('[data-toggle-member-view]'))) return setMemberView(!state.memberView);
+      if ((m = t.closest('[data-quick-amount]')))    { const i = $('#bmAmount'); if (i) { i.value = m.dataset.quickAmount; i.focus(); } return; }
+      if ((m = t.closest('[data-panel-user]')))      { state.panelUser = state.panelUser === m.dataset.panelUser ? null : m.dataset.panelUser; return renderAdminPanel(); }
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
     });
 
@@ -6160,6 +6206,7 @@
       let m;
       if ((m = el('#coverLightbox')))          return closeCoverLightbox();
       if ((m = el('[data-zoom-cover]')))       return openCoverLightbox(m.querySelector('img'));
+      if ((m = el('[data-exit-member-view]'))) return setMemberView(false);
       if ((m = el('[data-modal-close]')))      return closeModal();
       if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
       if ((m = el('[data-sign-out]')))         return signOut();
@@ -6258,7 +6305,6 @@
     document.addEventListener('change', (e) => {
       const t = e.target;
       if (t.matches('[data-cover-input]')) return handleCoverInput(t);
-      if (t.matches('[data-role-user]')) return setRole(t.dataset.roleUser, t.value);
       if (t.matches('[data-quick-status]')) return setBookStatus(t.dataset.quickStatus, t.value);
       if (t.matches('[data-deal-group]')) return setDealGroup(t.value);
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
@@ -6375,7 +6421,7 @@
     SYNC.forEach(([, arr]) => { arr.length = 0; });
   }
 
-  /* İlk girişte users/{uid} belgesi oluşturulur (bakiye 0; ana Kontrolcü e-postası → Kontrolcü) */
+  /* İlk girişte users/{uid} belgesi oluşturulur (bakiye 0; ana Admin e-postası → Admin) */
   async function ensureUserDoc(user) {
     const ref = col('users').doc(user.uid);
     const snap = await ref.get();
