@@ -526,12 +526,12 @@
     { id: 4,  title: 'Karadeniz Yaz Albümü 2019',      type: 'album', price: 35, pages: 64,  rentalDays: 7,  place: 'Trabzon – Uzungöl',       releaseDate: '2019-12-15', authorId: 'u1', cover: '', addedAt: '2026-09-03T12:00:00', newDiscountUntil: null },
     { id: 5,  title: 'Rüzgârın Kızı',                  type: 'seri', seriesNo: 4,  price: 30, pages: 190, rentalDays: 14, place: 'İzmir – Urla',            releaseDate: '2022-11-01', authorId: 'u1', cover: '', addedAt: '2026-09-05T12:00:00', newDiscountUntil: null },
     { id: 6,  title: 'Rüzgârın Oğlu',                  type: 'seri', seriesNo: 5,  price: 22, pages: 204, rentalDays: 14, place: 'İzmir – Urla',            releaseDate: '2023-09-15', authorId: 'u1', cover: '', addedAt: '2026-09-06T12:00:00', newDiscountUntil: null },
-    { id: 7,  title: 'Dedemin Bahçesi',                type: 'ozel',  price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
+    { id: 7,  title: 'Dedemin Bahçesi',                type: 'ozel',  special: true, period: 'yaz tatillerinde', description: 'Dedemin köy evindeki bahçede geçen yaz anıları.', price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
     { id: 8,  title: 'Kapadokya Albümü 2021',          type: 'album', price: 18, pages: 48,  rentalDays: 7,  place: 'Nevşehir – Göreme',       releaseDate: '2022-01-05', authorId: 'u1', cover: '', addedAt: '2026-09-10T12:00:00', newDiscountUntil: null },
     { id: 9,  title: 'Kayıp Harita',                   type: 'seri', seriesNo: 6,  price: 45, pages: 312, rentalDays: 14, place: 'Ankara – Çalışma odası',  releaseDate: '2024-04-20', authorId: 'u1', cover: '', addedAt: '2026-09-12T12:00:00', newDiscountUntil: null },
     { id: 10, title: 'Bayram Sabahları',               type: 'album', price: 20, pages: 56,  rentalDays: 7,  place: 'Ankara – Keçiören',       releaseDate: '2024-05-01', authorId: 'u1', cover: '', addedAt: '2026-09-14T12:00:00', newDiscountUntil: null },
     { id: 11, title: 'Yıldız Tozu',                    type: 'seri', seriesNo: 7,  price: 22, pages: 176, rentalDays: 14, place: 'Bolu – Abant',            releaseDate: '2025-01-10', authorId: 'u1', cover: '', addedAt: '2026-09-15T12:00:00', newDiscountUntil: null },
-    { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
+    { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  special: true, period: 'bayram günlerinde', description: 'Ailemizin kuşaklar boyu anlatılan hikâyesi.', price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
     { id: 13, title: 'Sessiz Kütüphane',               type: 'seri', seriesNo: 8,  price: 16, pages: 160, rentalDays: 14, place: 'İstanbul – Kadıköy',      releaseDate: '2026-03-01', authorId: 'u1', cover: '', addedAt: '2026-09-20T12:00:00', newDiscountUntil: null },
     { id: 14, title: 'Kış Masalları',                  type: 'seri', seriesNo: 9,  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → sonraki döngüye kalır
   ];
@@ -1219,7 +1219,7 @@
      • Geçmiş tarih → log o güne (12:00) yazılır; eski fiyat o günkü fiyattır.
        Sonraki ilk logun "eski fiyatı" yeni fiyata çekilir (zincir tutarlı kalır).
        O tarihten sonra başka değişim yoksa kitabın güncel fiyatı da otomatik değişir. */
-  function changeBookPrice(bookId, newPrice, dateKey = localDateKey()) {
+  function changeBookPrice(bookId, newPrice, dateKey = localDateKey(), oldPriceOverride = null) {
     const book = getBook(bookId);
     if (!book) return { ok: false, reason: 'Kitap bulunamadı.' };
     newPrice = round2(newPrice);
@@ -1230,7 +1230,9 @@
 
     const isToday = dateKey === today;
     const at = isToday ? new Date() : (() => { const d = dateFromKey(dateKey); d.setHours(12, 0, 0, 0); return d; })();
-    const oldPrice = isToday ? book.price : priceAt(book, at.getTime());
+    // Geçmiş tarihte o günkü fiyatı Kontrolcü girebilir (zam/indirim buna göre hesaplanır)
+    const override = round2(parseFloat(oldPriceOverride));
+    const oldPrice = isToday ? book.price : (override > 0 ? override : priceAt(book, at.getTime()));
     if (newPrice === oldPrice) return { ok: false, reason: `${isToday ? 'Yeni fiyat mevcut fiyatla' : 'Yeni fiyat o tarihteki fiyatla'} aynı.` };
 
     const later = priceTimeline(book.id).filter((l) => new Date(l.changedAt) > at);
@@ -1297,9 +1299,9 @@
   }
 
   /* Kitap türü ekle / düzenle / sil */
-  function addBookType({ label, palette, inDeals }) {
+  function addBookType({ label, palette, inDeals, special = false }) {
     const order = bookTypes.reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
-    return col('bookTypes').doc(uid('t')).set({ label, palette, inDeals, order });
+    return col('bookTypes').doc(uid('t')).set({ label, palette, inDeals, special, order });
   }
 
   /* Türü siler; o türdeki kitaplar indirim davranışı aynı olan ilk türe taşınır
@@ -1891,7 +1893,7 @@
             <!-- Orta boşluk: şeffaf, eğik, parıldayan kitap adı (tablet/masaüstü) -->
             <span class="ghost-title ${fresh ? 'is-new' : ''} hidden sm:block flex-1 min-w-0 truncate text-center text-xl lg:text-2xl px-3 select-none pointer-events-none" aria-hidden="true">${escapeHTML(b.title)}</span>
             <!-- Sağ: çarpıcı mavi fiyat (indirim varsa eski fiyat + yüzde) · durum -->
-            <div class="shrink-0 flex items-center gap-2 sm:gap-3">
+            <div class="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3">
               ${priceTagHTML(b, eff)}
               <div class="flex flex-col items-end gap-1">
                 ${statusChipHTML(b, now)}
@@ -2047,7 +2049,7 @@
                       <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
                       <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
                       <b class="text-slate-800">${formatMoney(l.newPrice)}</b>
-                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '+' : '−'}${formatMoney(Math.abs(diff))} · ${up ? '+' : '−'}%${Math.abs(pricePct(l.oldPrice, l.newPrice))} ${up ? 'zam' : 'indirim'}</span>
+                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '▲' : '▼'} ${formatMoney(Math.abs(diff))} · ${pctText(pricePct(l.oldPrice, l.newPrice))}</span>
                     </p>
                   </div>
                   ${admin ? `<button type="button" data-delete-log="${l.id}" data-book-id="${b.id}" data-back-offer="${backOfferId}" title="Bu kaydı sil"
@@ -2762,8 +2764,8 @@
         const up = diff > 0;
         const pct = Math.abs(pricePct(l.oldPrice, l.newPrice));
         const diffChip = `<span class="inline-flex flex-col items-end px-2 py-1 rounded-lg text-[11px] font-bold tabular-nums leading-tight ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">
-          <span>${up ? '+' : '−'}${formatMoney(Math.abs(diff))}</span>
-          <span class="text-[9px] font-extrabold">${up ? '+' : '−'}%${pct} ${up ? 'ZAM' : 'İNDİRİM'}</span>
+          <span>${up ? '▲' : '▼'} ${formatMoney(Math.abs(diff))}</span>
+          <span class="text-[9px] font-extrabold">%${pct} ${up ? 'ZAM' : 'İNDİRİM'}</span>
         </span>`;
         const priceFlow = `
           <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
@@ -3451,7 +3453,7 @@
     const b = editId ? getBook(editId) : null;
     state.bookDraftCover = b ? b.cover : '';
     const today = localDateKey();
-    const selType = b && getType(b.type) ? b.type : defaultTypeId();
+    const selType = b && getType(b.type) ? b.type : (getType(state.bookTab) ? state.bookTab : defaultTypeId());
     const typeOptions = bookTypes
       .map((t) => `<option value="${t.id}" ${selType === t.id ? 'selected' : ''}>${escapeHTML(t.label)}${t.inDeals ? '' : ' (indirime girmez)'}</option>`).join('');
 
@@ -3622,6 +3624,8 @@
           <div>
             <span id="cpCurrentLabel" class="block text-[11px] font-medium text-slate-500 mb-1">Mevcut Fiyat</span>
             <p id="cpCurrent" class="text-sm font-bold text-slate-700 bg-slate-50 rounded-xl px-3 py-2">${formatMoney(sel.price)}</p>
+            <!-- Geçmiş tarihte: o günkü fiyat yazılabilir -->
+            <input name="oldPrice" id="cpOld" type="number" min="0.01" step="0.01" class="${INPUT_CLS} hidden" placeholder="0,00" />
           </div>
           ${field('Yeni Fiyat (₺)', `<input name="newPrice" id="cpNew" type="number" min="0.01" step="0.01" required autofocus class="${INPUT_CLS}" placeholder="0,00" />`)}
         </div>
@@ -3631,15 +3635,22 @@
     updateChangePricePreview();
   }
 
-  /* Fiyat Güncelle formu: seçilen tarihteki fiyat + zam/indirim önizlemesi */
-  function updateChangePricePreview() {
+  /* Fiyat Güncelle formu: seçilen tarihteki fiyat + zam/indirim önizlemesi.
+     resetOld: tarih/kitap değişince geçmiş fiyat kutusu o günkü kayıtlı fiyatla yeniden doldurulur */
+  function updateChangePricePreview(resetOld = false) {
     const b = getBook($('#cpBook')?.value);
     const box = $('#cpPreview');
     if (!b || !box) return;
     const dateKey = $('#cpDate')?.value || localDateKey();
     const isToday = dateKey === localDateKey();
     const at = isToday ? Date.now() : dateFromKey(dateKey).setHours(12, 0, 0, 0);
-    const oldPrice = isToday ? b.price : priceAt(b, at);
+    const oldInput = $('#cpOld');
+    if (!isToday && (resetOld || !oldInput.value)) oldInput.value = priceAt(b, at) || '';
+    oldInput.classList.toggle('hidden', isToday);
+    oldInput.required = !isToday;
+    $('#cpCurrent').classList.toggle('hidden', !isToday);
+    const typedOld = parseFloat(oldInput.value);
+    const oldPrice = isToday ? b.price : (typedOld > 0 ? typedOld : priceAt(b, at));
     $('#cpCurrentLabel').textContent = isToday ? 'Mevcut Fiyat' : `${formatDate(dateKey + 'T12:00:00')} tarihindeki fiyat`;
     $('#cpCurrent').textContent = formatMoney(oldPrice);
     const np = parseFloat($('#cpNew')?.value);
@@ -3652,16 +3663,17 @@
     box.innerHTML = `${formatMoney(oldPrice)} → <b class="text-slate-700">${formatMoney(np)}</b> · ${pctChipHTML(pct)}<br><span class="text-slate-400">${note}</span>`;
   }
 
-  /* Zam / indirim yüzde rozeti */
+  /* Zam / indirim yüzdesi: işaretsiz ("%20 indirim", "%12 zam") */
+  const pctText = (pct) => (pct === 0 ? 'değişim yok' : `%${Math.abs(pct)} ${pct > 0 ? 'zam' : 'indirim'}`);
   const pctChipHTML = (pct) => pct === 0 ? '<span class="text-slate-400">değişim yok</span>'
-    : `<b class="${pct > 0 ? 'text-rose-500' : 'text-emerald-600'}">${pct > 0 ? '+' : '−'}%${Math.abs(pct)} ${pct > 0 ? 'zam' : 'indirim'}</b>`;
+    : `<b class="${pct > 0 ? 'text-rose-500' : 'text-emerald-600'}">${pctText(pct)}</b>`;
 
   function handleChangePrice(fd) {
     if (!requireAdmin()) return;
-    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice), fd.date);
+    const res = changeBookPrice(fd.bookId, parseFloat(fd.newPrice), fd.date, fd.oldPrice);
     if (!res.ok) return toast(res.reason, 'error');
     closeModal();
-    const pctTxt = `${res.pct > 0 ? '+' : '−'}%${Math.abs(res.pct)} ${res.pct > 0 ? 'zam' : 'indirim'}`;
+    const pctTxt = pctText(res.pct);
     run(res.done, `"${res.book.title}": ${formatMoney(res.oldPrice)} → ${formatMoney(res.newPrice)} (${pctTxt})${res.isToday ? '' : res.updatesCurrent ? ' · geçmişe kaydedildi, güncel fiyat da değişti' : ' · geçmişe kaydedildi'}`);
   }
 
@@ -3759,7 +3771,7 @@
             <span class="w-2.5 h-2.5 rounded-full shrink-0 ${typeStyle(t.id).dot}"></span>
             <input name="label" required maxlength="24" value="${escapeHTML(t.label)}" aria-label="Tür adı" class="${INPUT_CLS} !py-1.5 flex-1 min-w-0" />
             <select name="palette" aria-label="Renk" class="${INPUT_CLS} !py-1.5 !w-24 shrink-0">${paletteOptions(t.palette)}</select>
-            <span class="text-[10px] text-slate-400 whitespace-nowrap shrink-0" title="${t.inDeals ? 'Günün indirimi döngüsüne girer' : 'Günün indirimi döngüsüne girmez'}">${count} kitap${t.inDeals ? '' : ' · indirimsiz'}</span>
+            <span class="text-[10px] text-slate-400 whitespace-nowrap shrink-0" title="${t.inDeals ? 'Günün indirimi döngüsüne girer' : 'Günün indirimi döngüsüne girmez'}">${count} kitap${t.inDeals ? '' : ' · indirimsiz'}${isSpecialType(t.id) ? ' · 🔒 özel' : ''}</span>
             <div class="flex gap-1 shrink-0 ml-auto">
               <button type="submit" title="Kaydet" class="${BTN_ICON} text-slate-400 hover:text-emerald-600 hover:bg-emerald-50">${icon('check', 'w-3.5 h-3.5')}</button>
               <button type="button" data-delete-type="${t.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>
@@ -3782,6 +3794,10 @@
             <input type="checkbox" name="inDeals" class="rounded border-slate-300 text-brand-600" />
             Günün indirimi döngüsüne girsin
           </label>
+          <label class="flex items-center gap-2 text-[11px] text-slate-500">
+            <input type="checkbox" name="special" class="rounded border-slate-300 text-rose-500" />
+            🔒 Döneme özel tür (Dönem alanı, kiralanınca otomatik Kira dışı)
+          </label>
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Türü Ekle</button>
         </form>
         <p class="text-[10px] text-slate-400 leading-relaxed">İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
@@ -3800,7 +3816,7 @@
       if (!getType(editId)) return;
       done = col('bookTypes').doc(editId).update({ label, palette });
     } else {
-      done = addBookType({ label, palette, inDeals: fd.inDeals === 'on' });
+      done = addBookType({ label, palette, inDeals: fd.inDeals === 'on', special: fd.special === 'on' });
     }
     const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" türü eklendi.`);
     if (ok && state.modalOpen) openTypeManager();
@@ -4592,7 +4608,7 @@
       if (t.id === 'updQuery') { state.updQuery = t.value; renderUpdateList(); }
       if (t.id === 'bf-title') updateBookFormPreview();
       if (t.id === 'of-price') updateOfferCalc();
-      if (t.id === 'cpNew') updateChangePricePreview();
+      if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
     });
     document.addEventListener('change', (e) => {
       const t = e.target;
@@ -4602,7 +4618,7 @@
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
-      if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview();
+      if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview(true);
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
     });
 
