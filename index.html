@@ -121,6 +121,25 @@
       .new-glow::before, .new-glow::after, .twinkle, .deal-hot, .deal-mega, .rate-pop, .confetti-layer i { animation: none; }
       .confetti-layer { display: none; }
     }
+    /* Özel teklif vitrini · arka plan indirim yüzdesine göre, yıldız rozet, nokta deseni */
+    .offer-pattern { background-image: radial-gradient(rgba(255, 255, 255, .2) 1.2px, transparent 1.4px); background-size: 14px 14px; }
+    .offer-mega-bg {
+      background: linear-gradient(120deg, #4c1d95, #7c3aed, #db2777, #f59e0b, #db2777, #4c1d95);
+      background-size: 300% 300%; animation: offerFlow 6s ease infinite;
+    }
+    @keyframes offerFlow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    .offer-burst {
+      clip-path: polygon(50% 0%, 61% 11%, 75% 6%, 79% 21%, 94% 25%, 89% 39%, 100% 50%, 89% 61%, 94% 75%, 79% 79%, 75% 94%,
+        61% 89%, 50% 100%, 39% 89%, 25% 94%, 21% 79%, 6% 75%, 11% 61%, 0% 50%, 11% 39%, 6% 25%, 21% 21%, 25% 6%, 39% 11%);
+    }
+    .burst-spin { animation: burstSpin 14s linear infinite; }
+    @keyframes burstSpin { to { transform: rotate(360deg); } }
+    .offer-sheen::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+      background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .35) 50%, transparent 65%);
+      transform: translateX(-130%); animation: goldSweep 4.5s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) { .offer-mega-bg, .burst-spin, .offer-sheen::after { animation: none; } }
     /* 1 veya 2 kitaplı teklif vitrinleri */
     .sc-solo { transform: translateZ(30px); z-index: 3; }
     .showcase-host:hover .sc-solo { transform: translateZ(50px) translateY(-6px) scale(1.06); }
@@ -480,25 +499,26 @@
 
   /* Kitaplar (yazarı Kontrolcü · authorId yüklenirken Kontrolcünün uid'si olur)
      type: bookTypes[].id
-     id: sayısal ve artan; günlük indirim oranları bu ID'ye göre belirlenir
-     writtenAt: yazıldığı tarih (liste sıralaması) · releaseDate: çıkış tarihi
+     id: sayısal ve artan (belge adı)
+     seriesNo: kaçıncı seri · Günün İndirimleri sırası ve oranı buna göre (yalnızca indirim türlerinde)
+     releaseDate: çıkış tarihi · liste sıralaması, çıkış yılı ve 7 günlük yeni kitap indirimi buradan
      addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya ''
      lockUntil / lockBy / lockRental: kiralama kilidi (güvenlik kuralı müsaitliği bununla denetler) */
   const SEED_BOOKS = [
-    { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri',  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2019-03-14', releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
-    { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri',  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2020-01-20', releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
-    { id: 3,  title: 'Gece Yolcusu III: Gar',          type: 'seri',  price: 40, pages: 268, rentalDays: 14, place: 'İstanbul – Haydarpaşa',   writtenAt: '2021-02-08', releaseDate: '2021-08-30', authorId: 'u1', cover: '', addedAt: '2026-09-02T12:00:00', newDiscountUntil: null },
-    { id: 4,  title: 'Karadeniz Yaz Albümü 2019',      type: 'album', price: 35, pages: 64,  rentalDays: 7,  place: 'Trabzon – Uzungöl',       writtenAt: '2019-08-02', releaseDate: '2019-12-15', authorId: 'u1', cover: '', addedAt: '2026-09-03T12:00:00', newDiscountUntil: null },
-    { id: 5,  title: 'Rüzgârın Kızı',                  type: 'seri',  price: 30, pages: 190, rentalDays: 14, place: 'İzmir – Urla',            writtenAt: '2022-05-11', releaseDate: '2022-11-01', authorId: 'u1', cover: '', addedAt: '2026-09-05T12:00:00', newDiscountUntil: null },
-    { id: 6,  title: 'Rüzgârın Oğlu',                  type: 'seri',  price: 22, pages: 204, rentalDays: 14, place: 'İzmir – Urla',            writtenAt: '2023-04-03', releaseDate: '2023-09-15', authorId: 'u1', cover: '', addedAt: '2026-09-06T12:00:00', newDiscountUntil: null },
-    { id: 7,  title: 'Dedemin Bahçesi',                type: 'ozel',  price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     writtenAt: '2018-06-21', releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
-    { id: 8,  title: 'Kapadokya Albümü 2021',          type: 'album', price: 18, pages: 48,  rentalDays: 7,  place: 'Nevşehir – Göreme',       writtenAt: '2021-10-09', releaseDate: '2022-01-05', authorId: 'u1', cover: '', addedAt: '2026-09-10T12:00:00', newDiscountUntil: null },
-    { id: 9,  title: 'Kayıp Harita',                   type: 'seri',  price: 45, pages: 312, rentalDays: 14, place: 'Ankara – Çalışma odası',  writtenAt: '2023-12-01', releaseDate: '2024-04-20', authorId: 'u1', cover: '', addedAt: '2026-09-12T12:00:00', newDiscountUntil: null },
-    { id: 10, title: 'Bayram Sabahları',               type: 'album', price: 20, pages: 56,  rentalDays: 7,  place: 'Ankara – Keçiören',       writtenAt: '2024-04-12', releaseDate: '2024-05-01', authorId: 'u1', cover: '', addedAt: '2026-09-14T12:00:00', newDiscountUntil: null },
-    { id: 11, title: 'Yıldız Tozu',                    type: 'seri',  price: 22, pages: 176, rentalDays: 14, place: 'Bolu – Abant',            writtenAt: '2024-08-19', releaseDate: '2025-01-10', authorId: 'u1', cover: '', addedAt: '2026-09-15T12:00:00', newDiscountUntil: null },
-    { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        writtenAt: '2025-02-14', releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
-    { id: 13, title: 'Sessiz Kütüphane',               type: 'seri',  price: 16, pages: 160, rentalDays: 14, place: 'İstanbul – Kadıköy',      writtenAt: '2025-11-03', releaseDate: '2026-03-01', authorId: 'u1', cover: '', addedAt: '2026-09-20T12:00:00', newDiscountUntil: null },
-    { id: 14, title: 'Kış Masalları',                  type: 'seri',  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        writtenAt: '2026-10-20', releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → sonraki döngüye kalır
+    { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri', seriesNo: 1,  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
+    { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri', seriesNo: 2,  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
+    { id: 3,  title: 'Gece Yolcusu III: Gar',          type: 'seri', seriesNo: 3,  price: 40, pages: 268, rentalDays: 14, place: 'İstanbul – Haydarpaşa',   releaseDate: '2021-08-30', authorId: 'u1', cover: '', addedAt: '2026-09-02T12:00:00', newDiscountUntil: null },
+    { id: 4,  title: 'Karadeniz Yaz Albümü 2019',      type: 'album', price: 35, pages: 64,  rentalDays: 7,  place: 'Trabzon – Uzungöl',       releaseDate: '2019-12-15', authorId: 'u1', cover: '', addedAt: '2026-09-03T12:00:00', newDiscountUntil: null },
+    { id: 5,  title: 'Rüzgârın Kızı',                  type: 'seri', seriesNo: 4,  price: 30, pages: 190, rentalDays: 14, place: 'İzmir – Urla',            releaseDate: '2022-11-01', authorId: 'u1', cover: '', addedAt: '2026-09-05T12:00:00', newDiscountUntil: null },
+    { id: 6,  title: 'Rüzgârın Oğlu',                  type: 'seri', seriesNo: 5,  price: 22, pages: 204, rentalDays: 14, place: 'İzmir – Urla',            releaseDate: '2023-09-15', authorId: 'u1', cover: '', addedAt: '2026-09-06T12:00:00', newDiscountUntil: null },
+    { id: 7,  title: 'Dedemin Bahçesi',                type: 'ozel',  price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
+    { id: 8,  title: 'Kapadokya Albümü 2021',          type: 'album', price: 18, pages: 48,  rentalDays: 7,  place: 'Nevşehir – Göreme',       releaseDate: '2022-01-05', authorId: 'u1', cover: '', addedAt: '2026-09-10T12:00:00', newDiscountUntil: null },
+    { id: 9,  title: 'Kayıp Harita',                   type: 'seri', seriesNo: 6,  price: 45, pages: 312, rentalDays: 14, place: 'Ankara – Çalışma odası',  releaseDate: '2024-04-20', authorId: 'u1', cover: '', addedAt: '2026-09-12T12:00:00', newDiscountUntil: null },
+    { id: 10, title: 'Bayram Sabahları',               type: 'album', price: 20, pages: 56,  rentalDays: 7,  place: 'Ankara – Keçiören',       releaseDate: '2024-05-01', authorId: 'u1', cover: '', addedAt: '2026-09-14T12:00:00', newDiscountUntil: null },
+    { id: 11, title: 'Yıldız Tozu',                    type: 'seri', seriesNo: 7,  price: 22, pages: 176, rentalDays: 14, place: 'Bolu – Abant',            releaseDate: '2025-01-10', authorId: 'u1', cover: '', addedAt: '2026-09-15T12:00:00', newDiscountUntil: null },
+    { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
+    { id: 13, title: 'Sessiz Kütüphane',               type: 'seri', seriesNo: 8,  price: 16, pages: 160, rentalDays: 14, place: 'İstanbul – Kadıköy',      releaseDate: '2026-03-01', authorId: 'u1', cover: '', addedAt: '2026-09-20T12:00:00', newDiscountUntil: null },
+    { id: 14, title: 'Kış Masalları',                  type: 'seri', seriesNo: 9,  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → sonraki döngüye kalır
   ];
 
   /* Kiralamalar (rentals) — örnek veri yok, gerçek kullanıcılar oluşturur
@@ -663,14 +683,6 @@
     observer: { label: 'Gözlemci',  chip: 'bg-slate-100 text-slate-600', desc: 'Sadece görüntüler' }
   };
 
-  const OFFER_THEMES = {
-    blue:    { label: 'Mavi',    grad: 'from-brand-500 to-brand-700' },
-    violet:  { label: 'Mor',     grad: 'from-violet-500 to-indigo-600' },
-    rose:    { label: 'Pembe',   grad: 'from-rose-400 to-pink-600' },
-    amber:   { label: 'Turuncu', grad: 'from-amber-400 to-orange-500' },
-    emerald: { label: 'Yeşil',   grad: 'from-emerald-400 to-teal-600' }
-  };
-
   const MEDALS = ['🥇', '🥈', '🥉'];
 
   /* Ortak form / buton sınıfları */
@@ -713,8 +725,9 @@
     return formatDate(iso);
   }
 
-  /* "3 gün önce yazıldı" / "4 yıl 7 ay önce yazıldı" */
-  function writtenAgo(dateKey) {
+  /* "3 gün önce çıktı" / "4 yıl 7 ay önce çıktı" (çıkış tarihinden) */
+  function releasedAgo(dateKey) {
+    if (!isDateKey(dateKey)) return 'Çıkış tarihi yok';
     const from = dateFromKey(dateKey);
     const now = new Date();
     if (from > now) return 'Yakında';
@@ -727,7 +740,7 @@
     if (y) parts.push(`${y} yıl`);
     if (m) parts.push(`${m} ay`);
     if (!y && d) parts.push(`${d} gün`);
-    return parts.length ? `${parts.slice(0, 2).join(' ')} önce yazıldı` : 'Bugün yazıldı';
+    return parts.length ? `${parts.slice(0, 2).join(' ')} önce çıktı` : 'Bugün çıktı';
   }
 
   const escapeHTML = (str) => String(str ?? '').replace(/[&<>"']/g, (c) =>
@@ -900,8 +913,17 @@
     { max: 20,       rate: 25 },
     { max: Infinity, rate: 20 }
   ];
-  const getDiscountRate = (bookId) => RATE_TIERS.find((t) => bookId <= t.max).rate;
+  /* Seri sırası: Kontrolcünün girdiği "kaçıncı seri" numarası.
+     Numarası olmayan (eski) kayıtlar sıranın sonuna, kitap numarasına göre dizilir. */
+  const seriesRank = (book) => (Number.isInteger(book?.seriesNo) && book.seriesNo > 0 ? book.seriesNo : 1e6 + (book?.id || 0));
+  const getDiscountRate = (bookId) => {
+    const b = getBook(bookId);
+    const rank = Number.isInteger(b?.seriesNo) && b.seriesNo > 0 ? b.seriesNo : Number(bookId);
+    return RATE_TIERS.find((t) => rank <= t.max).rate;
+  };
   const isDiscountEligible = (book) => getType(book.type)?.inDeals !== false;
+  /* "Seri #3" etiketi (numarası yoksa kitap numarası) */
+  const seriesLabel = (b) => (Number.isInteger(b?.seriesNo) && b.seriesNo > 0 ? `${typeLabel(b.type)} #${b.seriesNo}` : `#${b.id} · ${typeLabel(b.type)}`);
 
   /* Tarihi "indirim günü numarası"na çevirir (10:00 öncesi bir önceki güne sayılır) */
   function discountDayNumber(date = new Date()) {
@@ -925,7 +947,7 @@
     const startTime = cutoffMs ?? discountDayStart(cycleStartDay).getTime();
     return books
       .filter((b) => isDiscountEligible(b) && new Date(b.addedAt).getTime() <= startTime)
-      .sort((a, b) => a.id - b.id)
+      .sort((a, b) => seriesRank(a) - seriesRank(b) || a.id - b.id)
       .map((b) => b.id);
   }
 
@@ -1044,11 +1066,11 @@
   /* Belgeye yazılacak veri: yerel 'id' alanını çıkarır (belge adı zaten id) */
   const docData = ({ id, ...rest }) => rest;
 
-  /* Yeni kitap indirimi yazıldığı günden itibaren 7 gün sürer (7. günün sonuna kadar).
-     Yazıldığı tarih bundan eskiyse indirim uygulanmaz → null */
-  function newDiscountUntilFor(writtenAt, now = Date.now()) {
-    if (!isDateKey(writtenAt)) return null;
-    const end = dateFromKey(writtenAt);
+  /* Yeni kitap indirimi çıkış gününden itibaren 7 gün sürer (7. günün sonuna kadar).
+     Çıkış tarihi bundan eskiyse indirim uygulanmaz → null */
+  function newDiscountUntilFor(releaseDate, now = Date.now()) {
+    if (!isDateKey(releaseDate)) return null;
+    const end = dateFromKey(releaseDate);
     end.setDate(end.getDate() + NEW_BOOK_DISCOUNT.days);
     end.setHours(23, 59, 59, 999);
     return end.getTime() > now ? end.toISOString() : null;
@@ -1074,7 +1096,7 @@
     const book = {
       id, authorId: state.currentUserId, ...data,
       addedAt: isoAt(now),
-      newDiscountUntil: newDiscountUntilFor(data.writtenAt, now),
+      newDiscountUntil: newDiscountUntilFor(data.releaseDate, now),
       lockUntil: null, lockBy: null, lockRental: null
     };
     const batch = db.batch();
@@ -1374,17 +1396,18 @@
       { label: 'Toplam Kitap',   value: books.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600' },
       { label: 'Aktif Kiralık',  value: active.length,             sub: `Sende ${myActive} · ${books.length - active.length} kitap müsait`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
       { label: 'Toplam Bakiye',  value: formatMoney(totalBalance), sub: `Senin: ${formatMoney(currentUser().balance)}`,                                                 icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
-      { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}'e varan` : '—', sub: `${deals.ids.length} kitapta fırsat`,                              icon: 'tag',     tone: 'bg-rose-50 text-rose-500' }
+      { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
     ];
 
+    // Mobilde yazılar kesilmesin: ikon küçülür, alt satır 2 satıra kadar kayar
     $('#dashStats').innerHTML = cards.map((c) => `
-      <div class="bg-white rounded-2xl shadow-soft p-4 flex items-start justify-between gap-3 hover:shadow-soft-lg transition">
+      <div class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-start justify-between gap-2 sm:gap-3 hover:shadow-soft-lg transition min-w-0">
         <div class="min-w-0">
           <p class="text-[11px] font-medium text-slate-400">${c.label}</p>
-          <p class="text-lg sm:text-xl font-bold text-slate-800 mt-1 truncate">${c.value}</p>
-          <p class="text-[11px] text-slate-400 mt-0.5 truncate">${c.sub}</p>
+          <p class="text-base sm:text-xl font-bold text-slate-800 mt-1 truncate">${c.value}</p>
+          <p class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">${c.sub}</p>
         </div>
-        <span class="w-9 h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
+        <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
       </div>`).join('');
   }
 
@@ -1412,7 +1435,7 @@
               <span class="twinkle twinkle-d1 absolute -bottom-1 -right-1.5 text-yellow-400 text-xs">✦</span>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-600">#${b.id} · ${escapeHTML(typeLabel(b.type))}</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-600">${escapeHTML(seriesLabel(b))}</p>
               <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
               <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
               <span class="inline-block mt-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${rented ? 'text-amber-700 bg-amber-100' : 'text-emerald-600 bg-emerald-50'}">${rented ? 'Kiralı' : 'Müsait'}</span>
@@ -1486,7 +1509,7 @@
           <div class="relative z-[1] flex gap-3">
             ${coverHTML(b, 'md')}
             <div class="flex-1 min-w-0">
-              <p class="flex items-center gap-1.5 flex-wrap text-[10px] font-semibold uppercase tracking-wider text-brand-500">#${b.id} · ${typeLabel(b.type)} ${tierBadge(tier)}</p>
+              <p class="flex items-center gap-1.5 flex-wrap text-[10px] font-semibold uppercase tracking-wider text-brand-500">${escapeHTML(seriesLabel(b))} ${tierBadge(tier)}</p>
               <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
               <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
               ${rented
@@ -1668,7 +1691,7 @@
     const countOf = (k) => (k === 'all' ? books.length : books.filter((b) => b.type === k).length);
     const list = books
       .filter((b) => state.bookTab === 'all' || b.type === state.bookTab)
-      .sort((a, b) => b.writtenAt.localeCompare(a.writtenAt) || b.id - a.id);
+      .sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || b.id - a.id);
     const availableCount = list.filter((b) => !isBookRented(b, now)).length;
 
     const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf);
@@ -1699,7 +1722,7 @@
                 <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
                 ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
               </p>
-              <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${icon('pencil', 'w-3 h-3')}${writtenAgo(b.writtenAt)}${fresh
+              <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : ''}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}${fresh
                 ? `<span class="text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(new Date(b.newDiscountUntil) - nowDate)}</span>` : ''}</p>
             </div>
             <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full ${rented ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">
@@ -1715,7 +1738,7 @@
       <div class="bg-white rounded-2xl shadow-soft overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-400">
           <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${availableCount} müsait</span></span>
-          <span class="hidden sm:inline">Sıralama: Yazıldığı tarih (yeni → eski)</span>
+          <span class="hidden sm:inline">Sıralama: Çıkış tarihi (yeni → eski)</span>
         </div>
         <ul class="divide-y divide-slate-100">${rows}</ul>
       </div>`;
@@ -1872,17 +1895,18 @@
         <div class="absolute top-3 right-3 flex gap-1.5">
           ${backOfferId ? `<button type="button" data-open-offer="${backOfferId}" class="h-8 px-3 rounded-full bg-white shadow-soft text-[11px] font-semibold text-brand-600 hover:bg-brand-50 flex items-center gap-1 transition">${icon('back', 'w-3.5 h-3.5')}Pakete dön</button>` : ''}
           ${admin ? `<button type="button" data-delete-book="${b.id}" title="Kitabı sil" aria-label="Kitabı sil" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-rose-500 flex items-center justify-center transition">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
-          <button type="button" data-modal-close aria-label="Kapat" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close')}</button>
+          <button type="button" data-modal-close aria-label="Kapat" class="w-9 h-9 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>
         </div>
         <div class="flex gap-4 sm:gap-5 ${backOfferId ? 'pt-6 sm:pt-0' : ''}">
           ${coverHTML(b, 'lg')}
           <div class="min-w-0 flex-1 pt-1 pr-2 sm:pr-24">
             <div class="flex items-center gap-1.5 flex-wrap">
               ${typeChip(b.type)}
+              ${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-white">#${b.seriesNo}. seri</span>` : ''}
               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${active ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}">${active ? 'Kiralı' : 'Müsait'}</span>
             </div>
             <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
-            <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-1">${icon('pencil', 'w-3 h-3')}${writtenAgo(b.writtenAt)}</p>
+            <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-1">${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}</p>
             <div class="mt-3 flex items-end gap-2 flex-wrap">
               ${rate ? `<span class="text-xs text-slate-400 line-through">${formatMoney(b.price)}</span>` : ''}
               <span class="text-xl font-black ${rate ? 'text-emerald-600' : 'text-slate-800'} leading-none">${formatMoney(price)}</span>
@@ -2363,7 +2387,7 @@
       <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
         <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
         <span class="absolute right-20 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
-        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
         <p class="relative text-[11px] font-semibold text-brand-100">Detaylı Aile Üyesi İstatistikleri 📊</p>
         <div class="relative flex items-center gap-3.5 mt-3">
           ${avatarHTML(u, 'w-14 h-14 text-base ring-4 ring-white/25')}
@@ -2472,7 +2496,7 @@
               ${coverHTML(b, 'sm')}
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-slate-800 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
-                <p class="text-[11px] text-slate-400 truncate">${b ? `#${b.id} · ${typeLabel(b.type)}` : ''}${by ? ` · ${escapeHTML(by.name)}` : ''}</p>
+                <p class="text-[11px] text-slate-400 truncate">${b ? escapeHTML(seriesLabel(b)) : ''}${by ? ` · ${escapeHTML(by.name)}` : ''}</p>
                 <p class="sm:hidden flex items-center gap-1.5 text-[11px] mt-1">${priceFlow}</p>
               </div>
               <div class="hidden sm:flex items-center gap-2 text-xs shrink-0">${priceFlow}</div>
@@ -2670,7 +2694,7 @@
           <div class="mt-6 flex gap-4 p-4 rounded-2xl bg-gradient-to-br from-brand-50 to-white border border-brand-100">
             ${coverHTML(book, 'md')}
             <div class="min-w-0 flex-1">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-brand-500">#${book.id} · ${typeLabel(book.type)}</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wider text-brand-500">${escapeHTML(seriesLabel(book))}</p>
               <p class="text-sm font-bold text-slate-800">${escapeHTML(book.title)}</p>
               <p class="text-xs text-slate-400">${escapeHTML(authorName(book))}</p>
               <div class="flex items-center gap-2 mt-2 flex-wrap">
@@ -2688,7 +2712,7 @@
         <div class="relative p-6 sm:p-8 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
           <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
           <span class="absolute right-16 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
-          <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+          <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
           <span class="relative inline-block text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white/20">${escapeHTML(a.category)}</span>
           <h3 class="relative text-lg sm:text-xl font-bold mt-3 pr-8 leading-snug">${escapeHTML(a.title)}</h3>
           <div class="relative flex items-center gap-2 mt-3 text-[11px] text-brand-100">
@@ -2713,7 +2737,7 @@
     openModal(`
       <div class="relative p-6 sm:p-8 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
         <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
-        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
         <p class="relative text-[11px] text-brand-100 font-medium">Sürüm Notu</p>
         <p class="relative text-3xl sm:text-4xl font-black tracking-tight mt-1">${escapeHTML(a.version)}</p>
         ${a.title ? `<p class="relative text-sm font-semibold mt-2 pr-8">${escapeHTML(a.title)}</p>` : ''}
@@ -2787,12 +2811,30 @@
       </div>`;
   }
 
-  /* Vitrindeki indirim rozeti · %35+ ateşli, %50+ kutlamalı ve zıplayan */
-  const offerRateBadge = (rate, tier, cls = 'top-3 left-3 text-[11px] px-2.5 py-1') => tier === 'mega'
-    ? `<span class="rate-pop absolute ${cls} z-10 font-extrabold text-white bg-gradient-to-r from-rose-500 via-fuchsia-500 to-amber-500 rounded-full shadow-soft-lg ring-2 ring-white/60">🎉 %${rate} MEGA İNDİRİM</span>`
-    : tier === 'hot'
-      ? `<span class="absolute ${cls} z-10 font-extrabold text-white bg-gradient-to-r from-rose-500 to-orange-400 rounded-full shadow-soft">🔥 %${rate} İNDİRİM</span>`
-      : `<span class="absolute ${cls} z-10 font-extrabold text-white bg-white/25 backdrop-blur rounded-full">%${rate} İNDİRİM</span>`;
+  /* Vitrin şeması indirim yüzdesine göre: arka plan + yıldız rozetteki yüzde rengi + etiket */
+  function offerScheme(rate) {
+    if (rate >= 50) return { bg: 'offer-mega-bg', text: 'from-fuchsia-600 via-rose-500 to-amber-500', label: '🎉 MEGA FIRSAT', spin: true };
+    if (rate >= 35) return { bg: 'bg-gradient-to-br from-rose-500 via-orange-500 to-amber-400', text: 'from-rose-600 to-orange-500', label: '🔥 SÜPER FIRSAT' };
+    if (rate >= 20) return { bg: 'bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-500', text: 'from-violet-600 to-fuchsia-500', label: '💜 FIRSAT' };
+    if (rate > 0)   return { bg: 'bg-gradient-to-br from-sky-500 via-brand-600 to-indigo-700', text: 'from-brand-600 to-indigo-600', label: '' };
+    return { bg: 'bg-gradient-to-br from-slate-500 to-slate-700', text: 'from-slate-600 to-slate-800', label: '' };
+  }
+
+  /* Köşedeki yıldız rozet: büyük, çarpıcı indirim yüzdesi (mega'da arka yıldız döner) */
+  function offerBurstHTML(rate, size = 'md') {
+    const sc = offerScheme(rate);
+    const box = size === 'lg' ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-20 h-20 sm:w-[5.5rem] sm:h-[5.5rem]';
+    const num = size === 'lg' ? 'text-3xl sm:text-4xl' : 'text-2xl sm:text-[1.7rem]';
+    return `
+      <div class="relative ${box} shrink-0 -rotate-[10deg] drop-shadow-xl ${rate >= 50 ? 'rate-pop' : ''}">
+        <span class="absolute inset-0 offer-burst bg-white ${sc.spin ? 'burst-spin' : ''}"></span>
+        <span class="absolute inset-[9%] offer-burst bg-gradient-to-br ${sc.text} opacity-10"></span>
+        <span class="relative h-full flex flex-col items-center justify-center leading-none">
+          <span class="${num} font-black tracking-tighter bg-gradient-to-br ${sc.text} bg-clip-text text-transparent">%${rate}</span>
+          <span class="text-[9px] font-extrabold tracking-[0.15em] text-slate-700 mt-0.5">İNDİRİM</span>
+        </span>
+      </div>`;
+  }
 
   function offerRentCheck(o, user) {
     if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
@@ -2832,24 +2874,30 @@
     $('#offersContent').innerHTML = notice + `
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         ${list.map((o) => {
-          const theme = OFFER_THEMES[o.theme] || OFFER_THEMES.blue;
           const daysLeft = Math.ceil((offerEnd(o) - now) / DAY_MS);
           const check = offerRentCheck(o, u);
           const bs = offerBooks(o);
           const rate = offerRate(o);
           const tier = dealTier(rate);
+          const sc = offerScheme(rate);
+          const saving = Math.max(0, round2(offerNormalTotal(o) - o.price));
           return `
             <article class="showcase-host bg-white rounded-3xl shadow-soft overflow-hidden flex flex-col transition duration-300 hover:shadow-soft-lg hover:-translate-y-1 ${tier ? `deal-${tier}` : ''}">
-              <div data-open-offer="${o.id}" class="relative h-64 bg-gradient-to-br ${theme.grad} cursor-pointer overflow-hidden">
-                <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
-                <span class="absolute -left-8 -bottom-12 w-32 h-32 rounded-full bg-white/10"></span>
+              <div data-open-offer="${o.id}" class="offer-sheen relative h-60 sm:h-64 ${sc.bg} cursor-pointer overflow-hidden">
+                <span class="absolute inset-0 offer-pattern"></span>
+                <span class="absolute -right-12 -top-12 w-44 h-44 rounded-full bg-white/15"></span>
+                <span class="absolute -left-10 -bottom-14 w-36 h-36 rounded-full bg-black/10"></span>
                 ${tier === 'mega' ? confettiHTML(18) : ''}
-                ${offerRateBadge(rate, tier)}
-                <span class="absolute top-3 right-3 z-10 text-[10px] font-semibold text-white bg-black/15 backdrop-blur px-2 py-1 rounded-full">🎁 ${offerCountLabel(o)}</span>
-                <div class="absolute inset-0 flex items-center justify-center pb-6">${showcaseHTML(o)}</div>
-                <div class="absolute bottom-3 right-3 z-10 text-right bg-white/90 backdrop-blur rounded-2xl px-3.5 py-2 shadow-soft">
+                <div class="absolute top-2.5 left-2.5 z-10">${offerBurstHTML(rate)}</div>
+                <div class="absolute top-3 right-3 z-10 flex flex-col items-end gap-1.5">
+                  <span class="text-[10px] font-semibold text-white bg-black/20 backdrop-blur px-2 py-1 rounded-full">🎁 ${offerCountLabel(o)}</span>
+                  ${sc.label ? `<span class="text-[10px] font-extrabold text-slate-800 bg-white px-2 py-1 rounded-full shadow-soft">${sc.label}</span>` : ''}
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center pt-6 pb-8">${showcaseHTML(o)}</div>
+                ${saving ? `<span class="absolute bottom-3 left-3 z-10 text-[11px] font-extrabold text-emerald-700 bg-white/95 px-2.5 py-1.5 rounded-xl shadow-soft">${formatMoney(saving)} kazanç</span>` : ''}
+                <div class="absolute bottom-3 right-3 z-10 text-right bg-white/95 backdrop-blur rounded-2xl px-3 py-1.5 sm:px-3.5 sm:py-2 shadow-soft-lg">
                   <p class="text-[10px] text-slate-400 line-through leading-none">${formatMoney(offerNormalTotal(o))}</p>
-                  <p class="text-2xl font-black text-slate-800 leading-tight">${formatMoney(o.price)}</p>
+                  <p class="text-xl sm:text-2xl font-black text-slate-800 leading-tight">${formatMoney(o.price)}</p>
                 </div>
               </div>
               <div class="p-4 flex-1 flex flex-col">
@@ -2884,7 +2932,7 @@
     const o = getOffer(offerId);
     if (!o) return toast('Bu teklifin süresi doldu ve silindi.', 'info');
     const u = currentUser();
-    const theme = OFFER_THEMES[o.theme] || OFFER_THEMES.blue;
+    const sc = offerScheme(offerRate(o));
     const check = offerRentCheck(o, u);
     const normal = offerNormalTotal(o);
 
@@ -2911,13 +2959,15 @@
     }).join('');
 
     openModal(`
-      <div class="showcase-host relative h-72 bg-gradient-to-br ${theme.grad} overflow-hidden">
-        <span class="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/10"></span>
-        <span class="absolute -left-10 -bottom-14 w-40 h-40 rounded-full bg-white/10"></span>
+      <div class="showcase-host offer-sheen relative h-72 sm:h-80 ${sc.bg} overflow-hidden">
+        <span class="absolute inset-0 offer-pattern"></span>
+        <span class="absolute -right-12 -top-12 w-52 h-52 rounded-full bg-white/15"></span>
+        <span class="absolute -left-10 -bottom-14 w-44 h-44 rounded-full bg-black/10"></span>
         ${dealTier(offerRate(o)) === 'mega' ? confettiHTML(22) : ''}
-        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition">${icon('close')}</button>
-        ${offerRateBadge(offerRate(o), dealTier(offerRate(o)), 'top-4 left-4 text-xs px-3 py-1.5')}
-        <div class="absolute inset-0 flex items-center justify-center pb-4">${showcaseHTML(o, 'lg')}</div>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 text-white flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
+        <div class="absolute top-3 left-3 z-10">${offerBurstHTML(offerRate(o), 'lg')}</div>
+        ${sc.label ? `<span class="absolute bottom-3 left-3 z-10 text-[11px] font-extrabold text-slate-800 bg-white px-2.5 py-1 rounded-full shadow-soft">${sc.label}</span>` : ''}
+        <div class="absolute inset-0 flex items-center justify-center pt-6 pb-6">${showcaseHTML(o, 'lg')}</div>
       </div>
       <div class="p-5 sm:p-6 space-y-5">
         <div class="flex items-start justify-between gap-4">
@@ -3043,7 +3093,7 @@
   }
 
   const closeBtn = () =>
-    `<button type="button" data-modal-close aria-label="Kapat" class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition shrink-0">${icon('close')}</button>`;
+    `<button type="button" data-modal-close aria-label="Kapat" class="w-9 h-9 rounded-full bg-slate-50 text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition shrink-0">${icon('close', 'w-4 h-4 pointer-events-none')}</button>`;
 
   const modalHeader = (title, subtitle, iconKey, tone = 'bg-brand-50 text-brand-600') => `
     <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
@@ -3106,7 +3156,7 @@
 
     openModal(`
       ${modalHeader(b ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle',
-        b ? 'Fiyat değişirse Fiyat Loguna otomatik kaydedilir.' : `Eklenince Haberler'e otomatik duyuru düşer · son ${NEW_BOOK_DISCOUNT.days} gün içinde yazıldıysa %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi.`, 'books')}
+        b ? 'Fiyat değişirse Fiyat Loguna otomatik kaydedilir.' : `Eklenince Haberler'e otomatik duyuru düşer · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıktıysa %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi.`, 'books')}
       <form data-form="saveBook" data-edit-id="${b ? b.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
         <div class="flex gap-4 items-center p-3 rounded-2xl bg-brand-50/50 border border-brand-100">
           <div id="bookCoverPreview">${coverHTML({ title: b ? b.title : 'Yeni Kitap', type: selType, cover: state.bookDraftCover }, 'md')}</div>
@@ -3132,8 +3182,12 @@
         </div>
         ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${b ? escapeHTML(b.place) : ''}" class="${INPUT_CLS}" placeholder="Örn. Ankara – Çankaya" />`)}
         <div class="grid grid-cols-2 gap-3">
-          ${field('Yazıldığı Tarih', `<input name="writtenAt" type="date" required max="${today}" value="${b ? b.writtenAt : today}" class="${INPUT_CLS}" />`)}
-          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" required value="${b ? b.releaseDate : today}" class="${INPUT_CLS}" />`, 'Çıkış yılı bu tarihten alınır')}
+          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" required max="${today}" value="${b && isDateKey(b.releaseDate) ? b.releaseDate : today}" class="${INPUT_CLS}" />`,
+            `Çıkış yılı buradan alınır · son ${NEW_BOOK_DISCOUNT.days} gündeyse %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi`)}
+          <div id="bf-series-wrap" class="${getType(selType)?.inDeals ? '' : 'hidden'}">
+            ${field('Seri No', `<input name="seriesNo" id="bf-series" type="number" min="1" step="1" inputmode="numeric" value="${b?.seriesNo ?? (b ? '' : nextSeriesNo())}" class="${INPUT_CLS}" placeholder="Kaçıncı seri?" />`,
+              'Günün İndirimleri bu sıraya göre döner (1-2-3, 4-5-6…)')}
+          </div>
         </div>
         <p class="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2">${icon('pencil', 'w-3.5 h-3.5')}Yazar: <b class="text-slate-700">${escapeHTML(b ? authorName(b) : currentUser().name)}</b></p>
         ${formFooter(b ? 'Değişiklikleri Kaydet' : `${icon('plus', 'w-3.5 h-3.5')}Kitabı Ekle`)}
@@ -3149,7 +3203,12 @@
       cover: state.bookDraftCover
     }, 'md');
     $('#removeBookCover')?.classList.toggle('hidden', !state.bookDraftCover);
+    // Seri No yalnızca indirim döngüsüne giren türlerde
+    $('#bf-series-wrap')?.classList.toggle('hidden', !getType($('#bf-type')?.value)?.inDeals);
   }
+
+  /* Sıradaki seri numarası (en büyük + 1) */
+  const nextSeriesNo = () => books.reduce((m, b) => (Number.isInteger(b.seriesNo) ? Math.max(m, b.seriesNo) : m), 0) + 1;
 
   function handleSaveBook(fd, editId) {
     if (!requireAdmin()) return;
@@ -3164,9 +3223,18 @@
     if (!(price > 0)) return toast('Geçerli bir fiyat girin.', 'error');
     if (!(pages > 0)) return toast('Geçerli bir sayfa sayısı girin.', 'error');
     if (!(rentalDays > 0)) return toast('Geçerli bir kira süresi girin.', 'error');
-    if (!isDateKey(fd.writtenAt) || !isDateKey(fd.releaseDate)) return toast('Tarihleri kontrol edin.', 'error');
+    if (!isDateKey(fd.releaseDate)) return toast('Çıkış tarihini kontrol edin.', 'error');
 
-    const data = { title, type, pages, rentalDays, place: fd.place.trim(), writtenAt: fd.writtenAt, releaseDate: fd.releaseDate, cover: state.bookDraftCover || '' };
+    // Seri No: indirim türlerinde zorunlu ve benzersiz; diğer türlerde tutulmaz
+    let seriesNo = null;
+    if (getType(type)?.inDeals) {
+      seriesNo = parseInt(fd.seriesNo, 10);
+      if (!(seriesNo >= 1)) return toast('Kaçıncı seri olduğunu (Seri No) girin.', 'error');
+      const clash = books.find((x) => x.seriesNo === seriesNo && String(x.id) !== String(editId) && getType(x.type)?.inDeals);
+      if (clash) return toast(`Seri #${seriesNo} zaten "${clash.title}" kitabında.`, 'error');
+    }
+
+    const data = { title, type, seriesNo, pages, rentalDays, place: fd.place.trim(), releaseDate: fd.releaseDate, cover: state.bookDraftCover || '' };
 
     if (editId) {
       const b = getBook(editId);
@@ -3177,8 +3245,8 @@
         const res = changeBookPrice(b.id, price, batch);
         if (res.ok) priceMsg = ' · fiyat loga işlendi';
       }
-      // Yazıldığı tarih değiştiyse yeni kitap indirimi yeniden hesaplanır
-      if (fd.writtenAt !== b.writtenAt) data.newDiscountUntil = newDiscountUntilFor(fd.writtenAt);
+      // Çıkış tarihi değiştiyse yeni kitap indirimi yeniden hesaplanır
+      if (fd.releaseDate !== b.releaseDate) data.newDiscountUntil = newDiscountUntilFor(fd.releaseDate);
       batch.update(bookRef(b.id), data);
       closeModal();
       run(batch.commit(), `"${title}" güncellendi${priceMsg}.`);
@@ -3188,7 +3256,7 @@
     const { book, done } = addBook({ ...data, price });
     state.bookTab = 'all';
     closeModal();
-    run(done, `"${book.title}" eklendi · Duyurular'a haber düştü 📣${book.newDiscountUntil ? '' : ` · son ${NEW_BOOK_DISCOUNT.days} gün içinde yazılmadığı için yeni kitap indirimi yok`}`);
+    run(done, `"${book.title}" eklendi · Duyurular'a haber düştü 📣${book.newDiscountUntil ? '' : ` · son ${NEW_BOOK_DISCOUNT.days} gün içinde çıkmadığı için yeni kitap indirimi yok`}`);
   }
 
   /* --- Hızlı fiyat güncelleme (Fiyat Logu sayfası) --- */
@@ -3475,7 +3543,7 @@
           ${field('Son Geçerlilik', `<input name="validUntil" type="date" required min="${localDateKey(new Date())}" value="${o ? o.validUntil : defaultEnd}" class="${INPUT_CLS}" />`)}
         </div>
         <div id="offerCalc" class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2"></div>
-        ${field('Vitrin Rengi', `<select name="theme" class="${INPUT_CLS}">${Object.entries(OFFER_THEMES).map(([k, t]) => `<option value="${k}" ${(o ? o.theme : 'blue') === k ? 'selected' : ''}>${t.label}</option>`).join('')}</select>`)}
+        <p class="text-[10px] text-slate-400 leading-relaxed">🎨 Vitrin rengi indirim yüzdesine göre otomatik: %1–19 mavi · %20–34 mor · %35–49 turuncu (Süper Fırsat) · %50+ hareketli renkler + konfeti (Mega Fırsat).</p>
         ${formFooter(o ? 'Değişiklikleri Kaydet' : 'Teklifi Yayınla')}
       </form>`);
     updateOfferCalc();
@@ -3533,7 +3601,6 @@
     const data = {
       title, description, price, validUntil: fd.validUntil,
       endsAt: offerEndsAt(fd.validUntil),
-      theme: OFFER_THEMES[fd.theme] ? fd.theme : 'blue',
       items: slots,
       bookIds: ids
     };
@@ -3841,7 +3908,7 @@
       <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
         <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
         <span class="absolute right-20 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
-        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">${icon('close')}</button>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
         <p class="relative text-[11px] font-semibold text-brand-100">Profilim 👤</p>
         <div class="relative flex items-center gap-3.5 mt-3">
           ${avatarHTML(u, 'w-16 h-16 text-lg ring-4 ring-white/25')}
