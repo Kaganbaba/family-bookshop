@@ -668,6 +668,11 @@
     bookTab: 'all',
     bookFilterKind: 'none', // Kitaplar: filtre türü (place | year | status | rating)
     bookFilterValue: 'all', // Kitaplar: seçili türün değeri
+    logFilterKind: 'none',  // Fiyat Logu: filtre türü (change | year | book)
+    logFilterValue: 'all',
+    bookLogFilterKind: 'none', // Kitabın "Tümünü gör" fiyat geçmişi: filtre türü (change | year)
+    bookLogFilterValue: 'all',
+    bookLogsOpen: null,     // açık "Tümünü gör" penceresi: { bookId, backOfferId }
     rentTab: 'all',        // Kiralananlar: tür filtresi
     rentStatus: 'all',     // Kiralananlar: 'all' | 'active' | 'past'
     annTab: 'news',
@@ -2593,31 +2598,15 @@
     const inTab = shown.filter((b) => b.type === state.bookTab);
 
     // Filtre: solda tür (Mekan · Yıl · Durum · Reyting), sağda o türün seçenekleri (bu kategorideki kitaplardan)
-    const kind = BOOK_FILTERS[state.bookFilterKind] ? state.bookFilterKind : 'none';
-    const options = kind === 'none' ? [] : BOOK_FILTERS[kind].options(inTab);
-    if (!options.some((o) => o.value === state.bookFilterValue)) state.bookFilterValue = 'all';
-    const filtered = kind !== 'none' && state.bookFilterValue !== 'all';
+    const f = kindValueFilter('bookFilter', BOOK_FILTERS, inTab);
+    const filtered = f.active;
 
-    const list = inTab
-      .filter((b) => !filtered || BOOK_FILTERS[kind].match(b, state.bookFilterValue))
+    const list = f.apply(inTab)
       .sort((a, b) => statusRank(a) - statusRank(b) || (b.releaseDate || '').localeCompare(a.releaseDate || '') || b.id - a.id);
     const rentableCount = list.filter((b) => isRentableStatus(b) && !isBookRented(b, now)).length;
 
     const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf, 'mb-5', false);
-    const filterBar = inTab.length ? `
-      <div class="bg-white rounded-2xl shadow-soft p-3 grid grid-cols-2 sm:flex sm:items-center gap-2.5 mb-5">
-        <select id="bookFilterKind" aria-label="Filtre türü" class="${INPUT_CLS} min-w-0 sm:w-56 font-semibold">
-          <option value="none">🔎 Filtre türü seç</option>
-          ${Object.entries(BOOK_FILTERS).map(([k, f]) => `<option value="${k}" ${kind === k ? 'selected' : ''}>${f.label}</option>`).join('')}
-        </select>
-        <select id="bookFilterValue" aria-label="Filtre değeri" ${kind === 'none' ? 'disabled' : ''} class="${INPUT_CLS} min-w-0 sm:flex-1 disabled:opacity-50">
-          ${kind === 'none'
-            ? '<option value="all">Önce soldan bir filtre türü seç</option>'
-            : `<option value="all">${BOOK_FILTERS[kind].allLabel}</option>
-               ${options.map((o) => `<option value="${escapeHTML(o.value)}" ${state.bookFilterValue === o.value ? 'selected' : ''}>${escapeHTML(o.label)} (${o.count})</option>`).join('')}`}
-        </select>
-        ${kind !== 'none' ? `<button type="button" data-clear-book-filters class="${BTN_SOFT} col-span-2 sm:col-span-1 shrink-0">Filtreyi Temizle</button>` : ''}
-      </div>` : '';
+    const filterBar = inTab.length ? f.html : '';
 
     if (!list.length) {
       $('#booksContent').innerHTML = tabBar + filterBar
@@ -2800,34 +2789,49 @@
         </div>
       </div>`;
 
+    // Fiyat geçmişi: ilk 5 kayıt; fazlası "Tümünü gör" penceresinde (filtreli)
     const timeline = logs.length
       ? `<ol class="relative border-l-2 border-brand-100 ml-1.5 space-y-2.5">
-          ${logs.map((l) => {
-            const diff = round2(l.newPrice - l.oldPrice);
-            const up = diff > 0;
-            const future = isFutureLog(l);
-            return `
-              <li class="relative pl-5">
-                <span class="absolute -left-[7px] top-3 w-3 h-3 rounded-full bg-white border-2 ${future ? 'border-violet-400 border-dashed' : up ? 'border-rose-400' : 'border-emerald-400'}"></span>
-                <div class="flex items-center gap-2 p-2.5 rounded-xl ${future ? 'bg-violet-50/60 border border-dashed border-violet-200' : 'bg-slate-50/80'}">
-                  <div class="flex-1 min-w-0">
-                    <p class="text-[10px] ${future ? 'text-violet-600 font-semibold' : 'text-slate-400'}">${future
-                      ? `⏳ Planlandı · ${formatLongDate(l.changedAt)} · ${formatRemaining(logEffMs(l) - Date.now())}`
-                      : `${formatLongDate(l.changedAt)} · ${formatTime(l.changedAt)}`}</p>
-                    <p class="text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
-                      <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
-                      <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
-                      <b class="text-slate-800">${formatMoney(l.newPrice)}</b>
-                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '▲' : '▼'} ${formatMoney(Math.abs(diff))} · ${pctText(pricePct(l.oldPrice, l.newPrice))}</span>
-                    </p>
-                  </div>
-                  ${admin ? `<button type="button" data-delete-log="${l.id}" data-book-id="${b.id}" data-back-offer="${backOfferId}" title="Bu kaydı sil"
-                      class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
-                </div>
-              </li>`;
-          }).join('')}
-        </ol>`
+          ${logs.slice(0, PRICE_LOG_PREVIEW).map((l) => priceLogItemHTML(l, b, admin, backOfferId)).join('')}
+        </ol>
+        ${logs.length > PRICE_LOG_PREVIEW ? `<button type="button" data-all-logs="${b.id}" data-back-offer="${backOfferId}"
+          class="${BTN_SOFT} w-full !py-2 mt-3">Tümünü gör · ${logs.length} kayıt →</button>` : ''}`
       : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu kitabın fiyatı henüz değişmedi.</p>';
+
+    // Kiralama / düzenleme alanı: fiyatın hemen altında (fiyat geçmişi uzasa da yer değiştirmez)
+    const rentBlock = `
+        <div class="space-y-3">
+          ${active && holder ? `
+            <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-[11px] text-amber-700">
+              ${avatarHTML(holder, 'w-6 h-6 text-[10px]')}
+              <span class="flex-1 min-w-0"><b>${escapeHTML(holder.name)}</b> kiraladı · ${formatRemaining(new Date(active.dueAt) - now)}</span>
+            </div>` : ''}
+          ${myCoupons.length ? `
+            <label class="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs">
+              <span class="text-emerald-700 font-semibold shrink-0">🎟️ Kupon</span>
+              <select id="rentCoupon" data-book="${b.id}" class="flex-1 min-w-0 bg-white rounded-lg border border-emerald-100 text-xs py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-200">
+                <option value="">Kupon kullanma</option>
+                ${myCoupons.map((c) => `<option value="${c.id}">${escapeHTML(couponBadge(c))} kupon${c.name ? ` (${escapeHTML(c.name)})` : ''} · ${formatRemaining(c.expiresMs - now.getTime())}</option>`).join('')}
+              </select>
+            </label>` : ''}
+          ${canRent(u) ? `
+            <div class="flex items-center justify-between rounded-xl border border-brand-100 px-3 py-2.5 text-xs">
+              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
+              <span class="font-semibold text-slate-700">
+                ${formatMoney(u.balance)}
+                <span id="rentBalAfter" class="${check.ok ? '' : 'hidden'}"><span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - price))}</span></span>
+              </span>
+            </div>` : ''}
+          <p id="rentReason" class="${check.ok ? 'hidden' : ''} text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${check.ok ? '' : check.reason}</p>
+          <div class="grid grid-cols-2 gap-2.5">
+            ${admin
+              ? `<button type="button" data-edit-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>`
+              : `<button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>`}
+            <button type="button" id="rentBtn" data-rent-book="${b.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">
+              ${isRentableStatus(b) && hasPrice(b) ? `${formatMoney(price)} · ${b.rentalDays} gün Kirala` : `${statusView(b, now.getTime()).label} · Kiralanamaz`}
+            </button>
+          </div>
+        </div>`;
 
     openModal(`
       <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-50 via-white to-white">
@@ -2873,6 +2877,7 @@
       </div>
 
       <div class="p-5 sm:p-6 pt-4 space-y-5">
+        ${rentBlock}
         ${isSpecialBook(b) ? `
           <div class="flex gap-3 p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
             <span class="text-xl leading-none">🔒</span>
@@ -2907,46 +2912,120 @@
 
         <div id="ratingBox">${ratingBoxHTML(b)}</div>
 
-        ${active && holder ? `
-          <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-50/70 border border-amber-100 text-[11px] text-amber-700">
-            ${avatarHTML(holder, 'w-6 h-6 text-[10px]')}
-            <span class="flex-1 min-w-0"><b>${escapeHTML(holder.name)}</b> kiraladı · ${formatRemaining(new Date(active.dueAt) - now)}</span>
-          </div>` : ''}
-
         <div>
           <div class="flex items-center justify-between mb-3">
             <h4 class="text-xs font-bold text-slate-700">Fiyat Değişim Geçmişi</h4>
-            <span class="text-[10px] text-slate-400">${logs.length} kayıt${admin && logs.length ? ' · silmek için 🗑' : ''}</span>
+            <span class="text-[10px] text-slate-400">${logs.length > PRICE_LOG_PREVIEW ? `son ${PRICE_LOG_PREVIEW} / ` : ''}${logs.length} kayıt${admin && logs.length ? ' · silmek için 🗑' : ''}</span>
           </div>
           ${timeline}
         </div>
+      </div>`, 'lg');
+  }
 
-        <div class="pt-1 space-y-3">
-          ${myCoupons.length ? `
-            <label class="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs">
-              <span class="text-emerald-700 font-semibold shrink-0">🎟️ Kupon</span>
-              <select id="rentCoupon" data-book="${b.id}" class="flex-1 min-w-0 bg-white rounded-lg border border-emerald-100 text-xs py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-200">
-                <option value="">Kupon kullanma</option>
-                ${myCoupons.map((c) => `<option value="${c.id}">${escapeHTML(couponBadge(c))} kupon${c.name ? ` (${escapeHTML(c.name)})` : ''} · ${formatRemaining(c.expiresMs - now.getTime())}</option>`).join('')}
-              </select>
-            </label>` : ''}
-          ${canRent(u) ? `
-            <div class="flex items-center justify-between rounded-xl border border-brand-100 px-3 py-2.5 text-xs">
-              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
-              <span class="font-semibold text-slate-700">
-                ${formatMoney(u.balance)}
-                <span id="rentBalAfter" class="${check.ok ? '' : 'hidden'}"><span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - price))}</span></span>
-              </span>
-            </div>` : ''}
-          <p id="rentReason" class="${check.ok ? 'hidden' : ''} text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${check.ok ? '' : check.reason}</p>
-          <div class="grid grid-cols-2 gap-2.5">
-            ${admin
-              ? `<button type="button" data-edit-book="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>`
-              : `<button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>`}
-            <button type="button" id="rentBtn" data-rent-book="${b.id}" ${check.ok ? '' : 'disabled'} class="${BTN_PRIMARY} !py-2.5">
-              ${isRentableStatus(b) && hasPrice(b) ? `${formatMoney(price)} · ${b.rentalDays} gün Kirala` : `${statusView(b, now.getTime()).label} · Kiralanamaz`}
-            </button>
+  /* Kitap detayında gösterilen fiyat kaydı sayısı (fazlası "Tümünü gör") */
+  const PRICE_LOG_PREVIEW = 5;
+
+  /* Fiyat geçmişi satırı (kitap detayı + Tümünü gör penceresi) · planlı log mor, kesikli */
+  function priceLogItemHTML(l, b, admin, backOfferId = '') {
+    const diff = round2(l.newPrice - l.oldPrice);
+    const up = diff > 0;
+    const future = isFutureLog(l);
+    return `
+      <li class="relative pl-5">
+        <span class="absolute -left-[7px] top-3 w-3 h-3 rounded-full bg-white border-2 ${future ? 'border-violet-400 border-dashed' : up ? 'border-rose-400' : 'border-emerald-400'}"></span>
+        <div class="flex items-center gap-2 p-2.5 rounded-xl ${future ? 'bg-violet-50/60 border border-dashed border-violet-200' : 'bg-slate-50/80'}">
+          <div class="flex-1 min-w-0">
+            <p class="text-[10px] ${future ? 'text-violet-600 font-semibold' : 'text-slate-400'}">${future
+              ? `⏳ Planlandı · ${formatLongDate(l.changedAt)} · ${formatRemaining(logEffMs(l) - Date.now())}`
+              : `${formatLongDate(l.changedAt)} · ${formatTime(l.changedAt)}`}</p>
+            <p class="text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
+              <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
+              <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
+              <b class="text-slate-800">${formatMoney(l.newPrice)}</b>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '▲' : '▼'} ${formatMoney(Math.abs(diff))} · ${pctText(pricePct(l.oldPrice, l.newPrice))}</span>
+            </p>
           </div>
+          ${admin ? `<button type="button" data-delete-log="${l.id}" data-book-id="${b.id}" data-back-offer="${backOfferId}" title="Bu kaydı sil"
+              class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
+        </div>
+      </li>`;
+  }
+
+  /* Fiyat logu filtreleri (Fiyat Logu sayfası + kitabın Tümünü gör penceresi): solda tür, sağda değer */
+  const logYearOf = (l) => String(new Date(l.changedAt).getFullYear());
+  const PRICE_LOG_FILTERS = {
+    change: {
+      label: '↕️ Zam / İndirim', allLabel: 'Zam ve indirim',
+      options: (list) => [
+        { value: 'up', label: '▲ Zam', count: list.filter((l) => l.newPrice > l.oldPrice).length },
+        { value: 'down', label: '▼ İndirim', count: list.filter((l) => l.newPrice < l.oldPrice).length }
+      ].filter((o) => o.count),
+      match: (l, v) => (v === 'up' ? l.newPrice > l.oldPrice : l.newPrice < l.oldPrice)
+    },
+    year: {
+      label: '📅 Yıl', allLabel: 'Tüm yıllar',
+      options: (list) => distinctOptions(list, logYearOf, (a, b) => b[0].localeCompare(a[0])),
+      match: (l, v) => logYearOf(l) === v
+    },
+    book: {
+      label: '📚 Kitap', allLabel: 'Tüm kitaplar', pageOnly: true,
+      options: (list) => distinctOptions(list, (l) => String(l.bookId), (a, b) => (getBook(a[0])?.title || '').localeCompare(getBook(b[0])?.title || '', 'tr'))
+        .map((o) => ({ ...o, label: getBook(o.value)?.title || 'Silinmiş kitap' })),
+      match: (l, v) => String(l.bookId) === v
+    }
+  };
+
+  /* Ortak "solda tür, sağda değer" filtre çubuğu · prefix: element kimlikleri ve state alanları */
+  function kindValueFilter(prefix, filters, list, opts = {}) {
+    const kinds = Object.entries(filters).filter(([, f]) => !(opts.inModal && f.pageOnly));
+    const kind = kinds.some(([k]) => k === state[`${prefix}Kind`]) ? state[`${prefix}Kind`] : 'none';
+    const options = kind === 'none' ? [] : filters[kind].options(list);
+    if (!options.some((o) => o.value === state[`${prefix}Value`])) state[`${prefix}Value`] = 'all';
+    state[`${prefix}Kind`] = kind;
+    const value = state[`${prefix}Value`];
+    const active = kind !== 'none' && value !== 'all';
+    const html = `
+      <div class="${opts.inModal ? 'bg-slate-50' : 'bg-white shadow-soft'} rounded-2xl p-3 grid grid-cols-2 sm:flex sm:items-center gap-2.5 ${opts.cls ?? 'mb-5'}">
+        <select data-filter-kind="${prefix}" aria-label="Filtre türü" class="${INPUT_CLS} min-w-0 sm:w-52 font-semibold">
+          <option value="none">🔎 Filtre türü seç</option>
+          ${kinds.map(([k, f]) => `<option value="${k}" ${kind === k ? 'selected' : ''}>${f.label}</option>`).join('')}
+        </select>
+        <select data-filter-value="${prefix}" aria-label="Filtre değeri" ${kind === 'none' ? 'disabled' : ''} class="${INPUT_CLS} min-w-0 sm:flex-1 disabled:opacity-50">
+          ${kind === 'none'
+            ? '<option value="all">Önce soldan bir filtre türü seç</option>'
+            : `<option value="all">${filters[kind].allLabel}</option>
+               ${options.map((o) => `<option value="${escapeHTML(o.value)}" ${value === o.value ? 'selected' : ''}>${escapeHTML(o.label)} (${o.count})</option>`).join('')}`}
+        </select>
+        ${kind !== 'none' ? `<button type="button" data-filter-clear="${prefix}" class="${BTN_SOFT} col-span-2 sm:col-span-1 shrink-0">Filtreyi Temizle</button>` : ''}
+      </div>`;
+    return { html, active, apply: (items) => (active ? items.filter((x) => filters[kind].match(x, value)) : items) };
+  }
+
+  /* Filtre değişince ilgili görünümü yeniden çiz (pencere içindeyse pencereyi, değilse sayfayı) */
+  function rerenderFilter(prefix) {
+    if (prefix === 'bookLogFilter' && state.bookLogsOpen) return openBookPriceLogsModal(state.bookLogsOpen.bookId, state.bookLogsOpen.backOfferId);
+    renderCurrentPage();
+  }
+
+  /* Kitabın tüm fiyat geçmişi (5'ten fazlaysa) · Zam/İndirim ve Yıl filtresi */
+  function openBookPriceLogsModal(bookId, backOfferId = '') {
+    const b = getBook(bookId);
+    if (!b) return;
+    const admin = isAdmin();
+    const all = priceLogs.filter((l) => l.bookId === b.id).sort((x, y) => new Date(y.changedAt) - new Date(x.changedAt));
+    const f = kindValueFilter('bookLogFilter', PRICE_LOG_FILTERS, all, { inModal: true, cls: '' });
+    const list = f.apply(all);
+    state.bookLogsOpen = { bookId: b.id, backOfferId };
+    openModal(`
+      ${modalHeader(`Fiyat Değişim Geçmişi · ${escapeHTML(b.title)}`, `${all.length} kayıt${f.active ? ` · filtreye uyan ${list.length}` : ''}`, 'price-logs')}
+      <div class="p-5 space-y-4">
+        ${f.html}
+        ${list.length
+          ? `<ol class="relative border-l-2 border-brand-100 ml-1.5 space-y-2.5">${list.map((l) => priceLogItemHTML(l, b, admin, backOfferId)).join('')}</ol>`
+          : '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Bu filtreye uyan kayıt yok.</p>'}
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button type="button" data-open-book="${b.id}" data-back-offer="${backOfferId}" class="${BTN_SOFT} !py-2.5">${icon('back', 'w-3.5 h-3.5')}Kitaba dön</button>
+          <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
         </div>
       </div>`, 'lg');
   }
@@ -3124,8 +3203,9 @@
   async function deletePriceLog(logId, bookId, backOfferId) {
     if (!requireAdmin()) return;
     if (!priceLogs.some((l) => l.id === logId)) return;
+    const inAllLogs = !!$('[data-filter-kind="bookLogFilter"]');
     const ok = await run(col('priceLogs').doc(logId).delete(), 'Fiyat geçmişi kaydı silindi.', 'info');
-    if (ok && state.modalOpen) openBookModal(bookId, { backOfferId });
+    if (ok && state.modalOpen) inAllLogs ? openBookPriceLogsModal(bookId, backOfferId) : openBookModal(bookId, { backOfferId });
   }
 
   /* Fiyat Logu sayfasından kayıt silme (onaylı) */
@@ -3610,9 +3690,12 @@
 
     const admin = isAdmin();
     const nowMs = Date.now();
+    // Filtre: solda tür (Zam/İndirim · Yıl · Kitap), sağda değeri
+    const filter = kindValueFilter('logFilter', PRICE_LOG_FILTERS, priceLogs);
+    const source = filter.apply(priceLogs);
     // Planlı (tarihi gelmemiş) değişimler ayrı bölümde; tarihi gelince normal loga karışır
-    const planned = priceLogs.filter((l) => isFutureLog(l, nowMs)).sort((a, b) => logEffMs(a) - logEffMs(b));
-    const logs = priceLogs.filter((l) => !isFutureLog(l, nowMs)).sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt));
+    const planned = source.filter((l) => isFutureLog(l, nowMs)).sort((a, b) => logEffMs(a) - logEffMs(b));
+    const logs = source.filter((l) => !isFutureLog(l, nowMs)).sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt));
     const ups = logs.filter((l) => l.newPrice > l.oldPrice).length;
     const downs = logs.length - ups;
     const plannedHTML = planned.length ? `
@@ -3657,8 +3740,10 @@
           </div>`).join('')}
       </div>`;
 
+    const filterBar = priceLogs.length ? filter.html : '';
     if (!logs.length) {
-      $('#priceLogsContent').innerHTML = summary + plannedHTML + emptyState('Henüz fiyat değişikliği yapılmadı.');
+      $('#priceLogsContent').innerHTML = summary + filterBar + plannedHTML
+        + emptyState(filter.active ? 'Bu filtreye uyan fiyat değişikliği yok.' : 'Henüz fiyat değişikliği yapılmadı.');
       return;
     }
 
@@ -3720,7 +3805,7 @@
         </div>`;
     }).join('');
 
-    $('#priceLogsContent').innerHTML = summary + plannedHTML + `<div class="space-y-6">${groupsHTML}</div>`;
+    $('#priceLogsContent').innerHTML = summary + filterBar + plannedHTML + `<div class="space-y-6">${groupsHTML}</div>`;
   }
 
   /* ==========================================================
@@ -4680,6 +4765,7 @@
     if (!state.modalOpen) return;
     state.modalOpen = false;
     state.confirmAction = null;
+    state.bookLogsOpen = null;
     $('#modalBackdrop').classList.add('opacity-0');
     $('#modalPanel').classList.add('opacity-0', 'translate-y-6', 'sm:translate-y-2', 'sm:scale-95');
     document.body.style.overflow = '';
@@ -6056,7 +6142,8 @@
       if ((m = el('[data-delete-news]')))      return deleteNews(m.dataset.deleteNews);
       if ((m = el('[data-edit-news]')))        return openNewsModal(m.dataset.editNews);
       if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
-      if ((m = el('[data-clear-book-filters]'))) { state.bookFilterKind = 'none'; state.bookFilterValue = 'all'; return renderCurrentPage(); }
+      if ((m = el('[data-filter-clear]')))     { const p = m.dataset.filterClear; state[`${p}Kind`] = 'none'; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
+      if ((m = el('[data-all-logs]')))         return openBookPriceLogsModal(m.dataset.allLogs, m.dataset.backOffer || '');
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
       if ((m = el('[data-ann-tab]')))          { state.annTab = m.dataset.annTab; return renderCurrentPage(); }
@@ -6122,8 +6209,8 @@
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
       if (t.id === 'bn-cat' || t.matches('[data-bn-scope]')) updateBulkNewsPreview();
       if (t.id === 'updYearFilter') { state.updYear = t.value; renderUpdateList(); }
-      if (t.id === 'bookFilterKind') { state.bookFilterKind = t.value; state.bookFilterValue = 'all'; return renderCurrentPage(); }
-      if (t.id === 'bookFilterValue') { state.bookFilterValue = t.value; return renderCurrentPage(); }
+      if (t.matches('[data-filter-kind]')) { const p = t.dataset.filterKind; state[`${p}Kind`] = t.value; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
+      if (t.matches('[data-filter-value]')) { const p = t.dataset.filterValue; state[`${p}Value`] = t.value; return rerenderFilter(p); }
       if (t.id === 'cpBook' || t.id === 'cpDate') updateChangePricePreview(true);
       if (t.id === 'updDateInput' && t.value) $('#updYearInput').value = t.value.slice(0, 4);
     });
