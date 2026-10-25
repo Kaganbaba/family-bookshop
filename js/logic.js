@@ -285,6 +285,16 @@
   const showcaseDoc = () => appSettings.find((s) => s.id === 'showcase') || {};
   const showcaseOn = (key) => showcaseDoc()[key] !== false;
 
+  /* Sezon (settings/season.active) · Kış Fırsatları yalnızca Kış sezonunda ve vitrini açıkken geçerlidir */
+  const activeSeason = () => { const s = appSettings.find((x) => x.id === 'season')?.active; return SEASONS[s] ? s : null; };
+  const winterOn = () => activeSeason() === 'winter' && showcaseOn('winter');
+  /* Kış Fırsatları puan çarpanı (settings/winter.multiplier · 1–WINTER_MULT_MAX tam sayı, yoksa 1) */
+  const winterMult = () => {
+    const m = appSettings.find((x) => x.id === 'winter')?.multiplier;
+    return Number.isInteger(m) && m >= 1 && m <= WINTER_MULT_MAX ? m : 1;
+  };
+  const winterDealOf = (book) => (winterOn() && winterDeals.find((d) => d.bookId === book?.id && Number.isInteger(d.rate) && d.rate > 0)) || null;
+
   function getDailyDeals(now = new Date()) {
     const size = DISCOUNT_SETTINGS.groupSize;
     const today = discountDayNumber(now);
@@ -317,7 +327,7 @@
       // silinmiş / bugün indirimden çıkarılmış / Kiralık olmayan (Kira dışı, Liste dışı) /
       // Vitrin indirimindeki / yeni kitap indirimi süren kitapları atla · sırası korunur, o gün yeri boş kalır
       .filter((id) => getBook(id) && !removed.includes(id) && isRentableStatus(getBook(id))
-        && !customDiscountOf(getBook(id), now) && !isNewBook(getBook(id), now));
+        && !customDiscountOf(getBook(id), now) && !winterDealOf(getBook(id)) && !isNewBook(getBook(id), now));
 
     return {
       ids, group, list,
@@ -334,7 +344,9 @@
   /* Kitaba o an uygulanacak indirim: vitrin indirimi varsa o; yoksa günün indirimi / yeni kitaptan yüksek olan */
   /* dealIds verilirse günün indirimleri yeniden hesaplanmaz (listelerde tek sefer hesap) */
   function getEffectiveDiscount(book, now = new Date(), dealIds = null) {
-    // Vitrin indirimindeki kitap başka indirime girmez (günün indirimi o kitabı atlar)
+    // Kış Fırsatı / Özel Fırsat'taki kitap başka indirime girmez (günün indirimi o kitabı atlar)
+    const winter = winterDealOf(book);
+    if (winter) return { rate: winter.rate, source: 'winter' };
     const custom = customDiscountOf(book, now);
     if (custom) return { rate: custom.rate, source: 'custom' };
     let rate = 0, source = null;
@@ -350,8 +362,9 @@
   const isVitrineActive = (d, now = new Date()) => Number.isInteger(d.rate) && d.rate > 0 && (d.endsMs == null || d.endsMs > now.getTime());
   const customDiscountOf = (book, now = new Date()) => (showcaseOn('vitrine')
     && discounts.find((d) => d.bookId === book?.id && isVitrineActive(d, now))) || null;
-  /* Kitap şu an başka bir indirimde mi (vitrine eklenemez): günün indirimi, yeni kitap, aktif özel teklif */
+  /* Kitap şu an başka bir indirimde mi (vitrine eklenemez): kış fırsatı, günün indirimi, yeni kitap, aktif özel teklif */
   function otherDiscountOf(book, now = new Date(), dealIds = getDailyDeals(now).ids) {
+    if (winterDealOf(book)) return 'Kış Fırsatında';
     if (dealIds.includes(book.id)) return 'Günün İndiriminde';
     if (isNewBook(book, now)) return 'Yeni Kitap İndiriminde';
     if (offers.some((o) => isOfferActive(o, now) && o.items.some((it) => it.bookId === book.id))) return 'bir Özel Teklifte';
@@ -371,7 +384,7 @@
   const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', coupon: 'Kupon' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', winter: 'Kış Fırsatı', coupon: 'Kupon' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -639,6 +652,7 @@
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
     custom: { label: '🏷️ Özel Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
+    winter: { label: '❄️ Kış Fırsatı kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'winter' },
     coupon: { label: '🎟️ Kuponlar ve kuponlu kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'coupon' }, // + kupon kayıtları
     offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
   };
@@ -725,14 +739,15 @@
     const savingDeal  = sum(discounted.filter((r) => r.discountSource === 'deal'), saveOf);
     const savingNew   = sum(discounted.filter((r) => r.discountSource === 'new'), saveOf);
     const savingCustom = sum(discounted.filter((r) => r.discountSource === 'custom'), saveOf);
+    const savingWinter = sum(discounted.filter((r) => r.discountSource === 'winter'), saveOf);
     const savingOffer = sum(purchases, (p) => Math.max(0, p.normalTotal - p.price));
     const savingCoupon = sum(discounted.filter((r) => r.discountSource === 'coupon'), saveOf);
-    const total = round2(savingDeal + savingNew + savingCustom + savingOffer);
+    const total = round2(savingDeal + savingNew + savingCustom + savingWinter + savingOffer);
     return {
       count: rs.length,                                              // paket = paketteki kitap sayısı
       spent: round2(sum(singles, (r) => r.price) + sum(purchases, (p) => p.price)), // paket = +paket fiyatı
       purchases, discounted, saveOf,
-      savings: { deal: savingDeal, new: savingNew, custom: savingCustom, offer: savingOffer, coupon: round2(savingCoupon), total },
+      savings: { deal: savingDeal, new: savingNew, custom: savingCustom, winter: savingWinter, offer: savingOffer, coupon: round2(savingCoupon), total },
       points: userPoints(userId)
     };
   }
@@ -742,10 +757,13 @@
      Puan defteri: users/{id}.pointsEarned + pointsSpent · kural kupon alımında yeterliliği bununla denetler.
      • Kazanma: indirimli kiralama / paket ödemesiyle aynı batch'te artar (kural kazancı doğrular).
      • Harcama: kupon alımıyla aynı batch'te artar (kural: harcanan ≤ kazanılan).
-     • Admin kayıt silince defter kayıtlardan yeniden hesaplanır; defteri olmayanınki Admin açınca kurulur. */
-  const POINT_SOURCES = ['deal', 'new', 'custom'];
-  const rentalGain = (r) => (!r.offerId && POINT_SOURCES.includes(r.discountSource) ? Math.max(0, round2((r.listPrice ?? r.price) - r.price)) : 0);
-  const purchaseGain = (p) => Math.max(0, round2(p.normalTotal - p.price));
+     • Admin kayıt silince defter kayıtlardan yeniden hesaplanır; defteri olmayanınki Admin açınca kurulur.
+     • pointsMult: Kış Fırsatı kiralamasında / kış paketinde o anki puan çarpanı kayda yazılır
+       (çarpan sonradan değişse de eski kazançlar değişmez; kural çarpanı denetler). */
+  const POINT_SOURCES = ['deal', 'new', 'custom', 'winter'];
+  const pointsMultOf = (x) => (Number.isInteger(x?.pointsMult) && x.pointsMult > 1 ? x.pointsMult : 1);
+  const rentalGain = (r) => (!r.offerId && POINT_SOURCES.includes(r.discountSource) ? Math.max(0, round2(((r.listPrice ?? r.price) - r.price) * pointsMultOf(r))) : 0);
+  const purchaseGain = (p) => Math.max(0, round2((p.normalTotal - p.price) * pointsMultOf(p)));
   const hasLedger = (u) => typeof u?.pointsEarned === 'number' && typeof u?.pointsSpent === 'number';
   /* Kayıtlardan puan · ex: silinmek üzere olan kayıtların kimlikleri (rentals / purchases / coupons Set) */
   function computePoints(userId, ex = {}) {

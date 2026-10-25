@@ -60,7 +60,10 @@
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
-  const appSettings = [];    // settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds }
+  const winterDeals = [];    // winterDeals/{bookId} · Kış Fırsatı (Admin seçer, sezon boyunca): { bookId, rate (1–100), createdAt, createdBy }
+  /* settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları
+     'season': { active: 'winter' | null } · 'winter': { multiplier } (Kış Fırsatları puan çarpanı) */
+  const appSettings = [];
   /* feedback/{id} · { userId, type, message, createdAt, status ('open'|'answered'), replies: [{ by, text, at }],
      adminSeen, lastReplyAt, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
   const feedbacks = [];
@@ -173,6 +176,11 @@
     bogo:    { label: 'Al-Öde Kuponu', hint: 'Kaç kitap alınacak (2–5)', min: 2, max: 5, step: 1 }
   };
   const COUPON_DAYS = 7; // alınan kupon 1 hafta içinde kullanılmalı
+  /* Sezonlar (Admin profil panelindeki Sezonlar butonundan seçer) · sezon açıkken arayüz temalanır ve sezonun vitrini Vitrin Ayarları'nda görünür */
+  const SEASONS = {
+    winter: { label: 'Kış', icon: '❄️', desc: 'Kar yağışı, karlı desenler ve Kış Fırsatları vitrini' }
+  };
+  const WINTER_MULT_MAX = 10; // Kış Fırsatları puan çarpanı üst sınırı
   const DEFAULT_RENTAL_DAYS = 7;
 
   /* Uygulama durumu */
@@ -196,7 +204,6 @@
     feedbackOpen: false,   // Geri Bildirim penceresi açık mı (canlı liste yenilemesi için)
     fbFilter: 'open',      // Admin: 'open' | 'answered' | 'all'
     fbFresh: null,         // pencere açılırken "yeni" olan geri bildirimler
-    fbListOnly: false,     // "Gönderdiklerim ve cevaplar": yazma kutusu olmadan yalnızca liste
     refundsOpen: false,    // Onay Bekleyenler / İadelerim penceresi açık mı
     refundFilter: 'pending', // Admin: 'pending' | 'approved' | 'rejected'
     memberView: (() => { try { return localStorage.getItem('fb.memberView') === '1'; } catch { return false; } })(), // Admin: Üye Görünümü
@@ -290,8 +297,8 @@
   /* Kitap durumları (Admin ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
   const BOOK_STATUSES = {
     kiralik:     { label: 'Kiralık',     chip: 'bg-emerald-50 text-emerald-600', dot: 'bg-emerald-400', desc: 'Kiralanabilir' },
-    kiradisi:    { label: 'Kira dışı',   chip: 'bg-slate-100 text-slate-500',    dot: 'bg-slate-400',   desc: 'Görünür ama kiralanamaz' },
-    listedisi:   { label: 'Liste dışı',  chip: 'bg-rose-50 text-rose-500',       dot: 'bg-rose-400',    desc: 'Yalnızca Adminler görür' },
+    kiradisi:    { label: 'Kira dışı',   chip: 'bg-rose-50 text-rose-500',       dot: 'bg-rose-400',    desc: 'Görünür ama kiralanamaz' },
+    listedisi:   { label: 'Liste dışı',  chip: 'bg-slate-100 text-slate-500',    dot: 'bg-slate-400',   desc: 'Yalnızca Adminler görür' },
     planlaniyor: { label: 'Planlanıyor', chip: 'bg-violet-50 text-violet-600',   dot: 'bg-violet-400',  desc: 'Gelmesi planlanıyor · bilgiler eksik olabilir · kiralanamaz' },
     yakinda:     { label: 'Yakında',     chip: 'bg-sky-50 text-sky-600',         dot: 'bg-sky-400',     desc: 'Yazılmaya başlandı · bilgiler eksik olabilir · kiralanamaz' }
   };
@@ -484,7 +491,26 @@
       </div>`;
     }
     // SINIRLI / VIP işareti yalnızca "döneme özel" türdeki kitaplarda
-    return book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
+    const marked = book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
+    // Kış Fırsatı'ndaki kitap: Noel şapkası + kar
+    return book && winterDealOf(book) ? winterCoverHTML(marked, size) : marked;
+  }
+
+  /* Kış Fırsatı kapağı: sol üst köşede Noel şapkası, üstte kar birikintisi */
+  const SANTA_HAT = `<svg viewBox="0 0 64 52" aria-hidden="true">
+      <path d="M8 40 C14 18 30 4 50 8 C46 14 50 22 56 30 L52 40 Z" fill="#dc2626"/>
+      <path d="M50 8 C46 14 50 22 56 30 L60 28 C54 20 52 14 50 8 Z" fill="#991b1b" opacity=".45"/>
+      <rect x="2" y="36" width="56" height="12" rx="6" fill="#fff"/>
+      <circle cx="56" cy="31" r="7" fill="#fff"/>
+    </svg>`;
+  const WINTER_HAT = { xs: 'w-5 -top-2 -left-2', sm: 'w-6 -top-2.5 -left-2.5', md: 'w-8 -top-3 -left-3', lg: 'w-12 -top-4 -left-4', fill: 'w-12 top-0 left-0' };
+  function winterCoverHTML(cover, size) {
+    return `
+      <span class="${size === 'fill' ? 'relative block w-full h-full' : 'relative inline-flex shrink-0 align-top'}" title="Kış Fırsatı">
+        ${cover}
+        <span class="winter-cover-snow pointer-events-none absolute inset-x-0 top-0 z-[1]"></span>
+        <span class="santa-hat pointer-events-none absolute z-[3] ${WINTER_HAT[size] || WINTER_HAT.md}">${SANTA_HAT}</span>
+      </span>`;
   }
 
   /* Özel kitap kapağı: altta "SINIRLI" şeridi + köşede VIP tacı (en küçük boyutta yalnızca taç) */
@@ -666,9 +692,32 @@
 
   function renderCurrentPage() {
     if (!state.ready || !currentUser()) return;
+    applySeasonTheme();
     PAGE_RENDERERS[state.route]?.();
     updateBadges();
   }
+
+  /* Sezon teması: <body> sınıfı (season-winter) + ekran boyu kar yağışı katmanı (bir kez kurulur) */
+  function applySeasonTheme() {
+    const winter = activeSeason() === 'winter';
+    document.body.classList.toggle('season-winter', winter);
+    let layer = $('#snowLayer');
+    if (winter && !layer) {
+      layer = document.createElement('div');
+      layer.id = 'snowLayer';
+      layer.className = 'snow-layer';
+      layer.setAttribute('aria-hidden', 'true');
+      layer.innerHTML = snowflakesHTML(42);
+      document.body.appendChild(layer);
+    }
+    if (!winter && layer) layer.remove();
+  }
+  /* Düşen kar taneleri (konum, boyut, hız ve gecikme sabit dağılımlı · her çizimde aynı) */
+  const snowflakesHTML = (count) => Array.from({ length: count }, (_, i) => {
+    const size = 3 + (i * 7) % 6;
+    return `<i style="left:${(i * 37 + 11) % 100}%;width:${size}px;height:${size}px;opacity:${(0.45 + ((i * 13) % 50) / 100).toFixed(2)};`
+      + `animation-duration:${(7 + (i * 5) % 9).toFixed(1)}s,${(3 + (i % 4)).toFixed(1)}s;animation-delay:-${((i * 1.7) % 12).toFixed(1)}s,-${(i % 3).toFixed(1)}s"></i>`;
+  }).join('');
 
   /* ==========================================================
      14) MODAL ALTYAPISI

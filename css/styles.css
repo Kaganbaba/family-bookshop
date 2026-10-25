@@ -169,3 +169,86 @@
       .ultra-bolts g { animation: none; opacity: .6; }
       .ultra-flash { animation: none; }
     }
+
+    /* ===== Sezon: Kış (body.season-winter) · kar yağışı, karlı kenarlar, Kış Fırsatları vitrini ===== */
+    /* Zemin: buz mavisi geçiş + çok soluk kar taneli desen (iki farklı boyutta) */
+    body.season-winter {
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dbeafe' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e0f2fe' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E"),
+        linear-gradient(to bottom, #e0f2fe, #ffffff 35%, #f0f9ff) !important;
+      background-size: 30px 30px, 18px 18px, auto;
+      background-position: 0 0, 90px 120px, 0 0;
+      background-repeat: repeat, repeat, no-repeat;
+      background-attachment: fixed;
+    }
+    /* Başlık çubuğunun ve alt bilginin üstünde kar birikintisi (header sabit, footer'a relative verilir) */
+    .season-winter > footer { position: relative; }
+    .season-winter > header::after, .season-winter > footer::before {
+      content: ''; position: absolute; left: 0; right: 0; height: 9px; pointer-events: none;
+      background: radial-gradient(circle at 7px 0, #fff 7px, transparent 7.5px) repeat-x;
+      background-size: 15px 9px;
+      filter: drop-shadow(0 2px 1.5px rgba(14, 116, 144, .22));
+    }
+    .season-winter > header::after { bottom: -8px; }
+    .season-winter > footer::before { top: -1px; filter: drop-shadow(0 1px 1px rgba(255, 255, 255, .3)); }
+
+    /* Düşen kar taneleri · ekran katmanı (modalların altında) ve vitrin içi */
+    .snow-layer { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
+    .winter-snow { overflow: hidden; }
+    .snow-layer i, .winter-snow i {
+      position: absolute; top: -3%; border-radius: 9999px;
+      animation-name: snowFall, snowSway;
+      animation-timing-function: linear, ease-in-out;
+      animation-iteration-count: infinite, infinite;
+      animation-direction: normal, alternate;
+    }
+    .snow-layer i { background: #dbeafe; box-shadow: 0 0 2px #fff, 0 0 5px rgba(59, 130, 246, .45); }
+    .winter-snow i { background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, .85); }
+    @keyframes snowFall { from { top: -3%; } to { top: 103%; } }
+    @keyframes snowSway { from { translate: -14px 0; } to { translate: 14px 0; } }
+
+    /* Kış Fırsatları vitrini: buz mavisi çerçeve, gece mavisi zemin, kar taneli desen, üstte kar */
+    .winter-rim { background: linear-gradient(135deg, #e0f2fe, #93c5fd, #f8fafc, #7dd3fc, #e0f2fe); background-size: 300% 300%; animation: goldFlow 9s ease infinite; }
+    .winter-bg { background: radial-gradient(ellipse at top, rgba(59, 130, 246, .45), transparent 60%), linear-gradient(160deg, #0c4a6e 0%, #1e3a8a 55%, #0f172a 100%); }
+    .winter-flakes {
+      opacity: .14;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E");
+      background-size: 34px 34px, 20px 20px;
+      background-position: 0 0, 60px 70px;
+      background-repeat: space;
+    }
+    .winter-cap {
+      height: 18px;
+      background: radial-gradient(circle at 11px 4px, #fff 11px, transparent 11.5px) repeat-x, linear-gradient(#fff, #fff) no-repeat;
+      background-size: 22px 16px, 100% 5px;
+      filter: drop-shadow(0 3px 2px rgba(2, 6, 23, .35));
+    }
+    .winter-card {
+      background: linear-gradient(160deg, rgba(255, 255, 255, .17), rgba(255, 255, 255, .05));
+      border: 1px solid rgba(255, 255, 255, .22);
+      backdrop-filter: blur(6px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 12px 28px -14px rgba(2, 6, 23, .7);
+    }
+    .winter-card:hover { border-color: rgba(255, 255, 255, .5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 22px rgba(186, 230, 253, .35), 0 14px 30px -14px rgba(2, 6, 23, .7); }
+
+    /* Kış Fırsatı kapağı: Noel şapkası + üstte kar · Kitaplar satırında büyük kar tanesi */
+    .santa-hat { transform: rotate(-24deg); }
+    .santa-hat svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .3)); }
+    .winter-cover-snow {
+      height: 6px; border-radius: inherit;
+      background: radial-gradient(circle at 4px 0, #fff 4px, transparent 4.5px) repeat-x;
+      background-size: 8px 6px;
+      filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .25));
+    }
+    .winter-row::after {
+      content: ''; position: absolute; top: 50%; right: 18%; width: 54px; height: 54px; transform: translateY(-50%) rotate(15deg);
+      pointer-events: none; opacity: .14;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E") center/contain no-repeat;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .snow-layer, .winter-snow { display: none; }
+      .winter-rim { animation: none; }
+    }

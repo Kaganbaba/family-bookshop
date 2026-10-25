@@ -17,8 +17,9 @@
       if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction, m.dataset.user);
       if ((m = t.closest('[data-set-role]')))        return setRole(m.dataset.user, m.dataset.setRole);
       if ((m = t.closest('[data-toggle-member-view]'))) return setMemberView(!state.memberView);
-      if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(m.dataset.openFeedback === 'list'); }
+      if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(); }
       if ((m = t.closest('[data-open-refunds]')))    { toggleProfile(false); return openRefundsModal(); }
+      if ((m = t.closest('[data-open-seasons]')))    { toggleProfile(false); return openSeasonModal(); }
       if ((m = t.closest('[data-quick-amount]')))    { const i = $('#bmAmount'); if (i) { i.value = m.dataset.quickAmount; i.focus(); } return; }
       if ((m = t.closest('[data-panel-user]')))      { state.panelUser = state.panelUser === m.dataset.panelUser ? null : m.dataset.panelUser; return renderAdminPanel(); }
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
@@ -35,7 +36,7 @@
       if ((m = el('#coverLightbox')))          return closeCoverLightbox();
       if ((m = el('[data-zoom-cover]')))       return openCoverLightbox(m.querySelector('img'));
       if ((m = el('[data-exit-member-view]'))) return setMemberView(false);
-      if ((m = el('[data-open-feedback]')))    return openFeedbackModal(m.dataset.openFeedback === 'list');
+      if ((m = el('[data-open-feedback]')))    return openFeedbackModal();
       if ((m = el('[data-fb-filter]')))        { state.fbFilter = m.dataset.fbFilter; return openFeedbackModal(); }
       if ((m = el('[data-send-reply]')))       return sendFeedbackReply(m.dataset.sendReply);
       if ((m = el('[data-delete-feedback]')))  return deleteFeedback(m.dataset.deleteFeedback);
@@ -77,6 +78,12 @@
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-showcase]')))    return openShowcaseModal();
       if ((m = el('[data-showcase-toggle]')))  return setShowcase(m.dataset.showcaseToggle, !showcaseOn(m.dataset.showcaseToggle));
+      if ((m = el('[data-add-winter]')))       return openWinterDealModal();
+      if ((m = el('[data-delete-winter]')))    return deleteWinterDeal(m.dataset.deleteWinter);
+      if ((m = el('[data-winter-settings]')))  return openWinterSettingsModal();
+      if ((m = el('[data-add-winter-package]'))) return openOfferFormModal(null, 'winter');
+      if ((m = el('[data-open-seasons]')))     return openSeasonModal();
+      if ((m = el('[data-set-season]')))       return setSeason(m.dataset.setSeason);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-cancel-rental]')))    return cancelRental(m.dataset.cancelRental);
@@ -129,9 +136,10 @@
         case 'resetStats':  return handleResetStats(form);
         case 'setPassword': return handleSetPassword(fd);
         case 'saveVitrine': return handleSaveVitrine(fd);
+        case 'saveWinterDeal': return handleSaveWinterDeal(fd);
+        case 'saveWinterSettings': return handleSaveWinterSettings(fd);
         case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
         case 'bulkNews':    return handleBulkNews(fd);
-        case 'sendFeedback': return handleSendFeedback(fd);
         case 'sendRefund':  return handleSendRefund(fd, form);
         case 'useBogo':     return handleUseBogo(form);
       }
@@ -144,6 +152,7 @@
       if (t.id === 'of-price') updateOfferCalc();
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
       if (t.id === 'vd-rate') updateVitrinePreview();
+      if (t.id === 'wd-rate') updateWinterPreview();
       if (t.id === 'sc-value' || t.id === 'sc-free') updateShopCouponForm();
     });
     document.addEventListener('change', (e) => {
@@ -155,6 +164,7 @@
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'vd-book') updateVitrinePreview();
+      if (t.id === 'wd-book') updateWinterPreview();
       if (t.id === 'rentCoupon') updateRentCoupon();
       if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
@@ -213,6 +223,7 @@
     ['announcements', announcements],
     ['offers', offers],
     ['discounts', discounts, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
+    ['winterDeals', winterDeals, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['ratings', ratings, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['couponShop', couponShop, null, (d) => ({ id: d.id, ...d.data(), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],

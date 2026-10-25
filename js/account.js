@@ -67,6 +67,11 @@
     rfBadge.classList.toggle('flex', !!rfCount);
     $('#panelRefundLabel').textContent = isAdmin() ? '⏳ Onay Bekleyenler' : '↩️ İadelerim';
     $('#fbDot').classList.toggle('hidden', !fbCount && !rfCount);
+    // Sezonlar butonu yalnızca Admin'de (Üye Görünümü'nde gizli) · açık sezon yazılır
+    const season = activeSeason();
+    $('#panelSeasonsBtn').classList.toggle('hidden', !isAdmin());
+    $('#panelSeasonsBtn').classList.toggle('flex', isAdmin());
+    $('#panelSeasonsLabel').textContent = season ? `${SEASONS[season].icon} Sezonlar · ${SEASONS[season].label} açık` : '🗓️ Sezonlar';
     // Üye Görünümü şeridi yalnızca gerçek Admin'de ve mod açıkken
     const banner = $('#memberViewBanner');
     const showBanner = isRealAdmin() && state.memberView;
@@ -257,34 +262,26 @@
   const fbUnseen = (f) => (f.userId === state.currentUserId ? fbReplyUnread(f) : isAdmin() && !f.adminSeen);
   const feedbackBadgeCount = () => feedbacks.filter(fbUnseen).length;
 
-  /* listOnly: "Gönderdiklerim ve cevaplar" → yalnızca gönderilenler ve cevaplar (yazma kutusu yok) */
-  function openFeedbackModal(listOnly = state.fbListOnly) {
+  /* Pencerede yazma kutusu yok: geri bildirim yalnızca sayfanın en altındaki kutudan gönderilir.
+     Üye → gönderdikleri ve cevaplar · Admin → hepsi (filtre + cevap) */
+  function openFeedbackModal() {
     const admin = isAdmin();
     state.feedbackOpen = true;
-    state.fbListOnly = !!listOnly;
     // Pencere açıldığında "yeni" olanlar vurgulanır (görüldü işareti hemen yazılsa da vurgu kalır)
     state.fbFresh = new Set(feedbacks.filter(fbUnseen).map((f) => f.id));
-    const compose = canSendFeedback() && !listOnly ? `
-      <form data-form="sendFeedback" class="p-4 rounded-2xl bg-brand-50/40 border border-brand-100 space-y-3" autocomplete="off">
-        <textarea name="message" id="fbMessage" rows="4" required minlength="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed"
-          placeholder="Görüş, öneri veya şikayetini yaz…"></textarea>
-        <button type="submit" class="${BTN_PRIMARY} w-full !py-2.5">Gönder</button>
-      </form>` : '';
     const filterBtn = (k, label, n) => `
       <button type="button" data-fb-filter="${k}" class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${state.fbFilter === k ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}">
         ${label} <span class="opacity-70">${n}</span></button>`;
     const count = (s) => feedbacks.filter((f) => (f.status || 'open') === s).length;
     openModal(`
-      ${modalHeader(admin ? 'Geri Bildirimler 💬' : listOnly ? 'Gönderdiklerim ve Cevaplar 💬' : 'Geri Bildirim 💬',
-        admin ? 'Geri bildirimleri oku ve cevapla · sen de yazabilirsin.'
-          : listOnly ? 'Gönderdiğin geri bildirimler ve Admin\'in cevapları.' : 'Görüş, öneri ya da şikayetini yaz · Admin cevaplayınca burada görürsün.', 'announcements')}
+      ${modalHeader(admin ? 'Geri Bildirimler 💬' : 'Geri Bildirimlerim 💬',
+        admin ? 'Geri bildirimleri oku ve cevapla.' : 'Gönderdiğin geri bildirimler ve Admin\'in cevapları.', 'announcements')}
       <div class="p-5 space-y-4">
-        ${compose}
         ${admin ? `<div class="flex gap-1.5 flex-wrap">
             ${filterBtn('open', '⏳ Bekleyen', count('open'))}${filterBtn('answered', '✓ Cevaplanan', count('answered'))}${filterBtn('all', 'Tümü', feedbacks.length)}
           </div>` : ''}
-        ${admin || listOnly ? '' : '<p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Gönderdiklerin</p>'}
         <div id="fbList"></div>
+        <p class="text-[10px] text-slate-400 text-center">💬 Yeni geri bildirimi sayfanın en altındaki <b class="text-slate-500">Geri Bildirim</b> kutusundan gönderebilirsin.</p>
         <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
       </div>`, 'lg');
     renderFeedbackList();
@@ -347,8 +344,8 @@
       .catch((e) => console.error(e));
   }
 
-  /* form verilirse (alt bilgi kutusu) gönderince o form temizlenir */
-  function handleSendFeedback(fd, form = null) {
+  /* Alt bilgideki kutudan gönderilir · gönderince form temizlenir */
+  function handleSendFeedback(fd, form) {
     const u = currentUser();
     const message = (fd.message || '').trim();
     if (!u) return;
@@ -357,9 +354,7 @@
       userId: u.id, message, createdAt: isoAt(Date.now()),
       status: 'open', replies: [], adminSeen: false, lastReplyAt: null, userSeenAt: null
     }), 'Geri bildirimin gönderildi, teşekkürler! 💬').then((ok) => {
-      if (!ok) return;
-      if (form) form.reset();
-      else if ($('#fbMessage')) $('#fbMessage').value = '';
+      if (ok) form?.reset();
     });
   }
 
@@ -659,7 +654,7 @@
         <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
         <span class="absolute right-20 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
         <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
-        <p class="relative text-[11px] font-semibold text-brand-100">Profilim 👤</p>
+        <p class="relative text-[11px] font-semibold text-brand-100">Ayarlar ⚙️</p>
         <div class="relative flex items-center gap-3.5 mt-3">
           ${avatarHTML(u, 'w-16 h-16 text-lg ring-4 ring-white/25')}
           <div class="min-w-0">

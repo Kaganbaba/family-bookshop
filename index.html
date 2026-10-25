@@ -43,7 +43,7 @@
     };
   </script>
 
-  <link rel="stylesheet" href="css/styles.css?v=9" />
+  <link rel="stylesheet" href="css/styles.css?v=12" />
 </head>
 
 <body class="bg-gradient-to-b from-brand-50 via-white to-brand-50/60 min-h-screen flex flex-col font-sans text-slate-700 text-sm antialiased">
@@ -184,7 +184,7 @@
               <div class="relative grid grid-cols-2 gap-2 mt-3">
                 <button type="button" data-open-profile
                   class="flex items-center justify-center gap-1 py-2 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-[11px] font-semibold shadow-soft transition">
-                  👤 Profilim
+                  ⚙️ Ayarlar
                 </button>
                 <button id="panelStatsBtn" type="button" data-user-stats=""
                   class="flex items-center justify-center gap-1 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
@@ -200,6 +200,11 @@
                   class="relative flex items-center justify-center gap-1 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
                   <span id="panelRefundLabel">↩️ İadelerim</span>
                   <span id="rfBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold items-center justify-center ring-2 ring-brand-600"></span>
+                </button>
+                <!-- Yalnızca Admin: Sezonlar (Kış vb.) -->
+                <button id="panelSeasonsBtn" type="button" data-open-seasons
+                  class="hidden col-span-2 items-center justify-center gap-1 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
+                  <span id="panelSeasonsLabel">🗓️ Sezonlar</span>
                 </button>
               </div>
             </div>
@@ -246,6 +251,9 @@
 
       <!-- 1.3) Vitrin Ayarları (yalnızca Admin: vitrinleri aç / kapat) -->
       <div id="showcaseSettings"></div>
+
+      <!-- 1.4) Kış Fırsatları (yalnızca Kış sezonunda ve vitrin açıkken) -->
+      <div id="winterSection"></div>
 
       <!-- 1.5) Yeni Kitap vitrini (1 haftalık yeni kitap indirimi) -->
       <div id="newBooksSection"></div>
@@ -399,14 +407,14 @@
   <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 items-end pointer-events-none"></div>
 
   <!-- Uygulama kodu · normal (modül olmayan) scriptler; sıra önemli, global değişkenleri paylaşırlar -->
-  <script src="js/core.js?v=9" defer></script>
-  <script src="js/logic.js?v=9" defer></script>
-  <script src="js/home.js?v=9" defer></script>
-  <script src="js/books.js?v=9" defer></script>
-  <script src="js/users-news.js?v=9" defer></script>
-  <script src="js/shop.js?v=9" defer></script>
-  <script src="js/admin.js?v=9" defer></script>
-  <script src="js/account.js?v=9" defer></script>
-  <script src="js/app.js?v=9" defer></script>
+  <script src="js/core.js?v=12" defer></script>
+  <script src="js/logic.js?v=12" defer></script>
+  <script src="js/home.js?v=12" defer></script>
+  <script src="js/books.js?v=12" defer></script>
+  <script src="js/users-news.js?v=12" defer></script>
+  <script src="js/shop.js?v=12" defer></script>
+  <script src="js/admin.js?v=12" defer></script>
+  <script src="js/account.js?v=12" defer></script>
+  <script src="js/app.js?v=12" defer></script>
 </body>
 </html>

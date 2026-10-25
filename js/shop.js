@@ -424,7 +424,9 @@
     else d.setHours(23, 59, 59, 999);
     return d;
   };
-  const isOfferActive = (o, now = new Date()) => offerEnd(o) > now;
+  /* Sezon paketi (season: 'winter'): tarihi yok, Kış Fırsatları açık olduğu sürece geçerli · Özel Teklifler'de görünmez */
+  const isSeasonOffer = (o) => !!o?.season;
+  const isOfferActive = (o, now = new Date()) => (isSeasonOffer(o) ? o.season === 'winter' && winterOn() : offerEnd(o) > now);
   const offerBooks = (o) => o.items.map((it) => getBook(it.bookId)).filter(Boolean);
   const offerNormalTotal = (o) => sum(offerBooks(o), (b) => b.price);
   const offerRate = (o) => { const n = offerNormalTotal(o); return n > 0 ? Math.max(0, Math.round((1 - o.price / n) * 100)) : 0; };
@@ -436,7 +438,8 @@
     const before = offers.length;
     for (let i = offers.length - 1; i >= 0; i--) {
       const o = offers[i];
-      if (isOfferActive(o, now)) continue;
+      // Sezon paketleri süreyle bitmez (sezon kapatılırken setSeason siler; Kış Fırsatları vitrini kapalıyken yalnızca gizlenir)
+      if (isSeasonOffer(o) || isOfferActive(o, now)) continue;
       offers.splice(i, 1);
       if (isAdmin() && !state.purgePending.has(o.id)) {
         state.purgePending.add(o.id);
@@ -510,7 +513,7 @@
 
   function offerRentCheck(o, user) {
     if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
-    if (!isOfferActive(o)) return { ok: false, reason: 'Bu teklifin süresi doldu.' };
+    if (!isOfferActive(o)) return { ok: false, reason: isSeasonOffer(o) ? 'Kış Fırsatları şu an kapalı.' : 'Bu teklifin süresi doldu.' };
     const bs = offerBooks(o);
     if (!bs.length || bs.length < o.items.length) return { ok: false, reason: 'Paketteki kitaplardan biri artık kitaplıkta yok.' };
     const notRentable = bs.find((b) => !isRentableStatus(b) || !hasPrice(b));
@@ -530,7 +533,7 @@
     const now = new Date();
     purgeExpiredOffers(now);
     const u = currentUser();
-    const list = [...offers].sort((a, b) => offerEnd(a) - offerEnd(b));
+    const list = offers.filter((o) => !isSeasonOffer(o)).sort((a, b) => offerEnd(a) - offerEnd(b));
 
     const notice = `
       <div class="flex items-start gap-2.5 bg-white/70 border border-brand-100 rounded-2xl px-4 py-3 mb-5 text-xs text-slate-500">
@@ -659,7 +662,9 @@
         </div>
 
         <div class="flex flex-wrap gap-1.5">
-          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-brand-50 text-brand-600">Son: ${formatDate(offerEnd(o).toISOString(), true)}</span>
+          ${isSeasonOffer(o)
+            ? `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-sky-50 text-sky-600">❄️ Kış boyunca geçerli</span>${winterMult() > 1 ? `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">⭐ ${winterMult()}x puan</span>` : ''}`
+            : `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-brand-50 text-brand-600">Son: ${formatDate(offerEnd(o).toISOString(), true)}</span>`}
           <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-600">${offerPurchaseCount(o)} kez kiralandı</span>
           <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-500">Tek kiralamada ${offerCountLabel(o)}</span>
         </div>
@@ -716,9 +721,12 @@
     });
 
     const batch = db.batch();
+    // Kış paketi: o anki puan çarpanı satın alıma yazılır (kural ayardaki çarpanla aynı olmasını ister)
+    const mult = o.season === 'winter' ? winterMult() : 1;
     batch.set(purchaseRef, {
       offerId: o.id, offerTitle: o.title, userId: u.id,
-      price: o.price, normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now)
+      price: o.price, normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now),
+      ...(mult > 1 ? { pointsMult: mult } : {})
     });
     bs.forEach((b, i) => {
       const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
@@ -732,7 +740,7 @@
       batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     });
     // Paket indirimi puan kazandırır (normal toplam − paket fiyatı)
-    const gain = purchaseGain({ normalTotal: normal, price: o.price });
+    const gain = purchaseGain({ normalTotal: normal, price: o.price, pointsMult: mult });
     batch.update(col('users').doc(u.id), {
       balance: round2(u.balance - o.price), lastTx: purchaseId, lastTxType: 'package',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})

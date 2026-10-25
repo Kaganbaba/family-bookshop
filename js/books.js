@@ -122,12 +122,15 @@
     const dealIds = getDailyDeals(nowDate).ids;
     const rows = list.map((b) => {
       const rented = isBookRented(b, now);
-      const fresh = isNewBook(b, nowDate);
       const eff = getEffectiveDiscount(b, nowDate, dealIds);
+      const winter = eff.source === 'winter';
+      const fresh = !winter && isNewBook(b, nowDate); // Kış Fırsatı'ndaki yeni kitap yeni kitap indirimi almaz
       return `
         <li>
           <button type="button" data-open-book="${b.id}"
-            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${fresh
+            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${winter
+              ? 'winter-row bg-gradient-to-r from-sky-50 via-white to-white border-l-4 border-sky-400 hover:from-sky-100/80 focus:from-sky-100'
+              : fresh
               ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
               : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
             <div class="relative shrink-0">
@@ -141,6 +144,7 @@
               <p class="flex items-center gap-1.5 min-w-0">
                 <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
                 ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
+                ${winter ? `<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-sky-400 to-indigo-500 px-1.5 py-0.5 rounded-full shadow-soft">❄️ KIŞ %${eff.rate}</span>` : ''}
               </p>
               <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : ''}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}${fresh
                 ? `<span class="hidden sm:inline text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(newDiscountLeftMs(b, nowDate))}</span>` : ''}</p>
@@ -612,7 +616,7 @@
     const batch = db.batch();
     const patch = { status };
     let extra = '';
-    if (toDraft) patch.newDiscountUntil = null;
+    if (toDraft) { patch.newDiscountUntil = null; patch.releaseDate = null; } // Planlanıyor / Yakında kitapta çıkış tarihi tutulmaz
     if (goingLive) {
       // Taslaktan yayına: döngüye sonraki turda girer; son 7 günde çıktıysa yeni kitap indirimi (+ istenirse duyuru)
       patch.addedAt = isoAt(Date.now());
@@ -697,16 +701,19 @@
     const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
     const ref = col('rentals').doc();
     const batch = db.batch();
+    // Kış Fırsatı: o anki puan çarpanı kayda yazılır (kural ayardaki çarpanla aynı olmasını ister)
+    const mult = rate && source === 'winter' ? winterMult() : 1;
     batch.set(ref, {
       bookId: b.id, userId: u.id,
       listPrice: b.price, price, discount: rate, discountSource: rate ? source : null,
       offerId: null, purchaseId: null, offerPrice: null, couponId: null,
-      rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
+      rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null,
+      ...(mult > 1 ? { pointsMult: mult } : {})
     });
     // Özel kitap: kiralandığı an "Kira dışı"; kiradayken "Kirada" görünür, süre bitince Kira dışı kalır
     batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     // İndirimli kiralama puan kazandırır (defter varsa aynı batch'te; kural kazancı doğrular)
-    const gain = rentalGain({ discountSource: rate ? source : null, listPrice: b.price, price });
+    const gain = rentalGain({ discountSource: rate ? source : null, listPrice: b.price, price, pointsMult: mult });
     batch.update(col('users').doc(u.id), {
       balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})
