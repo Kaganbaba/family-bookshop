@@ -67,9 +67,6 @@
     rfBadge.classList.toggle('flex', !!rfCount);
     $('#panelRefundLabel').textContent = isAdmin() ? '⏳ Onay Bekleyenler' : '↩️ İadelerim';
     $('#fbDot').classList.toggle('hidden', !fbCount && !rfCount);
-    // Alt bilgideki geri bildirim kutusu yalnızca üyelerde (Admin, Üye Görünümü'nde de yazamaz)
-    $('#footerFeedback').classList.toggle('hidden', !canSendFeedback());
-    $('#footerFeedbackAdmin').classList.toggle('hidden', canSendFeedback());
     // Üye Görünümü şeridi yalnızca gerçek Admin'de ve mod açıkken
     const banner = $('#memberViewBanner');
     const showBanner = isRealAdmin() && state.memberView;
@@ -249,16 +246,16 @@
   }
 
   /* ==========================================================
-     17.05) GERİ BİLDİRİM · üye yazar, Admin okur ve cevaplar; üye cevabı görür
+     17.05) GERİ BİLDİRİM · herkes yazar, Admin okur ve cevaplar; yazan cevabı görür
      ========================================================== */
-  /* Geri bildirimi yalnızca üyeler yazar · Adminler (Üye Görünümü'nde de) yazamaz, okur ve cevaplar */
-  const canSendFeedback = () => !!currentUser() && !isRealAdmin();
+  /* Herkes geri bildirim yazar (Admin de bir kullanıcıdır) · Adminler ayrıca hepsini okur ve cevaplar */
+  const canSendFeedback = () => !!currentUser();
   const isoMs = (iso) => (iso ? new Date(iso).getTime() : 0);
   const fbReplyUnread = (f) => !!f.lastReplyAt && isoMs(f.lastReplyAt) > isoMs(f.userSeenAt);
-  /* Rozet: Admin → okunmamış geri bildirim · üye → cevabı okunmamış kendi geri bildirimi */
-  const feedbackBadgeCount = () => (isAdmin()
-    ? feedbacks.filter((f) => !f.adminSeen).length
-    : feedbacks.filter((f) => f.userId === state.currentUserId && fbReplyUnread(f)).length);
+  /* Yeni mi? Admin → başkasının okunmamış geri bildirimi · herkes → cevabı okunmamış kendi geri bildirimi.
+     (Admin'in kendi geri bildirimi adminSeen ile işaretlenmez ki diğer Adminler de yeni görsün.) */
+  const fbUnseen = (f) => (f.userId === state.currentUserId ? fbReplyUnread(f) : isAdmin() && !f.adminSeen);
+  const feedbackBadgeCount = () => feedbacks.filter(fbUnseen).length;
 
   /* listOnly: "Gönderdiklerim ve cevaplar" → yalnızca gönderilenler ve cevaplar (yazma kutusu yok) */
   function openFeedbackModal(listOnly = state.fbListOnly) {
@@ -266,28 +263,26 @@
     state.feedbackOpen = true;
     state.fbListOnly = !!listOnly;
     // Pencere açıldığında "yeni" olanlar vurgulanır (görüldü işareti hemen yazılsa da vurgu kalır)
-    state.fbFresh = new Set((admin ? feedbacks.filter((f) => !f.adminSeen)
-      : feedbacks.filter((f) => f.userId === state.currentUserId && fbReplyUnread(f))).map((f) => f.id));
+    state.fbFresh = new Set(feedbacks.filter(fbUnseen).map((f) => f.id));
     const compose = canSendFeedback() && !listOnly ? `
       <form data-form="sendFeedback" class="p-4 rounded-2xl bg-brand-50/40 border border-brand-100 space-y-3" autocomplete="off">
         <textarea name="message" id="fbMessage" rows="4" required minlength="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed"
           placeholder="Görüş, öneri veya şikayetini yaz…"></textarea>
         <button type="submit" class="${BTN_PRIMARY} w-full !py-2.5">Gönder</button>
-      </form>`
-      : !canSendFeedback() && !admin
-        ? '<p class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2.5">👁️ Üye görünümündesin · Adminler geri bildirim gönderemez.</p>' : '';
+      </form>` : '';
     const filterBtn = (k, label, n) => `
       <button type="button" data-fb-filter="${k}" class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${state.fbFilter === k ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}">
         ${label} <span class="opacity-70">${n}</span></button>`;
     const count = (s) => feedbacks.filter((f) => (f.status || 'open') === s).length;
     openModal(`
       ${modalHeader(admin ? 'Geri Bildirimler 💬' : listOnly ? 'Gönderdiklerim ve Cevaplar 💬' : 'Geri Bildirim 💬',
-        admin ? 'Üyelerin geri bildirimlerini oku ve cevapla.'
+        admin ? 'Geri bildirimleri oku ve cevapla · sen de yazabilirsin.'
           : listOnly ? 'Gönderdiğin geri bildirimler ve Admin\'in cevapları.' : 'Görüş, öneri ya da şikayetini yaz · Admin cevaplayınca burada görürsün.', 'announcements')}
       <div class="p-5 space-y-4">
+        ${compose}
         ${admin ? `<div class="flex gap-1.5 flex-wrap">
             ${filterBtn('open', '⏳ Bekleyen', count('open'))}${filterBtn('answered', '✓ Cevaplanan', count('answered'))}${filterBtn('all', 'Tümü', feedbacks.length)}
-          </div>` : compose}
+          </div>` : ''}
         ${admin || listOnly ? '' : '<p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">Gönderdiklerin</p>'}
         <div id="fbList"></div>
         <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
@@ -341,16 +336,14 @@
     markFeedbackSeen();
   }
 
-  /* Görüldü: Admin → adminSeen · üye → userSeenAt (cevabı okudu) */
+  /* Görüldü: kendi geri bildirimi → userSeenAt (cevabı okudu) · Admin, başkasınınki → adminSeen */
   function markFeedbackSeen() {
-    const admin = isAdmin();
-    const list = admin ? feedbacks.filter((f) => !f.adminSeen)
-      : feedbacks.filter((f) => f.userId === state.currentUserId && fbReplyUnread(f));
-    const todo = list.filter((f) => !state.purgePending.has(`fbseen:${f.id}:${f.lastReplyAt || ''}`));
+    const todo = feedbacks.filter((f) => fbUnseen(f) && !state.purgePending.has(`fbseen:${f.id}:${f.lastReplyAt || ''}`));
     if (!todo.length) return;
     const now = isoAt(Date.now());
     todo.forEach((f) => state.purgePending.add(`fbseen:${f.id}:${f.lastReplyAt || ''}`));
-    commitOps(todo.map((f) => (bt) => bt.update(col('feedback').doc(f.id), admin ? { adminSeen: true } : { userSeenAt: now })))
+    commitOps(todo.map((f) => (bt) => bt.update(col('feedback').doc(f.id),
+      f.userId === state.currentUserId ? { userSeenAt: now } : { adminSeen: true })))
       .catch((e) => console.error(e));
   }
 
@@ -359,7 +352,6 @@
     const u = currentUser();
     const message = (fd.message || '').trim();
     if (!u) return;
-    if (!canSendFeedback()) return toast('Adminler geri bildirim gönderemez.', 'info');
     if (message.length < 3) return toast('Biraz daha yazar mısın? (en az 3 karakter)', 'error');
     run(col('feedback').add({
       userId: u.id, message, createdAt: isoAt(Date.now()),
@@ -531,6 +523,8 @@
               <div class="flex items-center gap-1.5 flex-wrap">
                 ${admin && usr ? `<span class="flex items-center gap-1.5 text-xs font-semibold text-slate-700">${avatarHTML(usr, 'w-5 h-5 text-[9px]')}${escapeHTML(usr.name)}</span>` : ''}
                 ${statusChip(refundStatus(f))}
+                ${admin && refundStatus(f) !== 'pending' ? `<button type="button" data-delete-refund="${f.id}" title="Geçmişten sil" aria-label="İade kaydını sil"
+                  class="${BTN_ICON} ml-auto text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
               </div>
               <p class="text-xs font-semibold text-slate-700 truncate mt-1">${escapeHTML(b?.title || 'Silinmiş kitap')}</p>
               <p class="text-[10px] text-slate-400">${r ? `Kiralandı: ${formatDate(r.rentedAt, true)} · ` : ''}Talep: ${formatDate(f.createdAt, true)}${admin && r ? ` · ${inTime ? '<b class="text-emerald-600">aynı gün ✓</b>' : '<b class="text-rose-500">farklı gün ✕</b>'}` : ''}</p>
@@ -548,8 +542,13 @@
             </div>` : ''}
         </li>`;
     };
+    // Admin: sonuçlanan talepler filtresinde geçmişi topluca temizleme
+    const clearAll = admin && state.refundFilter !== 'pending' && list.length ? `
+      <div class="flex justify-end mb-2">
+        <button type="button" data-delete-refund="all" class="text-[11px] font-semibold text-rose-500 hover:text-rose-600 hover:underline">🗑️ Bu listedeki ${list.length} kaydı sil</button>
+      </div>` : '';
     box.innerHTML = list.length
-      ? `<ul class="space-y-3">${list.map(card).join('')}</ul>`
+      ? `${clearAll}<ul class="space-y-3">${list.map(card).join('')}</ul>`
       : emptyState(admin ? 'Bu filtrede iade talebi yok.' : 'Henüz iade talebin yok. Kiraladığın gün, indirimsiz bir kitabı "↩️ İade" ile iade edebilirsin.');
     box.querySelectorAll('[data-refund-note]').forEach((t) => { if (drafts[t.dataset.refundNote]) t.value = drafts[t.dataset.refundNote]; });
     // Üye: sonuçlanan talepleri gördü olarak işaretle
@@ -589,6 +588,27 @@
     // Özel kitap kiralanınca "Kira dışı" olmuştu → iade edilince yeniden Kiralık
     if (b && isSpecialBook(b) && bookStatus(b) === 'kiradisi' && b.lockRental === r.id) ops.push((bt) => bt.update(bookRef(b.id), { status: 'kiralik' }));
     await run(commitOps(ops), `✓ İade onaylandı · ${u.name} bakiyesine ${formatMoney(f.amount)} yüklendi.`);
+  }
+
+  /* Admin: sonuçlanan iade kayıtlarını geçmişten siler (id = 'all' → açık filtredeki hepsi).
+     Bekleyen talepler silinmez; bakiye ve kiralamalar değişmez, yalnızca kayıt kalkar. */
+  function deleteRefunds(id) {
+    if (!requireAdmin()) return;
+    const list = refunds.filter((f) => refundStatus(f) !== 'pending'
+      && (id === 'all' ? refundStatus(f) === state.refundFilter : f.id === id));
+    if (!list.length) return;
+    const one = list.length === 1 ? list[0] : null;
+    openConfirm({
+      title: one ? 'İade kaydı silinsin mi?' : `${list.length} iade kaydı silinsin mi?`,
+      message: one
+        ? `${escapeHTML(getUser(one.userId)?.name || 'Üye')} · ${escapeHTML(getBook(one.bookId)?.title || 'Silinmiş kitap')} iade kaydı geçmişten kalıcı olarak silinecek. Bakiye değişmez.`
+        : 'Bu listedeki iade kayıtları geçmişten kalıcı olarak silinecek. Bakiyeler değişmez.',
+      onConfirm: async () => {
+        await run(commitOps(list.map((f) => (bt) => bt.delete(col('refunds').doc(f.id)))),
+          one ? 'İade kaydı silindi.' : `${list.length} iade kaydı silindi.`, 'info');
+        openRefundsModal();
+      }
+    });
   }
 
   /* ==========================================================

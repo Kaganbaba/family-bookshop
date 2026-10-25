@@ -726,13 +726,14 @@
     const rs = rentals.filter((r) => r.bookId === b.id);
     const logs = priceLogs.filter((l) => l.bookId === b.id);
     const inOffers = offers.filter((o) => o.items.some((it) => it.bookId === b.id));
-    const vitrine = customDiscountOf(b);
+    // Özel Fırsatlar kapalı olsa da kayıt silinsin
+    const vitrine = discounts.find((d) => d.bookId === b.id);
     const parts = [
       anns.length && `${anns.length} duyuru`,
       rs.length && `${rs.length} kiralama kaydı`,
       logs.length && `${logs.length} fiyat logu`,
       inOffers.length && `${inOffers.length} özel teklif`,
-      vitrine && 'vitrin indirimi'
+      vitrine && 'özel fırsat'
     ].filter(Boolean);
     openConfirm({
       title: 'Kitap silinsin mi?',

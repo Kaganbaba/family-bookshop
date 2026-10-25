@@ -53,6 +53,10 @@ service cloud.firestore {
     function couponValue(c) { return c.get('value', c.get('rate', 0)); }
     // Al-Öde bedava kitap sayısı (eski kayıtlar 1)
     function couponFree(c) { return c.get('free', null) == null ? 1 : c.free; }
+    // Vitrin Ayarları · settings/showcase.{vitrine|deals|newBooks} == false → o vitrin kapalı (belge/alan yoksa açık)
+    function showcaseOn(key) {
+      return !exists(path('settings', 'showcase')) || get(path('settings', 'showcase')).data.get(key, true) != false;
+    }
 
     // ---------- Kullanıcılar ----------
     match /users/{userId} {
@@ -244,16 +248,18 @@ service cloud.firestore {
             || (t == 'bogo' && a.rentalIds.size() == v
               && (r.price == r.listPrice || (r.price == 0 && r.bookId in a.freeBookIds))));
       }
-      // Günün İndirimi / Yeni Kitap: en fazla %50
+      // Günün İndirimi / Yeni Kitap: en fazla %50 · Vitrin Ayarları'nda kapalı vitrinin indirimi kullanılamaz
       function standardDiscount(r) {
         return r.discountSource in [null, 'deal', 'new']
+          && (r.discountSource != 'deal' || showcaseOn('deals'))
+          && (r.discountSource != 'new' || showcaseOn('newBooks'))
           && r.discount <= 50
           && r.price >= r.listPrice * 0.5 - 0.01;
       }
-      // Vitrin İndirimi: Kontrolcünün discounts/{kitap} belgesindeki yüzdenin aynısı (süresi dolmamış)
+      // Özel Fırsat (eski adı Vitrin İndirimi): Adminin discounts/{kitap} belgesindeki yüzdenin aynısı (süresi dolmamış, vitrin açık)
       function vitrineDiscount(r) {
         let d = get(path('discounts', string(r.bookId))).data;
-        return d.rate is int && r.discount == d.rate
+        return showcaseOn('vitrine') && d.rate is int && r.discount == d.rate
           && (!('endsAt' in d) || request.time < d.endsAt)
           && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
       }
@@ -346,11 +352,11 @@ service cloud.firestore {
     }
 
     // Geri bildirim · { userId, message, createdAt, status, replies, adminSeen, lastReplyAt, userSeenAt }
-    // Yalnızca üyeler yazar (Admin yazamaz); üye yalnızca kendininkini okur ve yalnızca "cevabı gördüm"
+    // Herkes (Admin de) kendi adına yazar; üye yalnızca kendininkini okur ve yalnızca "cevabı gördüm"
     // işaretini günceller; Admin hepsini okur, cevaplar (replies/status/adminSeen) ve siler.
     match /feedback/{feedbackId} {
       allow read: if isAdmin() || (signedIn() && resource.data.userId == uid());
-      allow create: if signedIn() && !isAdmin() && validFeedback(request.resource.data);
+      allow create: if signedIn() && validFeedback(request.resource.data);
       allow update: if isAdmin()
         || (signedIn() && resource.data.userId == uid() && changedKeys().hasOnly(['userSeenAt'])
           && request.resource.data.userSeenAt is string);
@@ -496,7 +502,7 @@ service cloud.firestore {
           && paidNotCheaper(ids, free, 3, m) && paidNotCheaper(ids, free, 4, m);
       }
     }
-    // Uygulama ayarları · settings/deals.refreshedAt: Kontrolcünün "Şimdi Yenile" anı
+    // Uygulama ayarları · settings/deals: günün indirimi seçimi · settings/showcase: Vitrin Ayarları (aç / kapat)
     match /settings/{settingId} {
       allow read: if signedIn();
       allow write: if isAdmin();

@@ -6,6 +6,7 @@
     const u = currentUser();
     $('#page-dashboard [data-page-desc]').textContent = `Merhaba ${u.name.split(' ')[0]} 👋 Kitaplığın genel görünümü ve günün fırsatları.`;
     renderStats(now);
+    renderShowcaseSettings();
     renderNewBooks(now);
     renderVitrine(now);
     renderDeals(now);
@@ -32,10 +33,13 @@
       { label: 'Toplam Kitap',   value: shown.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600' },
       { label: 'Kirada',         value: active.length,             sub: `Sende ${myActive} · ${rentableNow} kitap kiralık`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
       { label: 'Toplam Bakiye',  value: formatMoney(totalBalance), sub: `Senin: ${formatMoney(currentUser().balance)}`,                                                 icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
-      { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
-    ];
+      // Günün İndirimi vitrini kapalıysa kart hiç gösterilmez
+      showcaseOn('deals') && { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
+    ].filter(Boolean);
 
     // Mobilde yazılar kesilmesin: ikon küçülür, alt satır 2 satıra kadar kayar
+    $('#dashStats').classList.toggle('lg:grid-cols-4', cards.length === 4);
+    $('#dashStats').classList.toggle('lg:grid-cols-3', cards.length === 3);
     $('#dashStats').innerHTML = cards.map((c) => `
       <div class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-start justify-between gap-2 sm:gap-3 hover:shadow-soft-lg transition min-w-0">
         <div class="min-w-0">
@@ -45,6 +49,98 @@
         </div>
         <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
       </div>`).join('');
+  }
+
+  /* --- 8.1.3 Vitrin Ayarları (yalnızca Admin) · vitrinleri açar / kapatır ---
+     Kapalı vitrin hiç yokmuş gibidir (bkz. showcaseOn). Günün İndirimi kapatılırken o anki grup saklanır;
+     başka bir gün açılırsa o gruptan devam eder ve yine sonraki 10:00'a kadar sürer. */
+  const SHOWCASES = [
+    { key: 'vitrine',  icon: '🏷️', label: 'Özel Fırsatlar',  desc: "Admin'in seçtiği kitap + yüzde indirimleri" },
+    { key: 'deals',    icon: '🔥', label: 'Günün İndirimi',  desc: `Her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da değişen 3'lü seri indirimi` },
+    { key: 'newBooks', icon: '★',  label: 'Yeni Kitap',      desc: `Yeni çıkan kitaplara ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim` }
+  ];
+
+  /* Ana sayfada yalnızca küçük bir buton (kapalı vitrin sayısıyla) · ayarlar pencerede */
+  function renderShowcaseSettings() {
+    const box = $('#showcaseSettings');
+    if (!isAdmin()) { box.innerHTML = ''; return; }
+    const off = SHOWCASES.filter((s) => !showcaseOn(s.key)).length;
+    box.innerHTML = `
+      <div class="flex justify-end mb-4">
+        <button type="button" data-open-showcase
+          class="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white shadow-soft border border-slate-100 hover:border-brand-200 hover:shadow-soft-lg text-xs font-semibold text-slate-700 transition">
+          <span class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[11px]">⚙️</span>
+          Vitrin Ayarları
+          ${off ? `<span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">${off} kapalı</span>` : ''}
+        </button>
+      </div>`;
+  }
+
+  function openShowcaseModal() {
+    if (!requireAdmin()) return;
+    openModal(`
+      ${modalHeader('Vitrin Ayarları ⚙️', 'Kapalı vitrin hiç yokmuş gibidir: kimse görmez, indirimi uygulanmaz.', 'tag', 'bg-slate-100 text-slate-700')}
+      <div class="p-5 space-y-4">
+        <div id="showcaseList" class="space-y-2"></div>
+        <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
+      </div>`);
+    renderShowcaseList();
+  }
+
+  function renderShowcaseList() {
+    const box = $('#showcaseList');
+    if (!box) return;
+    const sc = showcaseDoc();
+    const size = DISCOUNT_SETTINGS.groupSize;
+    const note = (key, on) => {
+      if (on) return '';
+      if (key === 'deals' && Number.isInteger(sc.dealsPausedGroup)) {
+        const from = sc.dealsPausedGroup * size + 1;
+        return `<span class="block text-[10px] font-semibold text-amber-600 mt-0.5">⏸ Duraklatıldı · açılınca Sıra ${from}–${from + size - 1}'den devam eder</span>`;
+      }
+      return '<span class="block text-[10px] font-semibold text-slate-400 mt-0.5">Kapalı · ana sayfada görünmez, indirimi uygulanmaz</span>';
+    };
+    const row = ({ key, icon: ic, label, desc }) => {
+      const on = showcaseOn(key);
+      return `
+        <button type="button" data-showcase-toggle="${key}" aria-pressed="${on}"
+          class="w-full flex items-center gap-3 p-2.5 rounded-2xl border text-left transition ${on ? 'bg-white border-brand-100 hover:border-brand-200' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}">
+          <span class="w-9 h-9 rounded-xl ${on ? 'bg-brand-50 text-brand-600' : 'bg-slate-200 text-slate-400 grayscale'} flex items-center justify-center text-base shrink-0">${ic}</span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs font-bold ${on ? 'text-slate-700' : 'text-slate-400'}">${label}</span>
+            <span class="block text-[10px] text-slate-400">${desc}</span>
+            ${note(key, on)}
+          </span>
+          <span class="relative w-9 h-5 rounded-full shrink-0 transition ${on ? 'bg-emerald-500' : 'bg-slate-300'}">
+            <span class="absolute top-0.5 ${on ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+          </span>
+        </button>`;
+    };
+    box.innerHTML = SHOWCASES.map(row).join('');
+  }
+
+  function setShowcase(key, on) {
+    if (!requireAdmin()) return;
+    const sc = SHOWCASES.find((s) => s.key === key);
+    if (!sc) return;
+    const now = new Date();
+    const today = discountDayNumber(now);
+    const data = { [key]: !!on };
+    const batch = db.batch();
+    if (key === 'deals' && !on) {
+      // Kapanırken o anki grup saklanır
+      Object.assign(data, { dealsPausedDay: today, dealsPausedGroup: getDailyDeals(now).group });
+    }
+    const paused = showcaseDoc();
+    if (key === 'deals' && on && Number.isInteger(paused.dealsPausedDay) && paused.dealsPausedDay !== today) {
+      // Başka bir gün açıldı: döngü kapalıyken ilerlemesin, saklanan gruptan devam etsin
+      batch.set(col('settings').doc('deals'), {
+        pinDay: today, pinGroup: Number(paused.dealsPausedGroup) || 0, pinAt: now.toISOString(), pinBy: state.currentUserId, pinResume: true
+      }, { merge: true });
+    }
+    batch.set(col('settings').doc('showcase'), data, { merge: true });
+    run(batch.commit(), `${sc.icon} ${sc.label} ${on ? 'açıldı' : 'kapatıldı'}.`, on ? 'success' : 'info')
+      .then(() => renderShowcaseList()); // pencere açıksa anahtarlar güncellenir
   }
 
   /* --- 8.1.5 Yeni Kitap vitrini (altın parıltılı, günün indirimlerinden ayrı) --- */
@@ -113,8 +209,8 @@
       </div>`;
   }
 
-  /* --- 8.1.7 Vitrin İndirimleri (gece mavisi + altın) · Admin ekler/siler --- */
-  /* Süresi biten vitrin indirimleri: herkes için gizlenir, Admin açıksa Firestore'dan da silinir */
+  /* --- 8.1.7 Özel Fırsatlar (eski adı Vitrin İndirimleri · gece mavisi + altın) · Admin ekler/siler --- */
+  /* Süresi biten özel fırsatlar: herkes için gizlenir, Admin açıksa Firestore'dan da silinir */
   function purgeExpiredVitrine(now = new Date()) {
     if (!isAdmin()) return;
     discounts.filter((d) => d.endsMs != null && d.endsMs <= now.getTime()).forEach((d) => {
@@ -135,7 +231,7 @@
       .filter(({ d, b }) => b && hasPrice(b) && isVisibleBook(b) && customDiscountOf(b, now) === d)
       .sort((x, y) => y.d.rate - x.d.rate || new Date(y.d.createdAt) - new Date(x.d.createdAt));
     const box = $('#vitrineSection');
-    if (!list.length && !admin) { box.innerHTML = ''; return; }
+    if (!showcaseOn('vitrine') || (!list.length && !admin)) { box.innerHTML = ''; return; }
 
     const cards = list.map(({ d, b }) => {
       const eff = getEffectiveDiscount(b, now);
@@ -148,8 +244,8 @@
             <p class="text-[8px] font-extrabold tracking-[.2em] text-amber-900/80">${free ? 'BEDAVA' : 'İNDİRİM'}</p>
             <p class="text-xl font-black text-amber-950 leading-none mt-0.5">%${eff.rate}</p>
           </div>
-          <p class="relative z-[1] vitrine-gold text-base font-extrabold italic leading-tight truncate pr-20 ${admin ? 'pl-7' : ''} mb-3" style="font-family:'Playfair Display',Georgia,serif">${escapeHTML(d.name || 'Vitrin İndirimi')}</p>
-          ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Vitrin indirimini kaldır" aria-label="Vitrin indirimini kaldır"
+          <p class="relative z-[1] vitrine-gold text-base font-extrabold italic leading-tight truncate pr-20 ${admin ? 'pl-7' : ''} mb-3" style="font-family:'Playfair Display',Georgia,serif">${escapeHTML(d.name || 'Özel Fırsat')}</p>
+          ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Özel fırsatı kaldır" aria-label="Özel fırsatı kaldır"
             class="absolute top-2 left-2 z-[3] w-7 h-7 rounded-full bg-white/10 text-indigo-200 hover:bg-rose-500 hover:text-white flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
           <div class="relative z-[1] flex gap-3">
             <div class="shrink-0 rounded-xl ring-1 ring-amber-300/40 shadow-[0_10px_25px_-10px_rgba(251,191,36,.5)]">${coverHTML(b, 'md')}</div>
@@ -180,7 +276,7 @@
                 <span class="w-full h-full rounded-full bg-indigo-950 flex items-center justify-center text-lg">🏷️</span>
               </span>
               <div>
-                <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Vitrin İndirimleri</h2>
+                <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Özel Fırsatlar</h2>
                 <p class="text-[11px] text-indigo-200/70">Admin'in seçtiği özel fırsatlar · süreleri dolunca kendiliğinden kalkar</p>
               </div>
             </div>
@@ -189,12 +285,12 @@
           </div>
           ${list.length
             ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`
-            : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz vitrin indirimi yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Adminler görür.</span></p>`}
+            : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz özel fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Adminler görür.</span></p>`}
         </div>
       </div>`;
   }
 
-  /* Admin: vitrin indirimi ekle (aynı kitaba yeniden eklemek indirimi günceller).
+  /* Admin: özel fırsat ekle (aynı kitaba yeniden eklemek indirimi günceller).
      Başka bir indirimdeki kitap (günün indirimi, yeni kitap, aktif özel teklif) seçilemez. */
   function openVitrineModal() {
     if (!requireAdmin()) return;
@@ -205,18 +301,18 @@
       .filter((b) => hasPrice(b) && isRentableStatus(b))
       .map((b) => ({ b, other: customDiscountOf(b, now) ? null : otherDiscountOf(b, now, dealIds) }))
       .sort((x, y) => !!x.other - !!y.other || x.b.title.localeCompare(y.b.title, 'tr'));
-    if (!pickable.some((x) => !x.other)) return toast('Vitrine eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
+    if (!pickable.some((x) => !x.other)) return toast('Özel Fırsatlar\'a eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
     const defaultEnd = localDateKey(new Date(Date.now() + 7 * DAY_MS));
     openModal(`
-      ${modalHeader('Vitrin İndirimi Ekle 🏷️', 'Ana sayfadaki vitrinde görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
+      ${modalHeader('Özel Fırsat Ekle 🏷️', 'Ana sayfadaki Özel Fırsatlar\'da görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
       <form data-form="saveVitrine" class="p-5 space-y-3.5" autocomplete="off">
         ${field('İndirim Adı', `<input name="name" maxlength="60" required autofocus class="${INPUT_CLS}" placeholder="Örn. Kış Fırsatı ❄️" />`)}
         ${field('Kitap', `<select name="bookId" id="vd-book" required class="${INPUT_CLS}">
           ${pickable.map(({ b, other }) => {
             const cur = customDiscountOf(b, now);
-            return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (vitrinde %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
+            return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (özel fırsatta %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
           }).join('')}
-        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Vitrinde zaten olan kitabı seçersen indirimi güncellenir.')}
+        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Zaten özel fırsatta olan kitabı seçersen indirimi güncellenir.')}
         ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" class="${INPUT_CLS}" placeholder="Örn. 30" />`,
           `1–${CUSTOM_DISCOUNT_MAX} arası tam sayı · %100 = bedava`)}
         <div class="grid grid-cols-[1fr_auto] gap-3">
@@ -225,7 +321,7 @@
         </div>
         <div id="vd-preview" class="rounded-2xl bg-gradient-to-br from-indigo-950 to-slate-900 text-white px-4 py-3 text-xs"></div>
         ${announceCheckHTML('vd-announce', 'İndirim')}
-        ${formFooter('Vitrine Ekle')}
+        ${formFooter('Özel Fırsatlar\'a Ekle')}
       </form>`);
     updateVitrinePreview();
   }
@@ -237,7 +333,7 @@
     const rate = parseInt($('#vd-rate')?.value, 10);
     if (!b) { box.innerHTML = ''; return; }
     box.innerHTML = rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX
-      ? `<span class="text-indigo-200/70">Vitrin fiyatı:</span> <span class="line-through text-indigo-200/50">${formatMoney(b.price)}</span> → <b class="vitrine-gold text-base">${rate === 100 ? 'BEDAVA' : formatMoney(round2(b.price * (1 - rate / 100)))}</b> <span class="text-amber-300 font-bold">(%${rate})</span>`
+      ? `<span class="text-indigo-200/70">Fırsat fiyatı:</span> <span class="line-through text-indigo-200/50">${formatMoney(b.price)}</span> → <b class="vitrine-gold text-base">${rate === 100 ? 'BEDAVA' : formatMoney(round2(b.price * (1 - rate / 100)))}</b> <span class="text-amber-300 font-bold">(%${rate})</span>`
       : `<span class="text-indigo-200/70">Normal fiyat ${formatMoney(b.price)} · yüzde gir, yeni fiyat burada görünsün.</span>`;
   }
 
@@ -248,7 +344,7 @@
     const name = (fd.name || '').trim();
     if (!name) return toast('İndirime bir ad verin.', 'error');
     if (!b || !hasPrice(b)) return toast('Fiyatı olan bir kitap seçin.', 'error');
-    if (!isRentableStatus(b)) return toast('Vitrine yalnızca Kiralık durumdaki kitaplar eklenebilir.', 'error');
+    if (!isRentableStatus(b)) return toast('Özel Fırsatlar\'a yalnızca Kiralık durumdaki kitaplar eklenebilir.', 'error');
     if (!(rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX)) return toast(`İndirim yüzdesi 1–${CUSTOM_DISCOUNT_MAX} arası olmalı.`, 'error');
     if (!isDateKey(fd.endDate) || !isTimeKey(fd.endTime)) return toast('Geçerli bir bitiş tarihi ve saati seçin.', 'error');
     const end = dateFromKey(fd.endDate);
@@ -256,7 +352,7 @@
     if (end.getTime() <= Date.now()) return toast('Bitiş anı geçmiş olamaz.', 'error');
     const prev = customDiscountOf(b);
     const other = prev ? null : otherDiscountOf(b);
-    if (other) return toast(`"${b.title}" şu an ${other}; vitrine eklenemez.`, 'error');
+    if (other) return toast(`"${b.title}" şu an ${other}; Özel Fırsatlar'a eklenemez.`, 'error');
 
     const batch = db.batch();
     batch.set(col('discounts').doc(String(b.id)), {
@@ -268,12 +364,12 @@
       batch.set(col('announcements').doc(), {
         type: 'news', category: 'İndirim',
         title: `${name}: ${b.title} ${rate === 100 ? 'bedava' : `%${rate} indirimli`}`,
-        body: `🏷️ ${name}\n"${b.title}" vitrine çıktı! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
+        body: `🏷️ ${name}\n"${b.title}" Özel Fırsatlar'da! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
         bookId: b.id, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
       });
     }
     closeModal();
-    run(batch.commit(), prev ? `"${b.title}" vitrin indirimi güncellendi · ${name} %${rate}` : `"${b.title}" ${name} ile %${rate} indirimle vitrine eklendi 🏷️`);
+    run(batch.commit(), prev ? `"${b.title}" özel fırsatı güncellendi · ${name} %${rate}` : `"${b.title}" ${name} ile %${rate} indirimle Özel Fırsatlar'a eklendi 🏷️`);
   }
 
   function deleteVitrine(id) {
@@ -282,18 +378,22 @@
     if (!d) return;
     const b = getBook(d.bookId);
     openConfirm({
-      title: 'Vitrin indirimi kaldırılsın mı?',
-      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabındaki %${d.rate} vitrin indirimi kaldırılacak. <b>Kitap kitaplıkta kalır</b>, normal fiyatından kiralanabilir. Önceki kiralamalar etkilenmez.`,
+      title: 'Özel fırsat kaldırılsın mı?',
+      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabındaki %${d.rate} özel fırsat indirimi kaldırılacak. <b>Kitap kitaplıkta kalır</b>, normal fiyatından kiralanabilir. Önceki kiralamalar etkilenmez.`,
       confirmLabel: 'Kaldır',
       onConfirm: () => {
         closeModal();
-        run(col('discounts').doc(d.id).delete(), 'Vitrin indirimi kaldırıldı.', 'info');
+        run(col('discounts').doc(d.id).delete(), 'Özel fırsat kaldırıldı.', 'info');
       }
     });
   }
 
   /* --- 8.2 Günün indirimleri --- */
   function renderDeals(now) {
+    // Vitrin Ayarları'nda kapalıysa bölüm hiç görünmez
+    const on = showcaseOn('deals');
+    $('#dealsSection').classList.toggle('hidden', !on);
+    if (!on) return;
     const deals = getDailyDeals(now);
 
     $('#dealsMeta').textContent = deals.listSize
@@ -383,7 +483,7 @@
     const size = DISCOUNT_SETTINGS.groupSize;
     const from = g * size + 1, to = Math.min(g * size + size, list.length);
     run(col('settings').doc('deals').set({
-      pinDay: discountDayNumber(now), pinGroup: g, pinAt: now.toISOString(), pinBy: state.currentUserId, removedIds: []
+      pinDay: discountDayNumber(now), pinGroup: g, pinAt: now.toISOString(), pinBy: state.currentUserId, pinResume: false, removedIds: []
     }, { merge: true }), `Günün indirimleri güncellendi · Sıra ${from === to ? from : `${from}–${to}`}`);
   }
   /* Admin: sıradaki 3'lüye geç (son gruptan sonra baştan) */
@@ -432,7 +532,7 @@
     const map = {
       deal:   { label: '🔥 Günün İndirimi',      tone: 'bg-rose-50 text-rose-600' },
       new:    { label: '⭐ Yeni Kitap İndirimi', tone: 'bg-amber-50 text-amber-700' },
-      custom: { label: '🏷️ Vitrin İndirimi',     tone: 'bg-indigo-50 text-indigo-600' }
+      custom: { label: '🏷️ Özel Fırsat',         tone: 'bg-indigo-50 text-indigo-600' }
     };
     return map[r.discountSource] || (r.discount > 0 ? { label: discountSourceLabel(r.discountSource), tone: 'bg-rose-50 text-rose-600' } : null);
   }

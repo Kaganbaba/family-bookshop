@@ -279,11 +279,17 @@
     return d.removedDay === discountDayNumber(now) ? (d.removedIds || []).map(Number) : [];
   };
 
+  /* settings/showcase: Admin'in Vitrin Ayarları · { vitrine, deals, newBooks } (false = kapalı, alan yoksa açık).
+     Kapalı vitrin hiç yokmuş gibidir: ana sayfada görünmez, indirimi hiçbir yerde uygulanmaz.
+     dealsPausedDay + dealsPausedGroup: Günün İndirimi kapatılırken gösterilen grup (açılınca oradan devam eder) */
+  const showcaseDoc = () => appSettings.find((s) => s.id === 'showcase') || {};
+  const showcaseOn = (key) => showcaseDoc()[key] !== false;
+
   function getDailyDeals(now = new Date()) {
     const size = DISCOUNT_SETTINGS.groupSize;
     const today = discountDayNumber(now);
     let day = anchorDayNumber();
-    if (today < day) return { ids: [], group: 0, groupCount: 0, listSize: 0, pinned: false };
+    if (today < day || !showcaseOn('deals')) return { ids: [], group: 0, groupCount: 0, listSize: 0, pinned: false };
 
     // Başlangıç: Admin'in en son seçimi (bugün veya önce yapıldıysa), yoksa ilk gün 1. grup
     const d = dealsDoc();
@@ -317,7 +323,7 @@
       ids, group, list,
       groupCount: dealGroupCount(list),
       listSize: list.length,
-      pinned: d.pinDay === today,
+      pinned: d.pinDay === today && !d.pinResume, // vitrin yeniden açılınca yazılan devam noktası "Admin seçti" sayılmaz
       fromPos: group * size + 1,
       toPos: Math.min(group * size + size, list.length)
     };
@@ -338,11 +344,12 @@
     }
     return { rate, source };
   }
-  /* Vitrin İndirimi: Admin'in kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek).
-     %100 = bedava · bitiş anı (endsAt) geçince kendiliğinden düşer. */
+  /* Özel Fırsat (eski adı Vitrin İndirimi): Admin'in kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek).
+     %100 = bedava · bitiş anı (endsAt) geçince kendiliğinden düşer · Vitrin Ayarları'nda kapalıysa uygulanmaz. */
   const CUSTOM_DISCOUNT_MAX = 100;
   const isVitrineActive = (d, now = new Date()) => Number.isInteger(d.rate) && d.rate > 0 && (d.endsMs == null || d.endsMs > now.getTime());
-  const customDiscountOf = (book, now = new Date()) => discounts.find((d) => d.bookId === book?.id && isVitrineActive(d, now)) || null;
+  const customDiscountOf = (book, now = new Date()) => (showcaseOn('vitrine')
+    && discounts.find((d) => d.bookId === book?.id && isVitrineActive(d, now))) || null;
   /* Kitap şu an başka bir indirimde mi (vitrine eklenemez): günün indirimi, yeni kitap, aktif özel teklif */
   function otherDiscountOf(book, now = new Date(), dealIds = getDailyDeals(now).ids) {
     if (dealIds.includes(book.id)) return 'Günün İndiriminde';
@@ -359,10 +366,12 @@
     const byRelease = isDateKey(book.releaseDate) ? newDiscountEndOf(book.releaseDate).getTime() : Infinity;
     return Math.min(stored, byRelease);
   }
-  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return !!end && end > now.getTime(); };
+  /* Vitrin Ayarları'nda Yeni Kitap kapalıysa hiçbir kitap yeni kitap indirimine girmez; açılınca süresi
+     dolmamış kitaplar kalan süreleriyle girer */
+  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Vitrin İndirimi', coupon: 'Kupon' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', coupon: 'Kupon' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -433,7 +442,7 @@
       book.place ? `📍 Yazıldığı yer: ${book.place}` : ''
     ].filter(Boolean).join(' · ');
     const daysLeft = Math.ceil(newDiscountLeftMs(book) / DAY_MS);
-    const promo = daysLeft > 0 ? `\n${daysLeft} gün boyunca %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimiyle yayında!` : '';
+    const promo = isNewBook(book) && daysLeft > 0 ? `\n${daysLeft} gün boyunca %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimiyle yayında!` : '';
     return `Müjde! ${authorName(book)} tarafından yazılan "${book.title}" isimli yeni ${type} kitabımız kitaplığa eklendi!\n${facts}${promo}`;
   }
 
@@ -629,7 +638,7 @@
     normal: { label: '📚 İndirimsiz kiralamalar', pick: (r) => !r.purchaseId && !r.discountSource },
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
-    custom: { label: '🏷️ Vitrin İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
+    custom: { label: '🏷️ Özel Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
     coupon: { label: '🎟️ Kuponlar ve kuponlu kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'coupon' }, // + kupon kayıtları
     offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
   };

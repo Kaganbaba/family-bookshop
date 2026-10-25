@@ -43,7 +43,7 @@
     };
   </script>
 
-  <link rel="stylesheet" href="css/styles.css?v=5" />
+  <link rel="stylesheet" href="css/styles.css?v=9" />
 </head>
 
 <body class="bg-gradient-to-b from-brand-50 via-white to-brand-50/60 min-h-screen flex flex-col font-sans text-slate-700 text-sm antialiased">
@@ -244,14 +244,17 @@
       <!-- 1) İstatistik kartları -->
       <div id="dashStats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6"></div>
 
+      <!-- 1.3) Vitrin Ayarları (yalnızca Admin: vitrinleri aç / kapat) -->
+      <div id="showcaseSettings"></div>
+
       <!-- 1.5) Yeni Kitap vitrini (1 haftalık yeni kitap indirimi) -->
       <div id="newBooksSection"></div>
 
-      <!-- 1.7) Vitrin İndirimleri (Admin'in seçtiği kitap + yüzde) -->
+      <!-- 1.7) Özel Fırsatlar (Admin'in seçtiği kitap + yüzde) -->
       <div id="vitrineSection"></div>
 
-      <!-- 2) Günün İndirimleri -->
-      <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
+      <!-- 2) Günün İndirimleri (Vitrin Ayarları'nda kapalıysa gizlenir) -->
+      <div id="dealsSection" class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div class="flex items-center gap-3">
             <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-orange-400 text-white flex items-center justify-center shadow-soft">
@@ -356,11 +359,6 @@
               <button type="button" data-open-feedback="list" class="text-[11px] text-slate-400 hover:text-sky-400 transition">Gönderdiklerim ve cevaplar →</button>
             </div>
           </form>
-          <!-- Adminler geri bildirim yazmaz: okur ve cevaplar -->
-          <div id="footerFeedbackAdmin" class="hidden">
-            <p class="text-xs text-slate-400 leading-relaxed">Adminler geri bildirim göndermez; üyelerin geri bildirimlerini okuyup cevaplar.</p>
-            <button type="button" data-open-feedback="list" class="mt-3 px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 transition">Geri bildirimleri gör →</button>
-          </div>
         </div>
         <!-- Hakkında -->
         <div>
@@ -401,14 +399,14 @@
   <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 items-end pointer-events-none"></div>
 
   <!-- Uygulama kodu · normal (modül olmayan) scriptler; sıra önemli, global değişkenleri paylaşırlar -->
-  <script src="js/core.js?v=5" defer></script>
-  <script src="js/logic.js?v=5" defer></script>
-  <script src="js/home.js?v=5" defer></script>
-  <script src="js/books.js?v=5" defer></script>
-  <script src="js/users-news.js?v=5" defer></script>
-  <script src="js/shop.js?v=5" defer></script>
-  <script src="js/admin.js?v=5" defer></script>
-  <script src="js/account.js?v=5" defer></script>
-  <script src="js/app.js?v=5" defer></script>
+  <script src="js/core.js?v=9" defer></script>
+  <script src="js/logic.js?v=9" defer></script>
+  <script src="js/home.js?v=9" defer></script>
+  <script src="js/books.js?v=9" defer></script>
+  <script src="js/users-news.js?v=9" defer></script>
+  <script src="js/shop.js?v=9" defer></script>
+  <script src="js/admin.js?v=9" defer></script>
+  <script src="js/account.js?v=9" defer></script>
+  <script src="js/app.js?v=9" defer></script>
 </body>
 </html>

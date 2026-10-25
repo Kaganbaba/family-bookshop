@@ -42,6 +42,7 @@
       if ((m = el('[data-refund-rental]')))    return openRefundRequest(m.dataset.refundRental);
       if ((m = el('[data-refund-filter]')))    { state.refundFilter = m.dataset.refundFilter; return openRefundsModal(); }
       if ((m = el('[data-refund-decide]')))    return decideRefund(m.dataset.refund, m.dataset.refundDecide);
+      if ((m = el('[data-delete-refund]')))    return deleteRefunds(m.dataset.deleteRefund);
       if ((m = el('[data-modal-close]')))      return closeModal();
       if ((m = el('[data-confirm-yes]')))      { const fn = state.confirmAction; state.confirmAction = null; return fn?.(); }
       if ((m = el('[data-sign-out]')))         return signOut();
@@ -74,6 +75,8 @@
       if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
       if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
+      if ((m = el('[data-open-showcase]')))    return openShowcaseModal();
+      if ((m = el('[data-showcase-toggle]')))  return setShowcase(m.dataset.showcaseToggle, !showcaseOn(m.dataset.showcaseToggle));
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-cancel-rental]')))    return cancelRental(m.dataset.cancelRental);
