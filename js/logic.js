@@ -283,10 +283,20 @@
      Kapalı vitrin hiç yokmuş gibidir: ana sayfada görünmez, indirimi hiçbir yerde uygulanmaz.
      dealsPausedDay + dealsPausedGroup: Günün İndirimi kapatılırken gösterilen grup (açılınca oradan devam eder) */
   const showcaseDoc = () => appSettings.find((s) => s.id === 'showcase') || {};
-  const showcaseOn = (key) => showcaseDoc()[key] !== false;
+  /* Kış sezonunda yalnızca Kış Fırsatları açıktır: bu vitrinler hiç yokmuş gibi kapalı sayılır (anahtarları da gizlenir) */
+  const WINTER_OFF_SHOWCASES = ['deals', 'vitrine', 'newBooks'];
+  const showcaseOn = (key) => !(WINTER_OFF_SHOWCASES.includes(key) && activeSeason() === 'winter') && showcaseDoc()[key] !== false;
 
-  /* Sezon (settings/season.active) · Kış Fırsatları yalnızca Kış sezonunda ve vitrini açıkken geçerlidir */
-  const activeSeason = () => { const s = appSettings.find((x) => x.id === 'season')?.active; return SEASONS[s] ? s : null; };
+  /* Sezon (settings/season) · süreli açıldıysa endsAt geçince kendiliğinden kapalı sayılır
+     (kayıtları Admin istemcisi expireSeason ile temizler) · Kış Fırsatları yalnızca Kış sezonunda ve vitrini açıkken geçerlidir */
+  const seasonDoc = () => appSettings.find((x) => x.id === 'season') || {};
+  const seasonEndsMs = () => seasonDoc().endsAt?.toMillis?.() ?? null;
+  const seasonStartMs = () => seasonDoc().startedAt?.toMillis?.() ?? null; // eski kayıtlarda yok
+  const activeSeason = () => {
+    const d = seasonDoc();
+    const end = seasonEndsMs();
+    return SEASONS[d.active] && (end == null || end > Date.now()) ? d.active : null;
+  };
   const winterOn = () => activeSeason() === 'winter' && showcaseOn('winter');
   /* Kış Fırsatları puan çarpanı (settings/winter.multiplier · 1–WINTER_MULT_MAX tam sayı, yoksa 1) */
   const winterMult = () => {
@@ -294,6 +304,26 @@
     return Number.isInteger(m) && m >= 1 && m <= WINTER_MULT_MAX ? m : 1;
   };
   const winterDealOf = (book) => (winterOn() && winterDeals.find((d) => d.bookId === book?.id && Number.isInteger(d.rate) && d.rate > 0)) || null;
+  /* Kışın yeni kitabı: Kış sezonu başladıktan sonra kitaplığa giren (ya da sezon açılırken yeni kitap indirimi süren) kitap ·
+     sezon boyunca YENİ olarak Kış Fırsatları'nda %WINTER_NEW_RATE · normal Yeni Kitap vitrini kışın kapalıdır */
+  const isWinterNewBook = (book) => {
+    if (!book || activeSeason() !== 'winter' || isDraftBook(book)) return false;
+    const start = seasonStartMs();
+    return (start != null && new Date(book.addedAt).getTime() >= start) || (newDiscountEnd(book) || 0) > Date.now();
+  };
+  /* Yeni kitabın içinde olduğu YENİ kış paketi (yoksa null) · paketteki yeni kitaplar yalnızca paketle indirimlidir */
+  const winterNewPackOf = (book) => offers.find((o) => o.season === 'winter' && o.bookIds?.includes(book?.id) && isWinterNewPack(o)) || null;
+  /* Kitabın Kış Fırsatı (yeni kitap önce): { rate, source: 'winterNew' | 'winter', isNew, pack } · yoksa null
+     pack: yeni kitap bir yeni kış paketindeyse tek başına indirimi yoktur (rate 0) · vitrinde yalnızca paket görünür */
+  function winterOfferOf(book) {
+    if (!winterOn() || !hasPrice(book)) return null;
+    if (isWinterNewBook(book)) {
+      const pack = winterNewPackOf(book);
+      return pack ? { rate: 0, source: null, isNew: true, pack } : { rate: WINTER_NEW_RATE, source: 'winterNew', isNew: true, pack: null };
+    }
+    const d = winterDealOf(book);
+    return d ? { rate: d.rate, source: 'winter', isNew: false, pack: null } : null;
+  }
 
   function getDailyDeals(now = new Date()) {
     const size = DISCOUNT_SETTINGS.groupSize;
@@ -327,7 +357,7 @@
       // silinmiş / bugün indirimden çıkarılmış / Kiralık olmayan (Kira dışı, Liste dışı) /
       // Vitrin indirimindeki / yeni kitap indirimi süren kitapları atla · sırası korunur, o gün yeri boş kalır
       .filter((id) => getBook(id) && !removed.includes(id) && isRentableStatus(getBook(id))
-        && !customDiscountOf(getBook(id), now) && !winterDealOf(getBook(id)) && !isNewBook(getBook(id), now));
+        && !customDiscountOf(getBook(id), now) && !winterOfferOf(getBook(id)) && !isNewBook(getBook(id), now));
 
     return {
       ids, group, list,
@@ -345,8 +375,8 @@
   /* dealIds verilirse günün indirimleri yeniden hesaplanmaz (listelerde tek sefer hesap) */
   function getEffectiveDiscount(book, now = new Date(), dealIds = null) {
     // Kış Fırsatı / Özel Fırsat'taki kitap başka indirime girmez (günün indirimi o kitabı atlar)
-    const winter = winterDealOf(book);
-    if (winter) return { rate: winter.rate, source: 'winter' };
+    const winter = winterOfferOf(book);
+    if (winter) return { rate: winter.rate, source: winter.source }; // paketteki yeni kitap: tek başına indirimsiz
     const custom = customDiscountOf(book, now);
     if (custom) return { rate: custom.rate, source: 'custom' };
     let rate = 0, source = null;
@@ -364,7 +394,8 @@
     && discounts.find((d) => d.bookId === book?.id && isVitrineActive(d, now))) || null;
   /* Kitap şu an başka bir indirimde mi (vitrine eklenemez): kış fırsatı, günün indirimi, yeni kitap, aktif özel teklif */
   function otherDiscountOf(book, now = new Date(), dealIds = getDailyDeals(now).ids) {
-    if (winterDealOf(book)) return 'Kış Fırsatında';
+    const w = winterOfferOf(book);
+    if (w) return w.pack ? `"${w.pack.title}" kış paketinde` : w.isNew ? `yeni kitap olarak Kış Fırsatında (%${WINTER_NEW_RATE})` : 'Kış Fırsatında';
     if (dealIds.includes(book.id)) return 'Günün İndiriminde';
     if (isNewBook(book, now)) return 'Yeni Kitap İndiriminde';
     if (offers.some((o) => isOfferActive(o, now) && o.items.some((it) => it.bookId === book.id))) return 'bir Özel Teklifte';
@@ -381,10 +412,10 @@
   }
   /* Vitrin Ayarları'nda Yeni Kitap kapalıysa hiçbir kitap yeni kitap indirimine girmez; açılınca süresi
      dolmamış kitaplar kalan süreleriyle girer */
-  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && !!end && end > now.getTime(); };
+  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && activeSeason() !== 'winter' && !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', winter: 'Kış Fırsatı', coupon: 'Kupon' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', winter: 'Kış Fırsatı', winterNew: 'Kış · Yeni Kitap', coupon: 'Kupon', cheque: 'Hediye Çeki' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -652,7 +683,8 @@
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
     custom: { label: '🏷️ Özel Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
-    winter: { label: '❄️ Kış Fırsatı kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'winter' },
+    winter: { label: '❄️ Kış Fırsatı kiralamaları', pick: (r) => !r.purchaseId && ['winter', 'winterNew'].includes(r.discountSource) },
+    cheque: { label: '🎁 Hediye çekli kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'cheque' },
     coupon: { label: '🎟️ Kuponlar ve kuponlu kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'coupon' }, // + kupon kayıtları
     offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
   };
@@ -739,7 +771,7 @@
     const savingDeal  = sum(discounted.filter((r) => r.discountSource === 'deal'), saveOf);
     const savingNew   = sum(discounted.filter((r) => r.discountSource === 'new'), saveOf);
     const savingCustom = sum(discounted.filter((r) => r.discountSource === 'custom'), saveOf);
-    const savingWinter = sum(discounted.filter((r) => r.discountSource === 'winter'), saveOf);
+    const savingWinter = sum(discounted.filter((r) => ['winter', 'winterNew'].includes(r.discountSource)), saveOf);
     const savingOffer = sum(purchases, (p) => Math.max(0, p.normalTotal - p.price));
     const savingCoupon = sum(discounted.filter((r) => r.discountSource === 'coupon'), saveOf);
     const total = round2(savingDeal + savingNew + savingCustom + savingWinter + savingOffer);
@@ -760,7 +792,8 @@
      • Admin kayıt silince defter kayıtlardan yeniden hesaplanır; defteri olmayanınki Admin açınca kurulur.
      • pointsMult: Kış Fırsatı kiralamasında / kış paketinde o anki puan çarpanı kayda yazılır
        (çarpan sonradan değişse de eski kazançlar değişmez; kural çarpanı denetler). */
-  const POINT_SOURCES = ['deal', 'new', 'custom', 'winter'];
+  const POINT_SOURCES = ['deal', 'new', 'custom', 'winter', 'winterNew'];
+  const WINTER_SOURCES = ['winter', 'winterNew']; // puan çarpanı uygulanan kaynaklar
   const pointsMultOf = (x) => (Number.isInteger(x?.pointsMult) && x.pointsMult > 1 ? x.pointsMult : 1);
   const rentalGain = (r) => (!r.offerId && POINT_SOURCES.includes(r.discountSource) ? Math.max(0, round2(((r.listPrice ?? r.price) - r.price) * pointsMultOf(r))) : 0);
   const purchaseGain = (p) => Math.max(0, round2((p.normalTotal - p.price) * pointsMultOf(p)));
@@ -769,7 +802,9 @@
   function computePoints(userId, ex = {}) {
     const earned = sum(rentals.filter((r) => r.userId === userId && !ex.rentals?.has(r.id)), rentalGain)
       + sum(offerPurchases.filter((p) => p.userId === userId && !ex.purchases?.has(p.id)), purchaseGain);
-    const spent = sum(coupons.filter((c) => c.userId === userId && !ex.coupons?.has(c.id)), (c) => c.cost);
+    // Harcanan: alınan kuponlar + puanla açılan hediye çekleri
+    const spent = sum(coupons.filter((c) => c.userId === userId && !ex.coupons?.has(c.id)), (c) => c.cost)
+      + sum(giftCheques.filter((c) => c.userId === userId && c.openedAt && c.cost > 0 && !ex.cheques?.has(c.id)), (c) => c.cost);
     return { earned: round2(earned), spent: round2(spent) };
   }
   function userPoints(userId) {
@@ -822,13 +857,26 @@
   const COUPON_TONES = { percent: 'from-emerald-400 to-teal-500', amount: 'from-sky-400 to-indigo-500', bogo: 'from-fuchsia-500 to-rose-500' };
 
   /* Kupon durumu: aktif (kullanılmamış, süresi dolmamış) · kullanıldı · süresi doldu */
-  const couponState = (c, now = Date.now()) => (c.usedAt ? 'used' : c.expiresMs > now ? 'active' : 'expired');
+  /* Kış kuponu (season 'winter') yalnızca Kış sezonu boyunca kullanılabilir */
+  const couponState = (c, now = Date.now()) => (c.usedAt ? 'used'
+    : c.expiresMs > now && (c.season !== 'winter' || activeSeason() === 'winter') ? 'active' : 'expired');
   const activeCouponsOf = (userId, now = Date.now()) => coupons
     .filter((c) => c.userId === userId && couponState(c, now) === 'active')
     .sort((a, b) => a.expiresMs - b.expiresMs);
   /* Kupon yalnızca Kiralık, başka indirimi olmayan ve boştaki kitaba uygulanır */
+  // (yeni kış paketindeki kitap tek başına indirimsiz görünse de pakete aittir → kupon / çek uygulanmaz)
   const couponEligible = (book, now = new Date()) => isRentableStatus(book) && hasPrice(book)
-    && getEffectiveDiscount(book, now).rate === 0 && !isBookRented(book, now.getTime()) && !isBookLocked(book, now.getTime());
+    && getEffectiveDiscount(book, now).rate === 0 && !winterOfferOf(book) && !isBookRented(book, now.getTime()) && !isBookLocked(book, now.getTime());
+
+  /* --- Hediye çeki (₺) · Admin gönderir; ücretsizse hemen, puanlıysa sahibi puanıyla açınca kullanılır ---
+     Kupon gibi tek kullanımlık, yalnızca Kiralık ve indirimsiz kitaba (couponEligible) · fiyat 0'ın altına inmez.
+     Kış sezonunda gönderilen çek (season 'winter') yalnızca sezon boyunca geçerlidir. */
+  const chequeExpired = (c, now = Date.now()) => (c.expiresMs || 0) <= now || (c.season === 'winter' && activeSeason() !== 'winter');
+  const chequeState = (c, now = Date.now()) => (c.usedAt ? 'used' : chequeExpired(c, now) ? 'expired' : c.openedAt ? 'active' : 'locked');
+  const chequesOf = (userId) => giftCheques.filter((c) => c.userId === userId);
+  const activeChequesOf = (userId, now = Date.now()) => chequesOf(userId)
+    .filter((c) => chequeState(c, now) === 'active').sort((a, b) => a.expiresMs - b.expiresMs);
+  const chequePrice = (c, price) => Math.max(0, round2(price - c.amount));
 
   function couponCardHTML(c, now = Date.now(), withUse = false) {
     const st = couponState(c, now);

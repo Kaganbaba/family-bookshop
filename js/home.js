@@ -62,7 +62,9 @@
     // Sezon vitrini: yalnızca o sezon açıkken listelenir
     { key: 'winter',   icon: '❄️', label: 'Kış Fırsatları',  desc: 'Kış boyunca indirimli kitaplar ve paketler · puan çarpanlı', season: 'winter' }
   ];
-  const visibleShowcases = () => SHOWCASES.filter((s) => !s.season || s.season === activeSeason());
+  // Kış sezonunda Günün İndirimi, Özel Fırsatlar ve Yeni Kitap kapalıdır (yeni kitaplar Kış Fırsatları'na girer) → anahtarları da gizlenir
+  const visibleShowcases = () => SHOWCASES.filter((s) => (!s.season || s.season === activeSeason())
+    && !(WINTER_OFF_SHOWCASES.includes(s.key) && activeSeason() === 'winter'));
 
   /* Ana sayfada yalnızca küçük bir buton (kapalı vitrin sayısıyla) · ayarlar pencerede */
   function renderShowcaseSettings() {
@@ -123,6 +125,20 @@
     box.innerHTML = visibleShowcases().map(row).join('');
   }
 
+  /* Günün İndirimi döngüsünü duraklat / kaldığı yerden sürdür (vitrin anahtarı ve Kış sezonu ortak kullanır) */
+  function dealsPauseOp(now = new Date()) {
+    const data = { dealsPausedDay: discountDayNumber(now), dealsPausedGroup: getDailyDeals(now).group };
+    return (bt) => bt.set(col('settings').doc('showcase'), data, { merge: true });
+  }
+  function dealsResumeOp(now = new Date()) {
+    const p = showcaseDoc();
+    const today = discountDayNumber(now);
+    if (!Number.isInteger(p.dealsPausedDay) || p.dealsPausedDay === today) return null;
+    return (bt) => bt.set(col('settings').doc('deals'), {
+      pinDay: today, pinGroup: Number(p.dealsPausedGroup) || 0, pinAt: now.toISOString(), pinBy: state.currentUserId, pinResume: true
+    }, { merge: true });
+  }
+
   function setShowcase(key, on) {
     if (!requireAdmin()) return;
     const sc = SHOWCASES.find((s) => s.key === key);
@@ -156,24 +172,28 @@
     const box = $('#winterSection');
     const admin = isAdmin();
     if (!winterOn()) { box.innerHTML = ''; return; }
-    const deals = winterDeals
-      .map((d) => ({ d, b: getBook(d.bookId) }))
-      .filter(({ b }) => b && hasPrice(b) && isVisibleBook(b) && winterDealOf(b))
-      .sort((x, y) => y.d.rate - x.d.rate || x.b.title.localeCompare(y.b.title, 'tr'));
+    // Kış sezonunda kitaplığa giren kitaplar otomatik %WINTER_NEW_RATE (YENİ) · Admin'in eklediği kitaplar kendi yüzdesiyle
+    // (yeni bir kış paketine giren yeni kitaplar tek başına gösterilmez, yalnızca paketleri görünür)
+    const entries = visibleBooks().map((b) => ({ b, w: winterOfferOf(b) })).filter((x) => x.w && !x.w.pack);
+    const fresh = entries.filter((x) => x.w.isNew).sort((x, y) => new Date(y.b.addedAt) - new Date(x.b.addedAt));
+    const deals = entries.filter((x) => !x.w.isNew).sort((x, y) => y.w.rate - x.w.rate || x.b.title.localeCompare(y.b.title, 'tr'));
     const packs = winterPackages();
-    if (!deals.length && !packs.length && !admin) { box.innerHTML = ''; return; }
+    const newPacks = packs.filter(isWinterNewPack);
+    const oldPacks = packs.filter((o) => !isWinterNewPack(o));
+    if (!fresh.length && !deals.length && !packs.length && !admin) { box.innerHTML = ''; return; }
     const mult = winterMult();
 
-    const dealCard = ({ d, b }) => {
-      const newPrice = round2(b.price * (1 - d.rate / 100));
+    const dealCard = ({ b, w }) => {
+      const newPrice = round2(b.price * (1 - w.rate / 100));
       return `
         <div data-open-book="${b.id}" role="button" tabindex="0"
-          class="winter-card group relative cursor-pointer rounded-2xl p-4 pt-5 text-left transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-sky-200/70">
-          ${admin ? `<button type="button" data-delete-winter="${b.id}" title="Kış Fırsatı'ndan çıkar" aria-label="Kış Fırsatı'ndan çıkar"
+          class="winter-card ${w.isNew ? 'winter-new-card' : ''} group relative cursor-pointer rounded-2xl p-4 pt-5 text-left transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-sky-200/70">
+          ${w.isNew ? '<span class="crystal-chip absolute -top-2 left-4 z-[4] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">✨ YENİ KİTAP</span>' : ''}
+          ${admin && !w.isNew ? `<button type="button" data-delete-winter="${b.id}" title="Kış Fırsatı'ndan çıkar" aria-label="Kış Fırsatı'ndan çıkar"
             class="absolute top-2 right-2 z-[4] w-7 h-7 rounded-full bg-white/15 text-sky-100 hover:bg-rose-500 hover:text-white flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
           <div class="relative z-[1] flex gap-3">
             <div class="shrink-0 pt-1 pl-1">${coverHTML(b, 'md')}</div>
-            <div class="flex-1 min-w-0 ${admin ? 'pr-6' : ''}">
+            <div class="flex-1 min-w-0 ${admin && !w.isNew ? 'pr-6' : ''}">
               <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-sky-200/90 truncate">${escapeHTML(seriesLabel(b))}</p>
               <p class="text-sm font-semibold text-white mt-0.5 line-clamp-2 leading-snug">${escapeHTML(b.title)}</p>
               <p class="text-[11px] text-sky-100/70 truncate mt-0.5">${escapeHTML(authorName(b))}</p>
@@ -181,10 +201,9 @@
             </div>
           </div>
           <div class="relative z-[1] flex items-end justify-between mt-4 pt-3 border-t border-white/15">
-            <div class="flex items-baseline gap-1">
-              <span class="text-3xl font-black leading-none tracking-tight text-white drop-shadow">%${d.rate}</span>
-              <span class="text-[10px] font-extrabold text-sky-200 tracking-wider">KIŞ</span>
-            </div>
+            ${w.isNew
+              ? `<div class="flex items-baseline gap-1"><span class="crystal-text text-4xl font-black leading-none tracking-tight">%${w.rate}</span><span class="text-[10px] font-extrabold text-cyan-100 tracking-wider">YENİ</span></div>`
+              : `<div class="flex items-baseline gap-1"><span class="ice-text text-3xl font-black leading-none tracking-tight">%${w.rate}</span><span class="text-[10px] font-extrabold text-sky-200 tracking-wider">KIŞ</span></div>`}
             <div class="text-right">
               <p class="text-[11px] text-sky-100/60 line-through">${formatMoney(b.price)}</p>
               <p class="text-lg font-black text-white leading-none">${newPrice <= 0 ? 'BEDAVA' : formatMoney(newPrice)}</p>
@@ -193,26 +212,33 @@
         </div>`;
     };
 
+    // Paket kartı: büyük buz kristali indirim rozeti + altta kar birikintisi · paketteki kitapların hepsi kışın yeniyse YENİ
     const packCard = (o) => {
       const bs = offerBooks(o);
       const normal = offerNormalTotal(o);
-      const rate = offerRate(o);
+      const price = offerPrice(o);
+      const isNew = isWinterNewPack(o);
       return `
         <div data-open-offer="${o.id}" role="button" tabindex="0"
-          class="winter-card group relative cursor-pointer rounded-2xl p-4 text-left transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-sky-200/70">
-          <div class="relative z-[1] flex items-center justify-between gap-2">
-            <span class="text-[10px] font-extrabold tracking-[.16em] text-sky-200">🎁 KIŞ PAKETİ · ${bs.length} KİTAP</span>
-            ${rate ? `<span class="text-[11px] font-black text-sky-950 bg-gradient-to-r from-white to-sky-200 px-2 py-0.5 rounded-full shadow">%${rate}</span>` : ''}
+          class="winter-card winter-pack ${isNew ? 'winter-new-card' : ''} group relative cursor-pointer rounded-2xl p-4 pb-6 text-left overflow-hidden transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-sky-200/70">
+          <div class="winter-cap winter-cap-sm absolute inset-x-0 top-0 pointer-events-none"></div>
+          <div class="relative z-[1] flex items-start justify-between gap-2 pt-2">
+            <div class="min-w-0">
+              <span class="${isNew ? 'crystal-chip' : 'text-sky-950 bg-white/90'} inline-block text-[10px] font-extrabold tracking-[.12em] px-2 py-0.5 rounded-full">${isNew ? '✨ YENİ KIŞ PAKETİ' : '🎁 KIŞ PAKETİ'}</span>
+              <p class="text-sm font-semibold text-white mt-2 line-clamp-2 leading-snug">${escapeHTML(o.title)}</p>
+              <p class="text-[10px] text-sky-100/70 mt-0.5">${bs.length} kitap · tek kiralamada</p>
+            </div>
+            ${iceRateHTML(offerRate(o), 'md', isNew)}
           </div>
           <div class="relative z-[1] flex items-center gap-2 mt-3 pl-1 pt-1">${bs.map((b) => coverHTML(b, 'sm')).join('')}</div>
-          <p class="relative z-[1] text-sm font-semibold text-white mt-3 line-clamp-1">${escapeHTML(o.title)}</p>
-          <div class="relative z-[1] flex items-end justify-between mt-2 pt-2 border-t border-white/15">
+          <div class="relative z-[1] flex items-end justify-between mt-3 pt-2 border-t border-white/15">
             <p class="text-[10px] text-sky-100/70">Kış boyunca geçerli</p>
             <div class="text-right">
-              ${normal > o.price ? `<p class="text-[11px] text-sky-100/60 line-through">${formatMoney(normal)}</p>` : ''}
-              <p class="text-lg font-black text-white leading-none">${o.price > 0 ? formatMoney(o.price) : 'BEDAVA'}</p>
+              ${normal > price ? `<p class="text-[11px] text-sky-100/60 line-through">${formatMoney(normal)}</p>` : ''}
+              <p class="text-xl font-black text-white leading-none">${price > 0 ? formatMoney(price) : 'BEDAVA'}</p>
             </div>
           </div>
+          <div class="winter-drift absolute inset-x-0 bottom-0 pointer-events-none"></div>
         </div>`;
     };
 
@@ -237,11 +263,23 @@
                 class="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-bold text-sky-950 bg-gradient-to-r from-white to-sky-200 hover:to-sky-100 shadow-soft transition">${icon('plus', 'w-3.5 h-3.5')}Kitap Ekle</button>
             </div>` : ''}
           </div>
-          ${deals.length ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${deals.map(dealCard).join('')}</div>` : ''}
-          ${packs.length ? `
-            <p class="relative text-[11px] font-bold uppercase tracking-[.16em] text-sky-100/80 mt-5 mb-2.5 px-1">🎁 Kış Paketleri</p>
-            <div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${packs.map(packCard).join('')}</div>` : ''}
-          ${!deals.length && !packs.length ? `
+          ${fresh.length || newPacks.length ? `
+            <section class="winter-zone winter-zone-new relative rounded-2xl p-3 sm:p-4 mb-5">
+              <p class="relative text-[11px] font-bold uppercase tracking-[.16em] text-cyan-100 mb-3 px-1">✨ Kışın Yenileri${fresh.length ? ` · tek kitaplar otomatik %${WINTER_NEW_RATE}` : ''}</p>
+              ${fresh.length ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">${fresh.map(dealCard).join('')}</div>` : ''}
+              ${newPacks.length ? `
+                <p class="relative text-[10px] font-bold uppercase tracking-[.16em] text-cyan-100/80 ${fresh.length ? 'mt-5' : ''} mb-2.5 px-1">🎁 Yeni Kış Paketleri</p>
+                <div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${newPacks.map(packCard).join('')}</div>` : ''}
+            </section>` : ''}
+          ${deals.length || oldPacks.length ? `
+            <section class="winter-zone relative rounded-2xl p-3 sm:p-4">
+              <p class="relative text-[11px] font-bold uppercase tracking-[.16em] text-sky-100 mb-3 px-1">❄️ Kış İndirimleri</p>
+              ${deals.length ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${deals.map(dealCard).join('')}</div>` : ''}
+              ${oldPacks.length ? `
+                <p class="relative text-[10px] font-bold uppercase tracking-[.16em] text-sky-100/80 ${deals.length ? 'mt-5' : ''} mb-2.5 px-1">🎁 Kış Paketleri</p>
+                <div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${oldPacks.map(packCard).join('')}</div>` : ''}
+            </section>` : ''}
+          ${!fresh.length && !deals.length && !packs.length ? `
             <p class="relative text-center text-xs text-sky-100/80 py-8 border border-dashed border-white/25 rounded-2xl">Henüz kış fırsatı yok · <b class="text-white">Kitap Ekle</b> ile kitap ve yüzde, <b class="text-white">Ayarlar</b>'dan paket ekleyebilirsin.<br/><span class="text-[10px] text-sky-100/60">Bu boş alanı yalnızca Adminler görür.</span></p>` : ''}
         </div>
       </div>`;
@@ -254,7 +292,7 @@
     const dealIds = getDailyDeals(now).ids;
     const pickable = books
       .filter((b) => hasPrice(b) && isRentableStatus(b))
-      .map((b) => ({ b, other: winterDealOf(b) ? null : customDiscountOf(b, now) ? 'Özel Fırsatta' : otherDiscountOf(b, now, dealIds) }))
+      .map((b) => ({ b, other: winterDealOf(b) && !isWinterNewBook(b) ? null : customDiscountOf(b, now) ? 'Özel Fırsatta' : otherDiscountOf(b, now, dealIds) }))
       .sort((x, y) => !!x.other - !!y.other || x.b.title.localeCompare(y.b.title, 'tr'));
     if (!pickable.some((x) => !x.other)) return toast('Kış Fırsatı\'na eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
     openModal(`
@@ -294,7 +332,7 @@
     if (!b || !hasPrice(b)) return toast('Fiyatı olan bir kitap seçin.', 'error');
     if (!isRentableStatus(b)) return toast('Kış Fırsatı\'na yalnızca Kiralık kitaplar eklenebilir.', 'error');
     if (!(rate >= 1 && rate <= 100)) return toast('İndirim yüzdesi 1–100 arası olmalı.', 'error');
-    const prev = winterDealOf(b);
+    const prev = winterDealOf(b) && !isWinterNewBook(b) ? winterDealOf(b) : null;
     const other = prev ? null : customDiscountOf(b) ? 'Özel Fırsatta' : otherDiscountOf(b);
     if (other) return toast(`"${b.title}" şu an ${other}; Kış Fırsatı'na eklenemez.`, 'error');
 
@@ -359,7 +397,7 @@
               <div class="flex -space-x-2 shrink-0">${offerBooks(o).map((b) => coverHTML(b, 'xs')).join('')}</div>
               <div class="flex-1 min-w-0">
                 <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(o.title)}</p>
-                <p class="text-[10px] text-slate-400">${o.items.length} kitap · ${o.price > 0 ? formatMoney(o.price) : 'Bedava'}${offerRate(o) ? ` · %${offerRate(o)}` : ''}</p>
+                <p class="text-[10px] text-slate-400">${o.items.length} kitap · ${offerPrice(o) > 0 ? formatMoney(offerPrice(o)) : 'Bedava'}${offerRate(o) ? ` · %${offerRate(o)}` : ''}</p>
               </div>
               <button type="button" data-edit-offer="${o.id}" title="Düzenle" class="${BTN_ICON} text-slate-400 hover:text-brand-600 hover:bg-brand-50">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
               <button type="button" data-delete-offer="${o.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>
@@ -768,7 +806,9 @@
       deal:   { label: '🔥 Günün İndirimi',      tone: 'bg-rose-50 text-rose-600' },
       new:    { label: '⭐ Yeni Kitap İndirimi', tone: 'bg-amber-50 text-amber-700' },
       custom: { label: '🏷️ Özel Fırsat',         tone: 'bg-indigo-50 text-indigo-600' },
-      winter: { label: '❄️ Kış Fırsatı',          tone: 'bg-sky-50 text-sky-600' }
+      winter: { label: '❄️ Kış Fırsatı',          tone: 'bg-sky-50 text-sky-600' },
+      winterNew: { label: '✨ Kış · Yeni Kitap',  tone: 'bg-cyan-50 text-cyan-700' },
+      cheque: { label: '🎁 Hediye çekiyle',       tone: 'bg-emerald-50 text-emerald-600' }
     };
     return map[r.discountSource] || (r.discount > 0 ? { label: discountSourceLabel(r.discountSource), tone: 'bg-rose-50 text-rose-600' } : null);
   }

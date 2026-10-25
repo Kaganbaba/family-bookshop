@@ -80,10 +80,13 @@
       if ((m = el('[data-showcase-toggle]')))  return setShowcase(m.dataset.showcaseToggle, !showcaseOn(m.dataset.showcaseToggle));
       if ((m = el('[data-add-winter]')))       return openWinterDealModal();
       if ((m = el('[data-delete-winter]')))    return deleteWinterDeal(m.dataset.deleteWinter);
+      if ((m = el('[data-send-cheque]')))      return openSendChequeModal();
+      if ((m = el('[data-open-cheque]')))      return m.disabled ? null : openChequeWithPoints(m.dataset.openCheque);
+      if ((m = el('[data-delete-cheque]')))    return deleteCheque(m.dataset.deleteCheque);
+      if ((m = el('#chq-all')))                { $$('[data-chq-user]').forEach((x) => { x.checked = m.checked; }); return; }
       if ((m = el('[data-winter-settings]')))  return openWinterSettingsModal();
       if ((m = el('[data-add-winter-package]'))) return openOfferFormModal(null, 'winter');
       if ((m = el('[data-open-seasons]')))     return openSeasonModal();
-      if ((m = el('[data-set-season]')))       return setSeason(m.dataset.setSeason);
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-cancel-rental]')))    return cancelRental(m.dataset.cancelRental);
@@ -138,6 +141,8 @@
         case 'saveVitrine': return handleSaveVitrine(fd);
         case 'saveWinterDeal': return handleSaveWinterDeal(fd);
         case 'saveWinterSettings': return handleSaveWinterSettings(fd);
+        case 'sendCheque':  return handleSendCheque(form);
+        case 'saveSeason':  return handleSaveSeason(fd);
         case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
         case 'bulkNews':    return handleBulkNews(fd);
         case 'sendRefund':  return handleSendRefund(fd, form);
@@ -149,7 +154,7 @@
     document.addEventListener('input', (e) => {
       const t = e.target;
       if (t.id === 'bf-title') updateBookFormPreview();
-      if (t.id === 'of-price') updateOfferCalc();
+      if (t.id === 'of-rate') updateOfferCalc();
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
       if (t.id === 'vd-rate') updateVitrinePreview();
       if (t.id === 'wd-rate') updateWinterPreview();
@@ -243,8 +248,10 @@
       setupMissingLedgers();
       ensureFeedbackSync();
       expireStaleRefunds();
+      expireSeason();
       renderProfile();
       renderCurrentPage();
+      showChequePopup(); // yeni gelen hediye çeki varsa önüne çıkar
     });
   }
 
@@ -252,6 +259,7 @@
      (kural, üyenin başkasının geri bildirimini okumasına izin vermez). Rol değişince yeniden kurulur. */
   let feedbackUnsub = null;
   let refundUnsub = null;
+  let chequeUnsub = null;
   let feedbackMode = null;
   function ensureFeedbackSync() {
     if (!state.currentUserId || !currentUser()) return;
@@ -259,6 +267,7 @@
     if (mode === feedbackMode) return;
     feedbackUnsub?.();
     refundUnsub?.();
+    chequeUnsub?.();
     feedbackMode = mode;
     const scoped = (name) => (mode === 'all' ? col(name) : col(name).where('userId', '==', state.currentUserId));
     feedbackUnsub = scoped('feedback').onSnapshot((snap) => {
@@ -272,6 +281,11 @@
       scheduleRender();
       if (state.refundsOpen) renderRefundList(); // açık pencerede yalnızca liste (Admin notu taslakları korunur)
     }, (err) => console.error('[refunds]', err));
+    // Hediye çekleri: aynı kapsam (Admin hepsi · üye kendininki)
+    chequeUnsub = scoped('giftCheques').onSnapshot((snap) => {
+      giftCheques.splice(0, giftCheques.length, ...snap.docs.map((d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })));
+      scheduleRender();
+    }, (err) => console.error('[giftCheques]', err));
   }
 
   /* Tüm koleksiyonları dinler. Bir koleksiyon okunamazsa (örn. kuralı henüz yüklenmemiş)
@@ -306,11 +320,14 @@
     SYNC.forEach(([, arr]) => { arr.length = 0; });
     feedbackUnsub?.();
     refundUnsub?.();
+    chequeUnsub?.();
     feedbackUnsub = null;
     refundUnsub = null;
+    chequeUnsub = null;
     feedbackMode = null;
     feedbacks.length = 0;
     refunds.length = 0;
+    giftCheques.length = 0;
   }
 
   /* İlk girişte users/{uid} belgesi oluşturulur (bakiye 0; ana Admin e-postası → Admin) */

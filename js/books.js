@@ -123,7 +123,8 @@
     const rows = list.map((b) => {
       const rented = isBookRented(b, now);
       const eff = getEffectiveDiscount(b, nowDate, dealIds);
-      const winter = eff.source === 'winter';
+      const pack = winterOfferOf(b)?.pack || null; // yeni kış paketindeki yeni kitap: tek başına indirimsiz, paketle indirimli
+      const winter = WINTER_SOURCES.includes(eff.source) || !!pack;
       const fresh = !winter && isNewBook(b, nowDate); // Kış Fırsatı'ndaki yeni kitap yeni kitap indirimi almaz
       return `
         <li>
@@ -144,7 +145,9 @@
               <p class="flex items-center gap-1.5 min-w-0">
                 <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
                 ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
-                ${winter ? `<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-sky-400 to-indigo-500 px-1.5 py-0.5 rounded-full shadow-soft">❄️ KIŞ %${eff.rate}</span>` : ''}
+                ${pack ? `<span class="crystal-chip shrink-0 max-w-[14rem] truncate text-[9px] font-extrabold px-1.5 py-0.5 rounded-full" title="${escapeHTML(pack.title)} kış paketi">❄ YENİ · 🎁 ${escapeHTML(pack.title)} %${offerRate(pack)}</span>`
+                  : eff.source === 'winterNew' ? `<span class="crystal-chip shrink-0 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">❄ YENİ %${eff.rate}</span>`
+                  : winter ? `<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-sky-400 to-indigo-500 px-1.5 py-0.5 rounded-full shadow-soft">❄️ KIŞ %${eff.rate}</span>` : ''}
               </p>
               <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : ''}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}${fresh
                 ? `<span class="hidden sm:inline text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(newDiscountLeftMs(b, nowDate))}</span>` : ''}</p>
@@ -284,6 +287,7 @@
     const now = new Date();
     const { rate, source } = getEffectiveDiscount(b, now);
     const price = hasPrice(b) ? round2(b.price * (1 - rate / 100)) : 0;
+    const winterPack = winterOfferOf(b)?.pack || null; // yeni kış paketindeki yeni kitap
     const active = activeRentalOf(b, now.getTime());
     const holder = active ? getUser(active.userId) : null;
     const check = bookRentCheck(b, u, price);
@@ -291,6 +295,8 @@
     // (Al-Öde kuponları birden çok kitap ister → Hediyelerim'den kullanılır)
     const myCoupons = canRent(u) && !active && couponEligible(b, now)
       ? activeCouponsOf(u.id, now.getTime()).filter((c) => couponTypeOf(c) !== 'bogo') : [];
+    // Hediye çeki: kuponla aynı koşullar (Kiralık + indirimsiz + boşta) · açılmış ve geçerli çekler
+    const myCheques = canRent(u) && !active && couponEligible(b, now) ? activeChequesOf(u.id, now.getTime()) : [];
     const admin = isAdmin();
     const backOfferId = opts.backOfferId || '';
     const logs = priceLogs.filter((l) => l.bookId === b.id).sort((x, y) => new Date(y.changedAt) - new Date(x.changedAt));
@@ -322,12 +328,13 @@
               <span class="flex-1 min-w-0"><b>${escapeHTML(holder.name)}</b> kiraladı · ${formatRemaining(new Date(active.dueAt) - now)}</span>
               ${refundBtnHTML(active)}
             </div>` : ''}
-          ${myCoupons.length ? `
+          ${myCoupons.length || myCheques.length ? `
             <label class="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs">
-              <span class="text-emerald-700 font-semibold shrink-0">🎟️ Kupon</span>
+              <span class="text-emerald-700 font-semibold shrink-0">${myCheques.length && !myCoupons.length ? '🎁 Çek' : myCheques.length ? '🎟️ Kupon / Çek' : '🎟️ Kupon'}</span>
               <select id="rentCoupon" data-book="${b.id}" class="flex-1 min-w-0 bg-white rounded-lg border border-emerald-100 text-xs py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-200">
-                <option value="">Kupon kullanma</option>
+                <option value="">${myCheques.length && !myCoupons.length ? 'Çek kullanma' : 'Kullanma'}</option>
                 ${myCoupons.map((c) => `<option value="${c.id}">${escapeHTML(couponBadge(c))} kupon${c.name ? ` (${escapeHTML(c.name)})` : ''} · ${formatRemaining(c.expiresMs - now.getTime())}</option>`).join('')}
+                ${myCheques.map((c) => `<option value="chq:${c.id}">🎁 ${formatMoney(c.amount)} hediye çeki${c.name ? ` (${escapeHTML(c.name)})` : ''}</option>`).join('')}
               </select>
             </label>` : ''}
           ${canRent(u) ? `
@@ -393,6 +400,12 @@
       </div>
 
       <div class="p-5 sm:p-6 pt-4 space-y-5">
+        ${winterPack ? `
+          <button type="button" data-open-offer="${winterPack.id}" class="w-full flex items-center gap-3 p-3 rounded-2xl text-left bg-gradient-to-r from-sky-50 to-cyan-50 border border-cyan-200 hover:border-cyan-400 transition">
+            <span class="text-xl leading-none">🎁</span>
+            <span class="flex-1 min-w-0 text-xs text-sky-800 leading-relaxed">✨ Bu <b>yeni kitap</b> kışta yalnızca <b>"${escapeHTML(winterPack.title)}"</b> kış paketinde indirimli · <b>%${offerRate(winterPack)}</b>. Tek başına normal fiyatından kiralanır.</span>
+            <span class="text-[11px] font-bold text-cyan-700 shrink-0">Paketi gör →</span>
+          </button>` : ''}
         ${rentBlock}
         ${isSpecialBook(b) ? `
           <div class="flex gap-3 p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
@@ -646,24 +659,34 @@
     return { ok: true };
   }
 
-  /* Kitap detayında seçili kupon (yoksa null) */
-  function selectedCoupon(bookId) {
+  /* Kitap detayında seçili kupon / hediye çeki (yoksa null) · çek seçenekleri "chq:<id>" */
+  function selectedRentOption(bookId) {
     const sel = $('#rentCoupon');
-    if (!sel || sel.dataset.book !== String(bookId) || !sel.value) return null;
-    return coupons.find((c) => c.id === sel.value) || null;
+    if (!sel || sel.dataset.book !== String(bookId) || !sel.value) return '';
+    return sel.value;
+  }
+  function selectedCoupon(bookId) {
+    const v = selectedRentOption(bookId);
+    return v && !v.startsWith('chq:') ? coupons.find((c) => c.id === v) || null : null;
+  }
+  function selectedCheque(bookId) {
+    const v = selectedRentOption(bookId);
+    return v.startsWith('chq:') ? giftCheques.find((c) => c.id === v.slice(4)) || null : null;
   }
 
-  /* Kupon seçimi değişince fiyat, kalan bakiye ve Kirala butonu güncellenir */
+  /* Kupon / çek seçimi değişince fiyat, kalan bakiye ve Kirala butonu güncellenir */
   function updateRentCoupon() {
     const sel = $('#rentCoupon');
     const b = sel && getBook(sel.dataset.book);
     const u = currentUser();
     if (!b || !u) return;
     const coupon = selectedCoupon(b.id);
-    const price = coupon ? couponPrice(coupon, b.price) : round2(b.price * (1 - getEffectiveDiscount(b).rate / 100));
+    const cheque = selectedCheque(b.id);
+    const price = coupon ? couponPrice(coupon, b.price) : cheque ? chequePrice(cheque, b.price)
+      : round2(b.price * (1 - getEffectiveDiscount(b).rate / 100));
     const check = bookRentCheck(b, u, price);
     $('#rentBtn').disabled = !check.ok;
-    $('#rentBtn').textContent = `${price > 0 ? formatMoney(price) : 'Bedava'} · ${b.rentalDays} gün Kirala${coupon ? ` (${couponBadge(coupon)} kupon)` : ''}`;
+    $('#rentBtn').textContent = `${price > 0 ? formatMoney(price) : 'Bedava'} · ${b.rentalDays} gün Kirala${coupon ? ` (${couponBadge(coupon)} kupon)` : cheque ? ` (${formatMoney(cheque.amount)} çek)` : ''}`;
     $('#rentBalAfter')?.classList.toggle('hidden', !check.ok);
     const after = $('#rentBalAfter .text-brand-600');
     if (after) after.textContent = formatMoney(round2(u.balance - price));
@@ -692,6 +715,31 @@
       await run(cBatch.commit(), `"${b.title}" kiralandı · ${cPrice > 0 ? formatMoney(cPrice) : 'bedava'} · 🎟️ ${couponBadge(coupon)} kupon kullanıldı`);
       return;
     }
+    // Hediye çeki: tekli kiralama (ödeme bakiyeden) + çek aynı batch'te kullanılmış olur (kural çeki ve tutarı denetler)
+    const cheque = selectedCheque(b.id);
+    if (cheque) {
+      if (cheque.userId !== u.id || chequeState(cheque) !== 'active') return toast('Bu hediye çeki artık kullanılamaz.', 'error');
+      if (!couponEligible(b)) return toast('Hediye çeki yalnızca Kiralık ve indirimsiz kitaba uygulanır.', 'error');
+      const qPrice = chequePrice(cheque, b.price);
+      const qCheck = bookRentCheck(b, u, qPrice);
+      if (!qCheck.ok) return toast(qCheck.reason, 'error');
+      const nowMs = Date.now();
+      const due = nowMs + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
+      const ref = col('rentals').doc();
+      const qBatch = db.batch();
+      qBatch.set(ref, {
+        bookId: b.id, userId: u.id,
+        listPrice: b.price, price: qPrice, discount: Math.min(100, Math.round((1 - qPrice / b.price) * 100)), discountSource: 'cheque',
+        offerId: null, purchaseId: null, offerPrice: null, couponId: null, chequeId: cheque.id,
+        rentedAt: isoAt(nowMs), dueAt: isoAt(due), returnedAt: null
+      });
+      qBatch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
+      qBatch.update(col('users').doc(u.id), { balance: round2(u.balance - qPrice), lastTx: ref.id, lastTxType: 'rental' });
+      qBatch.update(col('giftCheques').doc(cheque.id), { usedAt: isoAt(nowMs), rentalId: ref.id });
+      closeModal();
+      await run(qBatch.commit(), `"${b.title}" kiralandı · ${qPrice > 0 ? formatMoney(qPrice) : 'bedava'} · 🎁 ${formatMoney(cheque.amount)} hediye çeki kullanıldı`);
+      return;
+    }
     const { rate, source } = getEffectiveDiscount(b);
     const price = round2(b.price * (1 - rate / 100));
     const check = bookRentCheck(b, u, price);
@@ -702,7 +750,7 @@
     const ref = col('rentals').doc();
     const batch = db.batch();
     // Kış Fırsatı: o anki puan çarpanı kayda yazılır (kural ayardaki çarpanla aynı olmasını ister)
-    const mult = rate && source === 'winter' ? winterMult() : 1;
+    const mult = rate && WINTER_SOURCES.includes(source) ? winterMult() : 1;
     batch.set(ref, {
       bookId: b.id, userId: u.id,
       listPrice: b.price, price, discount: rate, discountSource: rate ? source : null,

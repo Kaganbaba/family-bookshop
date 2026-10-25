@@ -6,13 +6,15 @@
        indirimi olmayan kitaba (kitap detayında Kirala'dan) uygulanır.
      • Özel tekliflere kupon uygulanmaz.
      ========================================================== */
-  const isShopActive = (s, now = Date.now()) => s.endsMs == null || s.endsMs > now;
+  /* Kış kuponu (Kış sezonundayken eklenen, season 'winter') yalnızca sezon boyunca mağazada; sezon kapanınca silinir */
+  const isShopActive = (s, now = Date.now()) => (s.endsMs == null || s.endsMs > now) && (s.season !== 'winter' || activeSeason() === 'winter');
 
   /* Süresi biten mağaza kuponları: herkes için gizlenir, Admin açıksa Firestore'dan da silinir
      (önceden alınmış kuponlar etkilenmez) */
   function purgeExpiredShop(now = Date.now()) {
     if (!isAdmin()) return;
-    couponShop.filter((s) => !isShopActive(s, now)).forEach((s) => {
+    // Kış kuponları sezon kapanışında (setSeason / expireSeason) silinir; burada yalnızca süresi biten
+    couponShop.filter((s) => s.endsMs != null && s.endsMs <= now).forEach((s) => {
       const key = `shop:${s.id}`;
       if (state.purgePending.has(key)) return;
       state.purgePending.add(key);
@@ -29,7 +31,10 @@
     const active = activeCouponsOf(u.id, now);
     const rentOk = canRent(u);
     setPageActions('gifts', admin
-      ? `<button type="button" data-add-shop-coupon class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Kupon Ekle</button>`
+      ? `<span class="flex gap-2">
+          <button type="button" data-send-cheque class="${BTN_SOFT}">🎁 Çek Gönder</button>
+          <button type="button" data-add-shop-coupon class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Kupon Ekle</button>
+        </span>`
       : '');
 
     const items = couponShop.filter((s) => isShopActive(s, now))
@@ -48,14 +53,18 @@
       return `<button type="button" data-buy-coupon="${s.id}" ${rentOk && enough ? '' : 'disabled'} class="${BTN_PRIMARY} ${cls}">
         ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(s.cost - pts.available))} eksik`}</button>`;
     };
-    /* Süreli kupon: yatay bilet · solda renkli kupon kısmı, sağda puan / kalan süre / al */
+    /* Süreli kupon: yatay bilet · solda renkli kupon kısmı, sağda puan / kalan süre / al
+       (kış kuponu: buz mavisi zemin, kar taneli desen, üstte kar) */
     const timedCard = (s) => {
       const type = couponTypeOf(s);
+      const winter = s.season === 'winter';
       return `
-        <div class="relative flex bg-white rounded-2xl shadow-soft overflow-hidden ring-2 ring-amber-300/70">
-          <div class="relative w-36 sm:w-40 shrink-0 bg-gradient-to-br ${COUPON_TONES[type]} text-white px-3.5 py-3 flex flex-col justify-center border-r-2 border-dashed border-white/70">
-            <span class="absolute inset-0 offer-pattern opacity-50"></span>
-            <span class="relative self-start text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>
+        <div class="relative flex bg-white rounded-2xl shadow-soft overflow-hidden ring-2 ${winter ? 'ring-sky-300/80' : 'ring-amber-300/70'}">
+          <div class="relative w-36 sm:w-40 shrink-0 ${winter ? 'winter-coupon-bg' : `bg-gradient-to-br ${COUPON_TONES[type]}`} text-white px-3.5 py-3 flex flex-col justify-center border-r-2 border-dashed border-white/70">
+            ${winter ? '<span class="absolute inset-0 winter-flakes"></span><span class="winter-cap winter-cap-sm absolute inset-x-0 top-0"></span>' : '<span class="absolute inset-0 offer-pattern opacity-50"></span>'}
+            ${winter
+              ? '<span class="relative self-start text-[9px] font-extrabold tracking-widest text-sky-950 bg-gradient-to-r from-white to-sky-200 px-2 py-0.5 rounded-full shadow-soft mt-1">❄️ KIŞ · SÜRELİ</span>'
+              : '<span class="relative self-start text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>'}
             <p class="relative text-[9px] font-bold tracking-[.18em] opacity-90 mt-2">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
             <p class="relative ${type === 'bogo' ? 'text-xl' : 'text-3xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
             ${s.name ? `<p class="relative text-[10px] font-semibold mt-1 truncate">${escapeHTML(s.name)}</p>` : ''}
@@ -75,10 +84,12 @@
     };
     const shopCard = (s) => {
       const type = couponTypeOf(s);
+      const winter = s.season === 'winter';
       return `
-        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col h-full">
-          <div class="relative px-4 pt-4 pb-5 bg-gradient-to-br ${COUPON_TONES[type]} text-white">
-            <span class="absolute inset-0 offer-pattern opacity-60"></span>
+        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col h-full ${winter ? 'ring-2 ring-sky-200' : ''}">
+          <div class="relative px-4 pt-4 pb-5 ${winter ? 'winter-coupon-bg' : `bg-gradient-to-br ${COUPON_TONES[type]}`} text-white">
+            ${winter ? '<span class="absolute inset-0 winter-flakes"></span><span class="winter-cap winter-cap-sm absolute inset-x-0 top-0"></span>' : '<span class="absolute inset-0 offer-pattern opacity-60"></span>'}
+            ${winter ? '<span class="relative inline-block text-[9px] font-extrabold tracking-widest text-sky-950 bg-white/90 px-2 py-0.5 rounded-full mb-1">❄️ KIŞ KUPONU</span>' : ''}
             ${adminBtns(s, 'bg-white/20')}
             <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
             <p class="relative ${type === 'bogo' ? 'text-2xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
@@ -139,8 +150,11 @@
         </div>
       </div>
 
+      ${myChequesHTML(u.id, now)}
+      ${admin ? sentChequesHTML(now) : ''}
+
       <div class="mb-6">
-        <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası</h2>
+        <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası${activeSeason() === 'winter' ? ' <span class="text-[10px] font-semibold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full align-middle">❄️ Kışta eklenen kuponlar sezon sonunda kalkar</span>' : ''}</h2>
         ${items.length
           ? timedHTML + groupsHTML
           : emptyState(admin ? 'Mağazada kupon yok · sağ üstteki <b>Kupon Ekle</b> ile yüzde, ₺ ya da Al-Öde kuponu ekleyebilirsin.' : 'Mağazada şu an kupon yok. Yakında yeni kuponlar gelecek!')}
@@ -182,6 +196,7 @@
         const batch = db.batch();
         batch.set(ref, {
           userId: u.id, shopId: s.id, type: couponTypeOf(s), value: couponValueOf(s), free: s.free ?? null, name: s.name || '', cost: s.cost,
+          ...(s.season ? { season: s.season } : {}), // kış kuponu yalnızca sezon boyunca kullanılır
           boughtAt: isoAt(now),
           expiresAt: Timestamp.fromMillis(now + COUPON_DAYS * DAY_MS),
           usedAt: null, rentalIds: null, bookIds: null, freeBookIds: null, paidTotal: null
@@ -288,7 +303,9 @@
     }
 
     const batch = db.batch();
-    batch.set(col('couponShop').doc(), { ...s, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
+    // Kış sezonundayken eklenen kupon kış kuponudur: farklı görünür, sezon boyunca geçerli, sezon kapanınca silinir
+    const season = activeSeason() === 'winter' ? { season: 'winter' } : {};
+    batch.set(col('couponShop').doc(), { ...s, ...season, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
     // İşaretliyse "Etkinlik" duyurusu
     if (fd.announce === 'on') batch.set(col('announcements').doc(), {
       type: 'news', category: 'Etkinlik',
@@ -301,6 +318,207 @@
     });
     closeModal();
     run(batch.commit(), `🎟️ ${couponBadge(s)} kuponu mağazaya eklendi${fd.announce === 'on' ? ' · Duyurular\'a Etkinlik haberi düştü 📣' : ''}`);
+  }
+
+  /* --- Hediye çekleri (₺) · Admin gönderir, sahibi Kiralık + indirimsiz kitabı kiralarken seçer --- */
+  function chequeCardHTML(c, now = Date.now(), withAction = true) {
+    const st = chequeState(c, now);
+    const winter = c.season === 'winter';
+    const pts = userPoints(c.userId);
+    const enough = hasLedger(getUser(c.userId)) && pts.available >= c.cost;
+    return `
+      <div class="cheque-card ${winter ? 'cheque-winter' : ''} relative overflow-hidden rounded-2xl p-4 text-white shadow-soft">
+        ${winter ? '<span class="absolute inset-0 winter-flakes"></span><span class="winter-cap winter-cap-sm absolute inset-x-0 top-0"></span>' : '<span class="absolute inset-0 offer-pattern opacity-40"></span>'}
+        <span class="cheque-notch left"></span><span class="cheque-notch right"></span>
+        <div class="relative flex items-start justify-between gap-3 ${winter ? 'pt-1.5' : ''}">
+          <div class="min-w-0">
+            <p class="text-[9px] font-extrabold tracking-[.2em] opacity-90">🎁 HEDİYE ÇEKİ${winter ? ' · ❄️ KIŞ' : ''}</p>
+            <p class="text-3xl font-black leading-none mt-1.5 drop-shadow">${formatMoney(c.amount)}</p>
+            ${c.name ? `<p class="text-[11px] font-semibold mt-1 truncate">${escapeHTML(c.name)}</p>` : ''}
+          </div>
+          <p class="text-[10px] text-right opacity-90 shrink-0">${winter ? 'Kış sezonu<br/>boyunca geçerli' : `Son kullanma<br/><b>${formatDate(new Date(c.expiresMs).toISOString())}</b>`}</p>
+        </div>
+        <p class="relative text-[10px] opacity-90 mt-2.5 leading-snug">Kiralık ve indirimsiz bir kitabı kiralarken seç · tutar fiyattan düşülür.</p>
+        ${withAction && st === 'locked' ? `
+          <button type="button" data-open-cheque="${c.id}" ${enough ? '' : 'disabled'}
+            class="relative mt-3 w-full py-2 rounded-xl text-xs font-bold ${winter ? 'text-sky-900' : 'text-emerald-800'} bg-white hover:bg-white/90 shadow-soft transition disabled:opacity-60 disabled:cursor-not-allowed">
+            ${enough ? `⭐ ${formatPoints(c.cost)} ile çeki aç` : `⭐ ${formatPoints(c.cost)} gerekiyor · ${formatPoints(Math.max(0, round2(c.cost - pts.available)))} eksik`}
+          </button>`
+          : st === 'active' ? '<span class="relative inline-flex mt-3 text-[10px] font-bold bg-white/20 px-2.5 py-1 rounded-full">✓ Kullanıma hazır</span>' : ''}
+      </div>`;
+  }
+
+  /* Hediyelerim: kullanıcının açık (kullanılabilir) ve kilitli (puanla açılacak) çekleri */
+  function myChequesHTML(userId, now = Date.now()) {
+    const list = chequesOf(userId).filter((c) => ['active', 'locked'].includes(chequeState(c, now)))
+      .sort((a, b) => (a.openedAt ? 1 : 0) - (b.openedAt ? 1 : 0) || a.expiresMs - b.expiresMs);
+    if (!list.length) return '';
+    return `
+      <div class="mb-6">
+        <h2 class="text-sm font-bold text-slate-800 mb-3">🎁 Hediye Çeklerim</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">${list.map((c) => chequeCardHTML(c, now)).join('')}</div>
+      </div>`;
+  }
+
+  /* Admin: gönderilen çekler (son 30) · durum + sil */
+  function sentChequesHTML(now = Date.now()) {
+    const list = [...giftCheques].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!list.length) return '';
+    const label = { active: ['✓ Açık', 'bg-emerald-50 text-emerald-600'], locked: ['🔒 Puanla açılacak', 'bg-amber-50 text-amber-700'],
+      used: ['Kullanıldı', 'bg-slate-100 text-slate-500'], expired: ['Süresi doldu', 'bg-rose-50 text-rose-500'] };
+    return `
+      <details class="mb-6 bg-white rounded-2xl shadow-soft p-4">
+        <summary class="cursor-pointer text-xs font-bold text-slate-700">🛡️ Gönderilen Hediye Çekleri <span class="text-slate-400 font-medium">· ${list.length}</span></summary>
+        <ul class="mt-3 space-y-1.5">${list.slice(0, 30).map((c) => {
+          const u = getUser(c.userId);
+          const [txt, tone] = label[chequeState(c, now)];
+          return `
+            <li class="flex items-center gap-2.5 p-2 rounded-xl border border-slate-100">
+              ${u ? avatarHTML(u, 'w-6 h-6 text-[10px]') : ''}
+              <span class="min-w-0 flex-1">
+                <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u?.name || 'Silinmiş kullanıcı')} · ${formatMoney(c.amount)}${c.season === 'winter' ? ' ❄️' : ''}</span>
+                <span class="block text-[10px] text-slate-400">${c.cost > 0 ? `⭐ ${formatPoints(c.cost)}` : 'Ücretsiz'} · ${relativeDay(c.createdAt)}${c.name ? ` · ${escapeHTML(c.name)}` : ''}</span>
+              </span>
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${tone} shrink-0">${txt}</span>
+              <button type="button" data-delete-cheque="${c.id}" title="Sil" aria-label="Çeki sil" class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>
+            </li>`;
+        }).join('')}</ul>
+      </details>`;
+  }
+
+  function openSendChequeModal() {
+    if (!requireAdmin()) return;
+    const winter = activeSeason() === 'winter';
+    const defaultEnd = localDateKey(new Date(Date.now() + CHEQUE_DAYS * DAY_MS));
+    openModal(`
+      ${modalHeader('Hediye Çeki Gönder 🎁', 'Seçtiğin kişilerin önüne siteyi açınca çıkar · Kiralık ve indirimsiz kitaplarda kullanılır.', 'gifts', 'bg-emerald-50 text-emerald-600')}
+      <form data-form="sendCheque" class="p-5 space-y-3.5" autocomplete="off">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-semibold text-slate-600">Kime</span>
+            <label class="flex items-center gap-1.5 text-[11px] text-brand-600 font-semibold cursor-pointer"><input type="checkbox" id="chq-all" class="rounded border-slate-300 text-brand-600" /> Herkes</label>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            ${users.map((u) => `
+              <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-100 hover:border-brand-200 cursor-pointer text-xs">
+                <input type="checkbox" name="to" value="${u.id}" data-chq-user class="rounded border-slate-300 text-brand-600" />
+                ${avatarHTML(u, 'w-6 h-6 text-[10px]')}<span class="truncate">${escapeHTML(u.name)}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Tutar (₺)', `<input name="amount" type="number" min="1" max="10000" step="0.01" required inputmode="decimal" class="${INPUT_CLS}" placeholder="Örn. 20" />`)}
+          ${field('Açma bedeli (puan)', `<input name="cost" type="number" min="0" step="0.01" value="0" class="${INPUT_CLS}" />`, '0 = ücretsiz · puanlıysa kişi kendi puanıyla açar')}
+        </div>
+        ${field('Çek Adı (isteğe bağlı)', `<input name="name" maxlength="60" class="${INPUT_CLS}" placeholder="${winter ? 'Örn. Yılbaşı Hediyesi 🎄' : 'Örn. Doğum Günü Hediyesi 🎂'}" />`)}
+        ${winter
+          ? '<p class="text-[11px] text-sky-700 bg-sky-50 rounded-xl px-3 py-2.5">❄️ Kış sezonu açık · bu çek <b>kış çeki</b> olur: yalnızca sezon boyunca geçerli, sezon bitince aktiflikten çıkar.</p>'
+          : field('Son Kullanma Tarihi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${defaultEnd}" class="${INPUT_CLS}" />`)}
+        ${formFooter('Çeki Gönder')}
+      </form>`);
+  }
+
+  function handleSendCheque(form) {
+    if (!requireAdmin()) return;
+    const fd = new FormData(form);
+    const to = fd.getAll('to').filter((id) => getUser(id));
+    const amount = round2(parseFloat(fd.get('amount')));
+    const cost = round2(parseFloat(fd.get('cost')) || 0);
+    const name = String(fd.get('name') || '').trim();
+    if (!to.length) return toast('En az bir kişi seçin.', 'error');
+    if (!(amount > 0 && amount <= 10000)) return toast('Tutar 0\'dan büyük olmalı.', 'error');
+    if (!(cost >= 0)) return toast('Açma bedeli 0 ya da daha büyük olmalı.', 'error');
+    const winter = activeSeason() === 'winter';
+    let expires;
+    if (winter) {
+      // Kış çeki sezon sonunda biter (süresiz sezonda 1 yıl üst sınır; sezon kapanınca zaten aktiflikten çıkar)
+      expires = seasonEndsMs() || Date.now() + 365 * DAY_MS;
+    } else {
+      const key = String(fd.get('endDate') || '');
+      if (!isDateKey(key)) return toast('Geçerli bir son kullanma tarihi seçin.', 'error');
+      const end = dateFromKey(key);
+      end.setHours(23, 59, 59, 0);
+      if (end.getTime() <= Date.now()) return toast('Son kullanma tarihi geçmiş olamaz.', 'error');
+      expires = end.getTime();
+    }
+    const now = isoAt(Date.now());
+    const batch = db.batch();
+    to.forEach((userId) => batch.set(col('giftCheques').doc(), {
+      userId, amount, cost, name, season: winter ? 'winter' : null,
+      createdAt: now, createdBy: state.currentUserId, expiresAt: Timestamp.fromMillis(expires),
+      openedAt: cost > 0 ? null : now, seenAt: null, usedAt: null, rentalId: null
+    }));
+    closeModal();
+    run(batch.commit(), `🎁 ${formatMoney(amount)} hediye çeki ${to.length} kişiye gönderildi${cost > 0 ? ` · ⭐ ${formatPoints(cost)} ile açılır` : ''}`);
+  }
+
+  /* Puanlı çeki aç: çek + puan defteri (harcanan) tek batch'te · kural: harcanan ≤ kazanılan */
+  function openChequeWithPoints(id) {
+    const u = currentUser();
+    const c = giftCheques.find((x) => x.id === id);
+    if (!u || !c || c.userId !== u.id || chequeState(c) !== 'locked') return toast('Bu çek açılamaz.', 'error');
+    if (!hasLedger(u)) return toast('Puanın henüz hesaplanıyor; bir Admin siteyi açınca çeki açabilirsin.', 'info');
+    const pts = userPoints(u.id);
+    if (pts.available < c.cost) return toast(`Yetersiz puan · ${formatPoints(round2(c.cost - pts.available))} eksik.`, 'error');
+    openConfirm({
+      title: `${formatMoney(c.amount)} hediye çeki açılsın mı?`,
+      message: `Puanından <b>${formatPoints(c.cost)}</b> düşecek (kalan ${formatPoints(round2(pts.available - c.cost))}).<br/>Çek açılınca Kiralık ve indirimsiz bir kitabı kiralarken kullanabilirsin.`,
+      confirmLabel: 'Çeki Aç',
+      positive: true,
+      iconKey: 'gifts',
+      onConfirm: () => {
+        closeModal();
+        const me = getUser(u.id);
+        const batch = db.batch();
+        batch.update(col('giftCheques').doc(c.id), { openedAt: isoAt(Date.now()) });
+        batch.update(col('users').doc(u.id), { pointsSpent: round2(me.pointsSpent + c.cost), lastTx: c.id, lastTxType: 'chequeOpen' });
+        run(batch.commit(), `🎁 ${formatMoney(c.amount)} hediye çeki açıldı · kiralarken seçebilirsin`);
+      }
+    });
+  }
+
+  /* Admin: çeki sil · puanla açılmışsa puan defteri yeniden hesaplanır (bedeli geri döner) */
+  function deleteCheque(id) {
+    if (!requireAdmin()) return;
+    const c = giftCheques.find((x) => x.id === id);
+    if (!c) return;
+    const u = getUser(c.userId);
+    openConfirm({
+      title: 'Hediye çeki silinsin mi?',
+      message: `${escapeHTML(u?.name || 'Kullanıcı')} kullanıcısının ${formatMoney(c.amount)} çeki silinecek.${c.openedAt && c.cost > 0 && !c.usedAt ? ` Açmak için harcadığı <b>${formatPoints(c.cost)}</b> geri döner.` : ''} Çekle yapılmış kiralama varsa korunur.`,
+      onConfirm: () => {
+        closeModal();
+        run(commitOps([(bt) => bt.delete(col('giftCheques').doc(c.id)), ...(u ? pointsSyncOps([u.id], { cheques: new Set([c.id]) }) : [])]),
+          'Hediye çeki silindi.', 'info');
+      }
+    });
+  }
+
+  /* Siteyi açınca: yeni gelen (görülmemiş) çekler kutlamalı bir pencerede gösterilir ve görüldü işaretlenir */
+  function showChequePopup() {
+    const u = currentUser();
+    if (!u || state.modalOpen) return;
+    const now = Date.now();
+    const fresh = chequesOf(u.id).filter((c) => !c.seenAt && ['active', 'locked'].includes(chequeState(c, now))
+      && !state.purgePending.has(`chqseen:${c.id}`));
+    if (!fresh.length) return;
+    fresh.forEach((c) => state.purgePending.add(`chqseen:${c.id}`));
+    commitOps(fresh.map((c) => (bt) => bt.update(col('giftCheques').doc(c.id), { seenAt: isoAt(now) }))).catch((e) => console.error(e));
+    openModal(`
+      <div class="relative p-6 text-center bg-gradient-to-br from-emerald-400 via-teal-500 to-sky-500 text-white overflow-hidden">
+        <span class="absolute inset-0 offer-pattern opacity-40"></span>
+        ${confettiHTML(18)}
+        <p class="relative text-4xl">🎁</p>
+        <h3 class="relative text-lg font-black mt-2">${fresh.length > 1 ? `${fresh.length} hediye çeki geldi!` : 'Sana hediye çeki geldi!'}</h3>
+        <p class="relative text-xs text-white/90 mt-1">Kiralık ve indirimsiz bir kitabı kiralarken kullanabilirsin.</p>
+      </div>
+      <div class="p-5 space-y-3">
+        ${fresh.map((c) => chequeCardHTML(c, now)).join('')}
+        <div class="grid grid-cols-2 gap-2.5 pt-1">
+          <button type="button" data-modal-close class="${BTN_SOFT} !py-2.5">Kapat</button>
+          <a href="#gifts" data-modal-close class="${BTN_PRIMARY} !py-2.5">Hediyelerim'e git</a>
+        </div>
+      </div>`);
   }
 
   function deleteShopCoupon(id) {
@@ -429,7 +647,11 @@
   const isOfferActive = (o, now = new Date()) => (isSeasonOffer(o) ? o.season === 'winter' && winterOn() : offerEnd(o) > now);
   const offerBooks = (o) => o.items.map((it) => getBook(it.bookId)).filter(Boolean);
   const offerNormalTotal = (o) => sum(offerBooks(o), (b) => b.price);
-  const offerRate = (o) => { const n = offerNormalTotal(o); return n > 0 ? Math.max(0, Math.round((1 - o.price / n) * 100)) : 0; };
+  /* Paket indirimi Admin'in girdiği yüzdedir (rate) · fiyat kitapların güncel fiyatından hesaplanır
+     (kural aynı hesabı yapar) · yüzdesi olmayan eski tekliflerde kayıtlı fiyat geçerlidir */
+  const hasOfferRate = (o) => Number.isInteger(o?.rate) && o.rate >= 0 && o.rate <= 100;
+  const offerPrice = (o) => (hasOfferRate(o) ? round2(offerNormalTotal(o) * (100 - o.rate) / 100) : o.price);
+  const offerRate = (o) => { if (hasOfferRate(o)) return o.rate; const n = offerNormalTotal(o); return n > 0 ? Math.max(0, Math.round((1 - o.price / n) * 100)) : 0; };
   const offerPurchaseCount = (o) => offerPurchases.filter((p) => p.offerId === o.id).length;
 
   /* Süresi biten teklifler vitrinden direkt silinir (kiralamalar ve istatistikler korunur).
@@ -520,7 +742,7 @@
     if (notRentable) return { ok: false, reason: `"${notRentable.title}" şu an kiralanamaz (${statusView(notRentable).label}).` };
     const rented = bs.find((b) => isBookRented(b) || isBookLocked(b));
     if (rented) return { ok: false, reason: `"${rented.title}" şu an kirada.` };
-    if (user.balance < o.price) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(o.price - user.balance)} eksik.` };
+    if (user.balance < offerPrice(o)) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(offerPrice(o) - user.balance)} eksik.` };
     return { ok: true };
   }
 
@@ -557,7 +779,7 @@
           const rate = offerRate(o);
           const tier = dealTier(rate);
           const sc = offerScheme(rate);
-          const saving = Math.max(0, round2(offerNormalTotal(o) - o.price));
+          const saving = Math.max(0, round2(offerNormalTotal(o) - offerPrice(o)));
           return `
             <article class="showcase-host bg-white rounded-3xl shadow-soft overflow-hidden flex flex-col transition duration-300 hover:shadow-soft-lg hover:-translate-y-1 ${sc.ultra ? 'ultra-glow' : tier ? `deal-${tier}` : ''}">
               <div data-open-offer="${o.id}" class="offer-sheen relative h-60 sm:h-64 ${sc.bg} cursor-pointer overflow-hidden">
@@ -575,7 +797,7 @@
                 ${saving ? `<span class="absolute bottom-3 left-3 z-10 text-[11px] font-extrabold text-emerald-700 bg-white/95 px-2.5 py-1.5 rounded-xl shadow-soft">${formatMoney(saving)} kazanç</span>` : ''}
                 <div class="absolute bottom-3 right-3 z-10 text-right bg-white/95 backdrop-blur rounded-2xl px-3 py-1.5 sm:px-3.5 sm:py-2 shadow-soft-lg">
                   <p class="text-[10px] text-slate-400 line-through leading-none">${formatMoney(offerNormalTotal(o))}</p>
-                  <p class="text-xl sm:text-2xl font-black text-slate-800 leading-tight">${formatMoney(o.price)}</p>
+                  <p class="text-xl sm:text-2xl font-black text-slate-800 leading-tight">${formatMoney(offerPrice(o))}</p>
                 </div>
               </div>
               <div class="p-4 flex-1 flex flex-col">
@@ -609,6 +831,7 @@
     if (purgeExpiredOffers(now)) renderCurrentPage();
     const o = getOffer(offerId);
     if (!o) return toast('Bu teklifin süresi doldu ve silindi.', 'info');
+    if (o.season === 'winter') return openWinterPackDetail(o);
     const u = currentUser();
     const sc = offerScheme(offerRate(o));
     const check = offerRentCheck(o, u);
@@ -656,8 +879,8 @@
           </div>
           <div class="text-right shrink-0">
             <p class="text-[11px] text-slate-400 line-through">${formatMoney(normal)}</p>
-            <p class="text-2xl font-black text-slate-800 leading-none">${formatMoney(o.price)}</p>
-            <p class="text-[10px] font-bold text-emerald-600 mt-1">${formatMoney(Math.max(0, normal - o.price))} kazanç</p>
+            <p class="text-2xl font-black text-slate-800 leading-none">${formatMoney(offerPrice(o))}</p>
+            <p class="text-[10px] font-bold text-emerald-600 mt-1">${formatMoney(Math.max(0, normal - offerPrice(o)))} kazanç</p>
           </div>
         </div>
 
@@ -678,7 +901,7 @@
           ${canRent(u) ? `
             <div class="flex items-center justify-between rounded-xl border border-brand-100 px-3 py-2.5 text-xs">
               <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
-              <span class="font-semibold text-slate-700">${formatMoney(u.balance)}${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - o.price))}</span>` : ''}</span>
+              <span class="font-semibold text-slate-700">${formatMoney(u.balance)}${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-brand-600">${formatMoney(round2(u.balance - offerPrice(o)))}</span>` : ''}</span>
             </div>` : ''}
           ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${escapeHTML(check.reason)}</p>`}
           <div class="grid ${isAdmin() ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'} gap-2.5">
@@ -690,6 +913,107 @@
           </div>
         </div>
       </div>`, 'lg');
+  }
+
+  /* Kış paketi YENİ mi: paketteki kitapların hepsi Kış sezonunda kitaplığa girdiyse */
+  const isWinterNewPack = (o) => o?.season === 'winter' && o.items.length > 0
+    && offerBooks(o).length === o.items.length && offerBooks(o).every(isWinterNewBook);
+
+  /* Kış paketi detayı: gece mavisi karlı sahne, buz kristali indirim rozeti, kar yağışı */
+  function openWinterPackDetail(o) {
+    const now = new Date();
+    const u = currentUser();
+    const check = offerRentCheck(o, u);
+    const normal = offerNormalTotal(o);
+    const price = offerPrice(o);
+    const rate = offerRate(o);
+    const fresh = isWinterNewPack(o);
+    const mult = winterMult();
+    const bookRows = o.items.map((it) => {
+      const b = getBook(it.bookId);
+      if (!b) return '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Silinmiş kitap</li>';
+      return `
+        <li>
+          <button type="button" data-open-book="${b.id}" data-back-offer="${o.id}"
+            class="w-full text-left flex items-center gap-3 p-2.5 rounded-xl border border-sky-100 bg-white hover:border-sky-300 hover:bg-sky-50/50 transition">
+            ${coverHTML(b, 'sm', it.cover)}
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-slate-800 truncate">${escapeHTML(b.title)}${isWinterNewBook(b) ? ' <span class="crystal-chip text-[9px] font-extrabold px-1.5 py-px rounded-full align-middle">❄ YENİ</span>' : ''}</p>
+              <p class="flex items-center gap-1.5 mt-0.5">${typeChip(b.type)}<span class="text-[10px] text-slate-400">${b.rentalDays} gün</span></p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="text-[11px] text-slate-400">${formatMoney(b.price)}</p>
+              <p class="mt-0.5">${statusChipHTML(b, now.getTime())}</p>
+            </div>
+            <span class="text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
+          </button>
+        </li>`;
+    }).join('');
+
+    openModal(`
+      <div class="winter-bg relative h-72 sm:h-80 overflow-hidden">
+        <div class="winter-flakes absolute inset-0 pointer-events-none"></div>
+        <div class="winter-snow absolute inset-0 pointer-events-none" aria-hidden="true">${snowflakesHTML(26)}</div>
+        <div class="winter-cap absolute inset-x-0 top-0 pointer-events-none"></div>
+        <div class="winter-drift absolute inset-x-0 bottom-0 pointer-events-none"></div>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
+        <div class="absolute top-5 left-4 z-10">${iceRateHTML(rate, 'lg', fresh)}</div>
+        <span class="absolute bottom-4 left-4 z-10 text-[11px] font-extrabold ${fresh ? 'crystal-chip' : 'text-sky-950 bg-white'} px-2.5 py-1 rounded-full shadow-soft">${fresh ? '✨ YENİ KIŞ PAKETİ' : '❄️ KIŞ PAKETİ'}</span>
+        <div class="absolute inset-0 flex items-center justify-center pt-6 pb-6">${showcaseHTML(o, 'lg')}</div>
+      </div>
+      <div class="p-5 sm:p-6 space-y-5 bg-gradient-to-b from-sky-50 via-white to-white">
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug">${escapeHTML(o.title)}</h3>
+            <p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(o.description)}</p>
+          </div>
+          <div class="text-right shrink-0">
+            ${normal > price ? `<p class="text-[11px] text-slate-400 line-through">${formatMoney(normal)}</p>` : ''}
+            <p class="text-2xl font-black leading-none bg-gradient-to-br from-sky-600 to-indigo-700 bg-clip-text text-transparent">${price > 0 ? formatMoney(price) : 'BEDAVA'}</p>
+            <p class="text-[10px] font-bold text-sky-600 mt-1">${formatMoney(Math.max(0, round2(normal - price)))} kazanç</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-sky-100 text-sky-700">❄️ Kış boyunca geçerli</span>
+          ${mult > 1 ? `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">⭐ ${mult}x puan</span>` : ''}
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-indigo-50 text-indigo-600">${offerPurchaseCount(o)} kez kiralandı</span>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-500">Tek kiralamada ${offerCountLabel(o)}</span>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-slate-700 mb-2.5">❄️ Paketteki Kitaplar</h4>
+          <ul class="space-y-2">${bookRows}</ul>
+        </div>
+        <div class="space-y-3">
+          ${canRent(u) ? `
+            <div class="flex items-center justify-between rounded-xl border border-sky-100 bg-white px-3 py-2.5 text-xs">
+              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
+              <span class="font-semibold text-slate-700">${formatMoney(u.balance)}${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-sky-600">${formatMoney(round2(u.balance - price))}</span>` : ''}</span>
+            </div>` : ''}
+          ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${escapeHTML(check.reason)}</p>`}
+          <div class="grid ${isAdmin() ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'} gap-2.5">
+            ${isAdmin() ? `
+              <button type="button" data-edit-offer="${o.id}" class="${BTN_SOFT}">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>
+              <button type="button" data-delete-offer="${o.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100">${icon('trash', 'w-3.5 h-3.5')}Sil</button>` : ''}
+            <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>
+            <button type="button" data-rent-offer="${o.id}" ${check.ok ? '' : 'disabled'}
+              class="inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-500 to-indigo-600 hover:shadow-soft-lg transition disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed">❄️ Paketi Kirala</button>
+          </div>
+        </div>
+      </div>`, 'lg');
+  }
+
+  /* Buz kristali indirim rozeti (kış paketleri ve kışın yeni kitapları) · fresh: YENİ kristal görünümü */
+  function iceRateHTML(rate, size = 'md', fresh = false) {
+    const box = size === 'lg' ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-[4.75rem] h-[4.75rem]';
+    const num = size === 'lg' ? 'text-[2rem] sm:text-[2.4rem]' : 'text-[1.6rem]';
+    // Altıgenin içinde yalnızca yüzde (kesilmesin) · etiket altıgenin altında ayrı şerit
+    return `
+      <div class="relative shrink-0 -rotate-[6deg] pb-2">
+        <div class="ice-burst ${fresh ? 'ice-burst-new' : ''} ${box} flex items-center justify-center">
+          <span class="${num} font-black tracking-tight leading-none ${fresh ? 'crystal-text' : 'ice-text'}">%${rate}</span>
+        </div>
+        <span class="ice-ribbon absolute left-1/2 -translate-x-1/2 bottom-0 whitespace-nowrap text-[8px] font-extrabold tracking-[0.16em] px-2 py-0.5 rounded-full">${fresh ? '✨ YENİ' : '❄ İNDİRİM'}</span>
+      </div>`;
   }
 
   /* Teklifi kirala: 1 işlemde paketteki tüm kitaplar kiralanır, bakiyeden paket fiyatı düşer */
@@ -714,8 +1038,8 @@
     // Paket fiyatını kitaplara normal fiyat oranında paylaştır (kuruş farkı son kitaba)
     let allocated = 0;
     const shares = bs.map((b, i) => {
-      if (i === bs.length - 1) return round2(o.price - allocated);
-      const share = round2(o.price * (b.price / normal));
+      if (i === bs.length - 1) return round2(offerPrice(o) - allocated);
+      const share = round2(offerPrice(o) * (b.price / normal));
       allocated = round2(allocated + share);
       return share;
     });
@@ -725,7 +1049,7 @@
     const mult = o.season === 'winter' ? winterMult() : 1;
     batch.set(purchaseRef, {
       offerId: o.id, offerTitle: o.title, userId: u.id,
-      price: o.price, normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now),
+      price: offerPrice(o), normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now),
       ...(mult > 1 ? { pointsMult: mult } : {})
     });
     bs.forEach((b, i) => {
@@ -734,19 +1058,19 @@
       batch.set(ref, {
         bookId: b.id, userId: u.id,
         listPrice: b.price, price: shares[i], discount: rate, discountSource: 'offer',
-        offerId: o.id, purchaseId, offerPrice: o.price,
+        offerId: o.id, purchaseId, offerPrice: offerPrice(o),
         rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
       });
       batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     });
     // Paket indirimi puan kazandırır (normal toplam − paket fiyatı)
-    const gain = purchaseGain({ normalTotal: normal, price: o.price, pointsMult: mult });
+    const gain = purchaseGain({ normalTotal: normal, price: offerPrice(o), pointsMult: mult });
     batch.update(col('users').doc(u.id), {
-      balance: round2(u.balance - o.price), lastTx: purchaseId, lastTxType: 'package',
+      balance: round2(u.balance - offerPrice(o)), lastTx: purchaseId, lastTxType: 'package',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})
     });
 
     closeModal();
-    await run(batch.commit(), `🎁 "${o.title}" kiralandı · ${bs.length} kitap · ${formatMoney(o.price)}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);
+    await run(batch.commit(), `🎁 "${o.title}" kiralandı · ${bs.length} kitap · ${formatMoney(offerPrice(o))}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);
   }
 

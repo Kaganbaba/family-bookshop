@@ -62,7 +62,7 @@
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
   const winterDeals = [];    // winterDeals/{bookId} · Kış Fırsatı (Admin seçer, sezon boyunca): { bookId, rate (1–100), createdAt, createdBy }
   /* settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları
-     'season': { active: 'winter' | null } · 'winter': { multiplier } (Kış Fırsatları puan çarpanı) */
+     'season': { active: 'winter' | null, startedAt (Timestamp), endsAt (Timestamp | null) } · 'winter': { multiplier } (Kış Fırsatları puan çarpanı) */
   const appSettings = [];
   /* feedback/{id} · { userId, type, message, createdAt, status ('open'|'answered'), replies: [{ by, text, at }],
      adminSeen, lastReplyAt, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
@@ -70,6 +70,9 @@
   /* refunds/{rentalId} · iade talebi: { userId, rentalId, bookId, amount, reason, createdAt, status ('pending'|'approved'|'rejected'),
      decidedAt, decidedBy, adminNote, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
   const refunds = [];
+  /* giftCheques/{id} · Admin'in gönderdiği ₺ hediye çeki: { userId, amount, cost (0 = ücretsiz, >0 = puanla açılır), name, season ('winter' | null),
+     createdAt, createdBy, expiresAt, openedAt, seenAt, usedAt, rentalId } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
+  const giftCheques = [];
 
   /* ==========================================================
      1.1) ÖRNEK KATALOG (Admin panelinden bir kez Firestore'a yüklenir)
@@ -181,6 +184,8 @@
     winter: { label: 'Kış', icon: '❄️', desc: 'Kar yağışı, karlı desenler ve Kış Fırsatları vitrini' }
   };
   const WINTER_MULT_MAX = 10; // Kış Fırsatları puan çarpanı üst sınırı
+  const WINTER_NEW_RATE = 30; // Kış sezonunda yeni kitaplar Kış Fırsatları'nda bu indirimle (sezon boyunca)
+  const CHEQUE_DAYS = 30;     // hediye çekinin varsayılan geçerliliği (kış çeki sezon sonuna kadar)
   const DEFAULT_RENTAL_DAYS = 7;
 
   /* Uygulama durumu */
@@ -492,8 +497,8 @@
     }
     // SINIRLI / VIP işareti yalnızca "döneme özel" türdeki kitaplarda
     const marked = book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
-    // Kış Fırsatı'ndaki kitap: Noel şapkası + kar
-    return book && winterDealOf(book) ? winterCoverHTML(marked, size) : marked;
+    // Kış Fırsatı'ndaki kitap (elle eklenen ya da kışın yeni gelen): Noel şapkası + kar
+    return book && winterOfferOf(book) ? winterCoverHTML(marked, size) : marked;
   }
 
   /* Kış Fırsatı kapağı: sol üst köşede Noel şapkası, üstte kar birikintisi */
@@ -699,7 +704,8 @@
 
   /* Sezon teması: <body> sınıfı (season-winter) + ekran boyu kar yağışı katmanı (bir kez kurulur) */
   function applySeasonTheme() {
-    const winter = activeSeason() === 'winter';
+    state.renderedSeason = activeSeason(); // süreli sezon bitince tick() yeniden çizdirir
+    const winter = state.renderedSeason === 'winter';
     document.body.classList.toggle('season-winter', winter);
     let layer = $('#snowLayer');
     if (winter && !layer) {
@@ -850,6 +856,8 @@
     const now = new Date();
     // Tarihi gelen planlı fiyat değişimleri (dakikada bir)
     if (now.getSeconds() === 0) applyDuePrices(now.getTime());
+    // Süreli sezon bittiyse her şey yeniden çizilir (Admin açıksa sezon kayıtları da temizlenir)
+    if (state.renderedSeason !== undefined && activeSeason() !== state.renderedSeason) return scheduleRender();
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
     if (purgeExpiredOffers(now) && state.route === 'offers' && !state.modalOpen) renderCurrentPage();
     if (!['dashboard', 'rentals'].includes(state.route) || document.hidden) return;
