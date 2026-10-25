@@ -27,6 +27,9 @@
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
+  // Tarayıcı önbelleği (IndexedDB): 30 dk içindeki yenilemelerde yalnızca değişen belgeler okunur (kota tasarrufu).
+  // Desteklenmezse (gizli pencere vb.) eskisi gibi önbelleksiz çalışır
+  db.enablePersistence({ synchronizeTabs: true }).catch((e) => console.warn('[persistence]', e.code));
   const FieldValue = firebase.firestore.FieldValue;
   const Timestamp = firebase.firestore.Timestamp;
   const col = (name) => db.collection(name);

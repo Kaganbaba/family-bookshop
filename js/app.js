@@ -261,17 +261,21 @@
   }
 
   /* Tüm koleksiyonları dinler. Bir koleksiyon okunamazsa (örn. kuralı henüz yüklenmemiş)
-     uygulama yine açılır; okunamayanların listesiyle çözülür → oturum asla kapatılmaz. */
+     uygulama yine açılır; okunamayanların listesiyle çözülür → oturum asla kapatılmaz.
+     Tarayıcı önbelleğinden gelen (eski olabilecek) ilk veriyle açılmaz: açılıştaki otomatik yazmalar
+     (applyDuePrices vb.) sunucu verisini görsün diye sunucu onayı beklenir · bağlantı yoksa 10 sn sonra açılır. */
   function startSync() {
     const waiting = new Set(SYNC.map(([name]) => name));
     const failed = [];
     return new Promise((resolve) => {
       const settle = (name) => { if (waiting.delete(name) && !waiting.size) resolve(failed); };
+      setTimeout(() => { if (waiting.size) { waiting.clear(); resolve(failed); } }, 10000);
       SYNC.forEach(([name, arr, query, map]) => {
         const q = query ? query(col(name)) : col(name);
-        unsubscribers.push(q.onSnapshot((snap) => {
+        // includeMetadataChanges: önbellekteki veri sunucuyla aynıysa da "sunucudan geldi" bildirimi alınır
+        unsubscribers.push(q.onSnapshot({ includeMetadataChanges: true }, (snap) => {
           arr.splice(0, arr.length, ...snap.docs.map(map || ((d) => ({ id: d.id, ...d.data() }))));
-          settle(name);
+          if (!snap.metadata.fromCache) settle(name);
           scheduleRender();
         }, (err) => {
           console.error(`[${name}]`, err);
