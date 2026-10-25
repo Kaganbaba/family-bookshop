@@ -70,13 +70,22 @@ service cloud.firestore {
 
       // Admin her şeyi; kullanıcı yalnızca kiralama ödemesi (bakiye düşüşü + lastTx [+ kazanılan puan]),
       // kupon alımı (harcanan puan) veya Profilim'den kendi adını değiştirme
-      allow update: if isAdmin() || (userId == uid() && (isPayment() || isCouponBuy() || isRename()));
+      allow update: if isAdmin() || (userId == uid() && (isPayment() || isCouponBuy() || isRename() || isLogin()));
       allow delete: if isAdmin();
 
       function isRename() {
         let name = request.resource.data.name;
         return changedKeys().hasOnly(['name'])
           && name is string && name.size() >= 2 && name.size() <= 60;
+      }
+
+      // Son giriş: yalnızca lastLoginAt (ISO metni), sunucu saatinden en fazla 10 dk sapabilir
+      function isLogin() {
+        let at = request.resource.data.lastLoginAt;
+        return changedKeys().hasOnly(['lastLoginAt'])
+          && at is string && at.size() == 24
+          && isoToTs(at) > request.time - duration.value(10, 'm')
+          && isoToTs(at) < request.time + duration.value(10, 'm');
       }
 
       // ---- Puan defteri: pointsEarned (kazanılan) · pointsSpent (harcanan) ----

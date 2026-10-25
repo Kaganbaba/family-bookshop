@@ -158,6 +158,7 @@
             <span class="min-w-0 flex-1">
               <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</span>
               <span class="inline-flex mt-0.5 text-[9px] font-semibold px-1.5 py-px rounded-full ${ROLES[u.role]?.chip || ''}">${owner ? '★ ' : ''}${ROLES[u.role]?.label || u.role}</span>
+              <span class="block mt-0.5 text-[9px] text-slate-400 truncate">🕒 Son giriş: ${u.lastLoginAt ? `${relativeDay(u.lastLoginAt)} ${formatTime(u.lastLoginAt)}` : 'Kayıt yok'}</span>
             </span>
             <span class="text-xs font-bold text-emerald-600 tabular-nums shrink-0">${formatMoney(u.balance)}</span>
             <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>

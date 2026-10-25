@@ -315,6 +315,12 @@
     });
   }
 
+  /* Son giriş zamanı (Adminler profil panelindeki Kullanıcı Yönetimi'nde görür) · site her açılışta/yenilemede yazılır */
+  function recordLogin() {
+    col('users').doc(state.currentUserId).update({ lastLoginAt: new Date().toISOString() })
+      .catch((e) => console.error('[lastLoginAt]', e));
+  }
+
   async function handleAuthState(user) {
     stopSync();
     state.ready = false;
@@ -349,6 +355,7 @@
     }
     state.ready = true;
     state.freshAnnIds = new Set();
+    recordLogin();
     hideAuth();
     router();
     renderProfile();
