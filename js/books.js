@@ -206,16 +206,15 @@
     const groups = Object.entries(MUSEUM_TYPES)
       .map(([key, t]) => ({ key, t, list: sorted(museumBooks.filter((b) => museumTypeOf(b) === key)) }))
       .filter((g) => g.list.length);
+    /* Dikey sergi kartı: kapak üstte, altında tür · ad · yıl ve sayfa (açıklama ve dönem kitap penceresinde) */
     const card = (b) => `
       <button type="button" data-open-museum="${b.id}"
-        class="group text-left bg-white rounded-2xl shadow-soft border border-stone-100 p-3.5 flex gap-3.5 hover:shadow-soft-lg hover:-translate-y-0.5 transition">
-        <span class="shrink-0 self-start">${museumCoverHTML(b, 'md')}</span>
-        <span class="min-w-0 flex-1 flex flex-col">
-          <span class="flex items-center gap-1.5 flex-wrap">${museumChip(b)}</span>
-          <span class="text-sm font-bold text-slate-800 leading-snug mt-1.5 line-clamp-2">${escapeHTML(b.title)}</span>
-          <span class="text-[11px] text-slate-400 mt-0.5">${isDateKey(b.releaseDate) ? `${b.releaseDate.slice(0, 4)} · ` : ''}${b.pages ? `${b.pages} sayfa` : ''}${b.place ? ` · ${escapeHTML(b.place)}` : ''}</span>
-          ${b.description ? `<span class="text-[11px] text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">${escapeHTML(b.description)}</span>` : ''}
-          <span class="mt-auto pt-2 text-[10px] font-semibold text-stone-400">🏛️ Sergide · kiralanamaz</span>
+        class="group text-left bg-white rounded-2xl shadow-soft border border-stone-100 p-3 flex flex-col items-center hover:shadow-soft-lg hover:-translate-y-0.5 transition">
+        <span class="py-1">${museumCoverHTML(b, 'md')}</span>
+        <span class="w-full min-w-0 flex flex-col items-center text-center mt-2.5">
+          ${museumChip(b)}
+          <span class="text-xs sm:text-[13px] font-bold text-slate-800 leading-snug mt-1.5 line-clamp-2">${escapeHTML(b.title)}</span>
+          <span class="text-[10px] text-slate-400 mt-0.5">${[isDateKey(b.releaseDate) ? b.releaseDate.slice(0, 4) : '', b.pages ? `${b.pages} sayfa` : ''].filter(Boolean).join(' · ')}</span>
         </span>
       </button>`;
     return intro + groups.map(({ t, list }) => `
@@ -225,7 +224,7 @@
           <h2 class="text-sm font-bold text-slate-800">${t.label}</h2>
           <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-500">${list.length} kitap</span>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">${list.map(card).join('')}</div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">${list.map(card).join('')}</div>
       </section>`).join('');
   }
 
@@ -259,7 +258,16 @@
         </div>
       </div>
       <div class="p-5 sm:p-6 pt-4 space-y-4">
-        ${b.description ? `<p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line bg-stone-50 rounded-2xl px-4 py-3">${escapeHTML(b.description)}</p>` : ''}
+        ${b.period ? `
+          <div class="rounded-2xl px-4 py-3 ${museumStyle(b).chip}">
+            <p class="text-[10px] font-semibold opacity-70">Okunduğu Dönem</p>
+            <p class="text-xs font-semibold mt-0.5">${escapeHTML(b.period)}</p>
+          </div>` : ''}
+        ${b.description ? `
+          <div class="bg-stone-50 rounded-2xl px-4 py-3">
+            <p class="text-[10px] text-stone-400">Açıklama</p>
+            <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line mt-0.5">${escapeHTML(b.description)}</p>
+          </div>` : ''}
         <div class="grid grid-cols-2 gap-2.5">
           ${info('Türü', `<span class="inline-flex items-center gap-1.5">${museumDot(museumStyle(b))}${museumStyle(b).label}</span>`)}
           ${info('Son Fiyatı', hasPrice(b) ? formatMoney(b.price) : '—')}
@@ -267,7 +275,6 @@
           ${info('Kira Süresi', b.rentalDays ? `${b.rentalDays} gün` : '—')}
           ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'))}
           ${info('Çıkış Tarihi', isDateKey(b.releaseDate) ? formatLongDate(dateFromKey(b.releaseDate)) : '—')}
-          ${b.period ? info('Okunduğu Dönem', escapeHTML(b.period)) : ''}
           ${info('Yazar', escapeHTML(authorName(b)))}
           ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`)}
           ${info('Müzeye Giriş', b.museumAt ? formatDate(b.museumAt) : '—')}
