@@ -542,7 +542,7 @@
     run(done, editId ? 'Haber güncellendi.' : 'Duyuru yayınlandı 📣');
   }
 
-  /* Admin: haberleri toplu sil · tür (Tümü / Duyuru / İndirim / Bilgilendirme / Etkinlik) + zaman (tümü / bugün) */
+  /* Admin: haberleri toplu sil · tür (Tümü / Duyuru / Yeni Kitap / İndirim / Bilgilendirme) + zaman (tümü / bugün) */
   const bulkNewsTargets = (cat, scope) => {
     const today = localDateKey();
     return announcements.filter((a) => a.type === 'news'
@@ -900,6 +900,7 @@
     const b = museumBooks.find((x) => x.id === Number(bookId));
     if (!b) return;
     if (!canLeaveMuseum(b)) return toast(`"${museumStyle(b).label}" türü kategorilerde yok; bu kitap Müze'den çıkarılamaz.`, 'error');
+    if (isOnExhibit(b) || isBookRented(b)) return toast('Sergideki ya da kiradaki kitap Müze\'den çıkarılamaz.', 'error');
     const type = getType(museumTypeOf(b));
     openConfirm({
       title: 'Müze\'den çıkarılsın mı?',
@@ -911,6 +912,105 @@
         closeModal();
         state.bookTab = type.id;
         run(commitOps(leaveMuseumOps(b)), `↩️ "${b.title}" Müze'den çıkarıldı · ${type.label} · Kira dışı.`);
+      }
+    });
+  }
+
+  /* --- Müze Vitrini: sergiye koy / sergiyi düzenle (fiyat, kira süresi, bitiş tarihi + saati) ---
+     bookId verilmezse sergilenebilir ve sergide olmayan Müze kitapları arasından seçilir · paket olarak eklenemez */
+  function openExhibitModal(bookId = null) {
+    if (!requireAdmin()) return;
+    if (!showcaseOn('museum')) return toast('Müze Vitrini kapalı · önce Vitrin Ayarları\'ndan aç.', 'info');
+    const fixed = bookId ? museumBooks.find((x) => x.id === Number(bookId)) : null;
+    if (bookId && !fixed) return;
+    if (fixed && !isExhibitable(fixed)) return toast('Bu kitap sergilenemez olarak ayarlı.', 'error');
+    const pickable = museumBooks.filter((b) => isExhibitable(b) && !isOnExhibit(b)).sort((a, b) => a.title.localeCompare(b.title, 'tr'));
+    if (!fixed && !pickable.length) return toast('Sergilenebilir ve sergide olmayan Müze kitabı yok.', 'info');
+    const b = fixed || pickable[0];
+    const editing = !!fixed && isOnExhibit(fixed);
+    const end = editing ? new Date(exhibitEndMs(fixed)) : new Date(Date.now() + 7 * DAY_MS);
+    const pad = (n) => String(n).padStart(2, '0');
+    openModal(`
+      ${modalHeader(editing ? 'Sergiyi Düzenle 🏛️' : 'Müze Vitrini\'nde Sergile 🏛️', 'Sergi süresince bu fiyatla kiralanabilir · bitince kitap Müze\'de kalır.', 'books', 'bg-amber-50 text-amber-700')}
+      <form data-form="saveExhibit" data-edit-id="${fixed ? fixed.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
+        ${fixed
+          ? `<div class="flex items-center gap-3 p-3 rounded-2xl bg-stone-50 border border-stone-100">
+              ${museumCoverHTML(fixed, 'md')}
+              <div class="min-w-0">
+                <p class="text-xs font-bold text-slate-800 truncate">${escapeHTML(fixed.title)}</p>
+                <p class="text-[11px] text-slate-400">${escapeHTML(museumStyle(fixed).label)}${hasPrice(fixed) ? ` · son fiyatı ${formatMoney(fixed.price)}` : ''}</p>
+              </div>
+            </div>`
+          : field('Kitap', `<select name="bookId" class="${INPUT_CLS}">
+              ${pickable.map((x) => `<option value="${x.id}">${escapeHTML(x.title)} · ${escapeHTML(museumStyle(x).label)}${hasPrice(x) ? ` · ${formatMoney(x.price)}` : ''}</option>`).join('')}
+            </select>`, 'Yalnızca sergilenebilir ve şu an sergide olmayan Müze kitapları')}
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Sergi Fiyatı (₺)', `<input name="price" type="number" min="0.01" step="0.01" required value="${editing ? fixed.exhibitPrice : hasPrice(b) ? b.price : ''}" class="${INPUT_CLS}" />`)}
+          ${field('Kira Süresi (gün)', `<input name="rentalDays" type="number" min="1" max="90" step="1" required value="${b.rentalDays || DEFAULT_RENTAL_DAYS}" class="${INPUT_CLS}" />`)}
+        </div>
+        <div class="grid grid-cols-[1fr_auto] gap-3">
+          ${field('Sergi Bitişi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${localDateKey(end)}" class="${INPUT_CLS} min-w-0" />`)}
+          ${field('Saat', `<input name="endTime" type="time" required value="${editing ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
+        </div>
+        ${editing ? '' : announceCheckHTML('ex-announce', 'Duyuru')}
+        ${formFooter(editing ? 'Değişiklikleri Kaydet' : 'Sergiye Koy')}
+      </form>`);
+  }
+
+  function handleSaveExhibit(fd, editId) {
+    if (!requireAdmin()) return;
+    const b = museumBooks.find((x) => x.id === Number(editId || fd.bookId));
+    if (!b) return toast('Kitap bulunamadı.', 'error');
+    if (!isExhibitable(b)) return toast('Bu kitap sergilenemez olarak ayarlı.', 'error');
+    if (!showcaseOn('museum')) return toast('Müze Vitrini kapalı.', 'error');
+    const price = round2(parseFloat(fd.price));
+    const rentalDays = parseInt(fd.rentalDays, 10);
+    if (!(price > 0)) return toast('Geçerli bir sergi fiyatı girin.', 'error');
+    if (!(rentalDays >= 1 && rentalDays <= 90)) return toast('Kira süresi 1–90 gün olmalı.', 'error');
+    if (!isDateKey(fd.endDate) || !isTimeKey(fd.endTime)) return toast('Geçerli bir bitiş tarihi ve saati seçin.', 'error');
+    const end = dateFromKey(fd.endDate);
+    end.setHours(...fd.endTime.split(':').map(Number), 0, 0);
+    if (end.getTime() <= Date.now()) return toast('Sergi bitişi geçmiş olamaz.', 'error');
+    const endsAt = Timestamp.fromDate(end);
+    const editing = isOnExhibit(b);
+    const batch = db.batch();
+    let exhibitId = b.exhibitId;
+    if (editing) {
+      batch.update(col('museumExhibits').doc(exhibitId), { price, rentalDays, endsAt });
+    } else {
+      // Süresi geçmiş ama henüz kapatılmamış eski sergi varsa geçmişe bitiş yazılır
+      if (b.exhibitId) endExhibitOps(b, isoAt(Math.min(Date.now(), exhibitEndMs(b) ?? Date.now()))).forEach((op) => op(batch));
+      const ref = col('museumExhibits').doc();
+      exhibitId = ref.id;
+      batch.set(ref, { bookId: b.id, price, rentalDays, startAt: isoAt(Date.now()), endsAt, endedAt: null, createdBy: state.currentUserId });
+    }
+    batch.update(bookRef(b.id), { exhibitId, exhibitPrice: price, exhibitEndsAt: endsAt, rentalDays });
+    const announce = !editing && fd.announce === 'on';
+    if (announce) {
+      batch.set(col('announcements').doc(), {
+        type: 'news', category: 'Duyuru',
+        title: `Müze Vitrini: "${b.title}" sergide 🏛️`,
+        body: `🏛️ Müzemizden "${b.title}" kısa bir süreliğine Müze Vitrini'nde sergileniyor!\n💰 ${formatMoney(price)} · ⏳ ${rentalDays} gün kiralama\n📅 Son: ${formatDate(end.toISOString(), true)}\nKaçırmadan ana sayfadaki Müze Vitrini'nden kiralayabilirsin.`,
+        bookId: null, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
+      });
+    }
+    closeModal();
+    if (state.route !== 'dashboard' && !editing) location.hash = '#dashboard';
+    run(batch.commit(), editing ? `🏛️ "${b.title}" sergisi güncellendi.` : `🏛️ "${b.title}" Müze Vitrini'nde sergide${announce ? ' · Duyurular\'a haber düştü 📣' : ''}`);
+  }
+
+  /* Sergiden kaldır: kitap Müze'de kalır, sergi geçmişine bitiş anı yazılır (önceki kiralamalar korunur) */
+  function endExhibit(bookId) {
+    if (!requireAdmin()) return;
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    if (!b?.exhibitId) return;
+    openConfirm({
+      title: 'Sergiden kaldırılsın mı?',
+      message: `"${escapeHTML(b.title)}" Müze Vitrini'nden kalkar, artık kiralanamaz. <b>Kitap Müze'de kalır</b>; sergi geçmişine eklenir. Süren kiralama varsa süresi dolana kadar devam eder.`,
+      confirmLabel: 'Sergiden Kaldır',
+      onConfirm: () => {
+        closeModal();
+        run(commitOps(endExhibitOps(b)), `🏛️ "${b.title}" sergiden kaldırıldı.`, 'info');
       }
     });
   }
@@ -956,6 +1056,11 @@
           ${field('Müzeye Giriş', `<input name="museumAt" type="date" max="${localDateKey()}" value="${b.museumAt ? localDateKey(new Date(b.museumAt)) : ''}" class="${INPUT_CLS}" />`, 'Boşsa gösterilmez · ileri tarih olamaz')}
         </div>
         ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed">${escapeHTML(b.description || '')}</textarea>`)}
+        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-stone-100 cursor-pointer hover:bg-stone-50 transition">
+          <input type="checkbox" name="exhibitable" ${isExhibitable(b) ? 'checked' : ''} class="mt-0.5 rounded border-slate-300 text-amber-600" />
+          <span class="text-xs text-slate-600 leading-relaxed"><b class="text-slate-700">🏛️ Sergilenebilir</b><br>
+            <span class="text-[11px] text-slate-400">Kapalıysa kitap Müze'de kalır ama Müze Vitrini'ne asla konamaz${isOnExhibit(b) ? ' · şu anki sergisi de hemen biter' : ''}.</span></span>
+        </label>
         ${formFooter('Değişiklikleri Kaydet')}
       </form>`);
   }
@@ -980,16 +1085,20 @@
       museumType: isMuseumTypeKey(fd.museumType) ? fd.museumType : museumTypeOf(b),
       price: pos(fd.price),
       pages: pos(fd.pages, true),
-      rentalDays: pos(fd.rentalDays, true),
+      // sergideki kitabın kira süresi boşaltılamaz (kiralama kuralı buna göre süre denetler)
+      rentalDays: pos(fd.rentalDays, true) || (b.exhibitId ? b.rentalDays || DEFAULT_RENTAL_DAYS : null),
       place: (fd.place || '').trim(),
       releaseDate: isDateKey(fd.releaseDate) ? fd.releaseDate : null,
       // boş bırakılan dönem kayıttan tamamen silinir
       period: (fd.period || '').trim() || FieldValue.delete(),
       description: (fd.description || '').trim(),
-      cover: state.bookDraftCover || ''
+      cover: state.bookDraftCover || '',
+      exhibitable: fd.exhibitable === 'on'
     };
+    // Sergilenemez yapılırsa süren sergi hemen biter
+    const ops = [(bt) => bt.update(bookRef(b.id), data), ...(!data.exhibitable && b.exhibitId ? endExhibitOps(b) : [])];
     closeModal();
-    run(bookRef(b.id).update(data), `🏛️ "${title}" güncellendi.`).then((ok) => ok && openMuseumModal(b.id));
+    run(commitOps(ops), `🏛️ "${title}" güncellendi.`).then((ok) => ok && openMuseumModal(b.id));
   }
 
   function runQuick(action) {

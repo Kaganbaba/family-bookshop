@@ -209,7 +209,7 @@
     const pad = (n) => String(n).padStart(2, '0');
     openModal(`
       ${modalHeader(s ? 'Kuponu Düzenle ✏️' : 'Mağazaya Kupon Ekle 🎟️',
-        s ? 'Değişiklik bundan sonra alınacak kuponlara uygulanır · önceden alınanlar aynen kalır.' : 'Kullanıcılar puanlarıyla alır · istersen Duyurulara "Etkinlik" haberi olarak at.', 'gifts', 'bg-amber-50 text-amber-600')}
+        s ? 'Değişiklik bundan sonra alınacak kuponlara uygulanır · önceden alınanlar aynen kalır.' : 'Kullanıcılar puanlarıyla alır · istersen Duyurulara "Duyuru" haberi olarak at.', 'gifts', 'bg-amber-50 text-amber-600')}
       <form data-form="saveShopCoupon" data-edit-id="${s ? s.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
         ${field('Kupon Türü', `<select name="type" id="sc-type" class="${INPUT_CLS}">
           ${Object.entries(COUPON_TYPES).map(([k, t]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${t.label}</option>`).join('')}
@@ -229,7 +229,7 @@
         </div>
         <div id="sc-preview" class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2"></div>
         <p class="text-[10px] text-slate-400">Alınan her kupon ${COUPON_DAYS} gün geçerlidir; yalnızca Kiralık ve indirimsiz kitaplara uygulanır.</p>
-        ${s ? '' : announceCheckHTML('sc-announce', 'Etkinlik')}
+        ${s ? '' : announceCheckHTML('sc-announce', 'Duyuru')}
         ${formFooter(s ? 'Değişiklikleri Kaydet' : 'Mağazaya Ekle')}
       </form>`);
     updateShopCouponForm();
@@ -295,9 +295,9 @@
 
     const batch = db.batch();
     batch.set(col('couponShop').doc(), { ...s, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
-    // İşaretliyse "Etkinlik" duyurusu
+    // İşaretliyse "Duyuru" haberi
     if (fd.announce === 'on') batch.set(col('announcements').doc(), {
-      type: 'news', category: 'Etkinlik',
+      type: 'news', category: 'Duyuru',
       title: `Yeni kupon: ${couponBadge(s)}${name ? ` · ${name}` : ''} 🎟️`,
       body: `Hediyelerim mağazasına yeni kupon geldi! 🎉\n🎟️ ${couponTitle(s)}\n⭐ Bedeli: ${formatPoints(cost)} · alındıktan sonra ${COUPON_DAYS} gün geçerli`
         + (type === 'bogo' ? `\n📚 ${bogoText(s)}!` : '')
@@ -306,7 +306,7 @@
       bookId: null, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
     });
     closeModal();
-    run(batch.commit(), `🎟️ ${couponBadge(s)} kuponu mağazaya eklendi${fd.announce === 'on' ? ' · Duyurular\'a Etkinlik haberi düştü 📣' : ''}`);
+    run(batch.commit(), `🎟️ ${couponBadge(s)} kuponu mağazaya eklendi${fd.announce === 'on' ? ' · Duyurular\'a haber düştü 📣' : ''}`);
   }
 
   /* --- Hediye çekleri (₺) · Admin gönderir, sahibi Kiralık + indirimsiz kitabı kiralarken seçer --- */

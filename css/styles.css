@@ -214,3 +214,117 @@
 
     /* Müze · Dönemsel türü: mavi → mor → sarı → yeşil (kapak, rozet, başlık simgesi) */
     .museum-rainbow { background-image: linear-gradient(135deg, #38bdf8, #8b5cf6 35%, #facc15 68%, #22c55e) !important; }
+
+    /* ===== Müze Vitrini · loş salon, camekân (kadife zemin, spot ışık, cam yansıması), ahşap kaide, pirinç etiket ===== */
+    .museum-hall {
+      background:
+        radial-gradient(ellipse 70% 45% at 50% -8%, rgba(255, 228, 181, .22), transparent 70%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 2px, transparent 2px 120px),
+        linear-gradient(180deg, #292524 0%, #1c1917 55%, #0c0a09 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 20px 50px -20px rgba(12, 10, 9, .8);
+    }
+    /* Tavandaki spot lambaları: her camekânın üstüne düşen sıcak ışık */
+    .museum-hall-lamps {
+      height: 60%;
+      background: radial-gradient(ellipse 12% 100% at 12% 0, rgba(255, 236, 200, .10), transparent),
+        radial-gradient(ellipse 12% 100% at 37% 0, rgba(255, 236, 200, .10), transparent),
+        radial-gradient(ellipse 12% 100% at 63% 0, rgba(255, 236, 200, .10), transparent),
+        radial-gradient(ellipse 12% 100% at 88% 0, rgba(255, 236, 200, .10), transparent);
+    }
+    .museum-gold { background: linear-gradient(180deg, #fde68a, #d4a24c 55%, #a16207); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    .museum-case { position: relative; perspective: 900px; transition: transform .4s ease; }
+    .museum-case:hover, .museum-case:focus-visible { transform: translateY(-3px); }
+    /* Cam kutu: ince metal çerçeve, içe doğru derinlik gölgesi */
+    .mc-glass {
+      position: relative; height: 13.5rem; border-radius: 6px 6px 2px 2px; overflow: hidden;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02));
+      border: 1px solid rgba(255, 255, 255, .28);
+      box-shadow: inset 0 0 0 3px rgba(20, 16, 12, .55), inset 0 0 0 4px rgba(214, 180, 110, .35),
+        inset 0 40px 50px -30px rgba(0, 0, 0, .75), 0 -6px 30px -10px rgba(255, 228, 181, .15);
+    }
+    @media (min-width: 640px) { .mc-glass { height: 15rem; } }
+    /* Cam kapağın üst kenarı (pirinç çıta) */
+    .mc-glass::before {
+      content: ''; position: absolute; inset: 0 0 auto 0; height: 7px; z-index: 5;
+      background: linear-gradient(180deg, #f3d48a, #a97a2c 60%, #6b4a17);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, .5);
+    }
+    /* Arka duvar: koyu bordo kadife (ince doku) */
+    .mc-back {
+      position: absolute; inset: 7px 5px 0 5px;
+      background:
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse 80% 70% at 50% 35%, #5b1d26, #2b0d13 75%, #1a070b);
+      box-shadow: inset 0 0 35px rgba(0, 0, 0, .75);
+    }
+    /* Taban: kadife zemin + eserin gölgesi */
+    .mc-floor {
+      position: absolute; left: 5px; right: 5px; bottom: 0; height: 24%;
+      background: linear-gradient(180deg, #3a1118, #22080d);
+      transform-origin: bottom; transform: perspective(300px) rotateX(48deg);
+      box-shadow: inset 0 6px 12px rgba(0, 0, 0, .6);
+    }
+    .mc-floor::after {
+      content: ''; position: absolute; left: 50%; top: 18%; width: 62%; height: 46%; transform: translateX(-50%);
+      background: radial-gradient(ellipse at center, rgba(0, 0, 0, .7), transparent 70%);
+    }
+    /* Tepeden düşen spot ışık konisi */
+    .mc-light {
+      position: absolute; inset: 0; pointer-events: none; z-index: 2; mix-blend-mode: screen;
+      background: radial-gradient(ellipse 55% 75% at 50% 0%, rgba(255, 236, 200, .38), rgba(255, 236, 200, .08) 55%, transparent 75%);
+    }
+    /* Eser (kapak): hafif eğik, havada asılı, derin gölgeli */
+    .mc-specimen {
+      position: absolute; left: 50%; top: 47%; z-index: 3;
+      transform: translate(-50%, -50%) rotateX(6deg) rotateZ(-1.5deg);
+      filter: drop-shadow(0 16px 14px rgba(0, 0, 0, .65)) drop-shadow(0 0 1px rgba(255, 236, 200, .4));
+      transition: transform .6s cubic-bezier(.2, .8, .2, 1);
+    }
+    .museum-case:hover .mc-specimen { transform: translate(-50%, -53%) rotateX(0) rotateZ(0) scale(1.05); }
+    /* Envanter etiketi: iğneyle tutturulmuş krem kâğıt */
+    .mc-tag {
+      position: absolute; right: 9px; bottom: 14px; z-index: 4; transform: rotate(-5deg);
+      font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em;
+      color: #44403c; background: #f5efe0; padding: 3px 6px 3px 9px; border-radius: 1px;
+      box-shadow: 0 2px 3px rgba(0, 0, 0, .5);
+    }
+    .mc-tag::before { content: ''; position: absolute; left: 3px; top: 50%; width: 3px; height: 3px; margin-top: -1.5px; border-radius: 50%; background: #b91c1c; }
+    .mc-rented {
+      position: absolute; left: 9px; top: 14px; z-index: 4; font-size: 9px; font-weight: 800; letter-spacing: .08em;
+      color: #fef3c7; background: rgba(120, 53, 15, .85); padding: 3px 7px; border-radius: 999px; text-transform: uppercase;
+    }
+    /* Cam yansıması: çapraz parlama + kenar ışıltısı */
+    .mc-shine {
+      position: absolute; inset: 0; z-index: 6; pointer-events: none;
+      background:
+        linear-gradient(118deg, transparent 22%, rgba(255, 255, 255, .16) 30%, rgba(255, 255, 255, .04) 37%, transparent 40%),
+        linear-gradient(118deg, transparent 58%, rgba(255, 255, 255, .07) 62%, transparent 66%),
+        linear-gradient(90deg, rgba(255, 255, 255, .12), transparent 6%, transparent 94%, rgba(255, 255, 255, .08));
+      transition: background-position .8s ease; background-size: 200% 100%, 200% 100%, 100% 100%; background-position: 100% 0, 100% 0, 0 0;
+    }
+    .museum-case:hover .mc-shine { background-position: 60% 0, 70% 0, 0 0; }
+    /* Ahşap kaide (ceviz damarlı) */
+    .mc-plinth {
+      position: relative; padding: 10px 9px 11px; border-radius: 2px 2px 7px 7px;
+      background:
+        repeating-linear-gradient(92deg, rgba(0, 0, 0, .09) 0 2px, transparent 2px 7px, rgba(255, 255, 255, .03) 7px 8px, transparent 8px 13px),
+        linear-gradient(180deg, #7a4a2a, #4a2b16 70%, #33200f);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .14), inset 0 -3px 0 rgba(0, 0, 0, .3), 0 16px 22px -12px rgba(0, 0, 0, .95);
+    }
+    /* Pirinç etiket (köşelerde vida) */
+    .mc-plaque {
+      position: relative; padding: 6px 10px 6px; border-radius: 3px; color: #3b2a0b;
+      background: linear-gradient(135deg, #f7e1a1, #c9993d 42%, #f3d68e 62%, #b7862f);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65), inset 0 -1px 0 rgba(0, 0, 0, .25), 0 2px 4px rgba(0, 0, 0, .45);
+    }
+    .mc-plaque::before, .mc-plaque::after {
+      content: ''; position: absolute; top: 4px; width: 4px; height: 4px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff7d6, #8a6420); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .3);
+    }
+    .mc-plaque::before { left: 4px; } .mc-plaque::after { right: 4px; }
+    .mc-plaque-title { font: italic 800 12px/1.25 'Playfair Display', Georgia, serif; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .mc-plaque-sub { font-size: 9px; font-weight: 600; text-align: center; opacity: .75; margin-top: 1px; letter-spacing: .04em; }
+    .mc-plaque-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(59, 42, 11, .25); font-size: 9.5px; font-weight: 700; }
+    .mc-plaque-row b { font-size: 13px; font-weight: 900; }
+    @media (prefers-reduced-motion: reduce) { .museum-case, .mc-specimen, .mc-shine { transition: none; } }

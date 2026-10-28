@@ -9,6 +9,7 @@
     renderShowcaseSettings();
     renderNewBooks(now);
     renderVitrine(now);
+    renderMuseumShowcase(now);
     renderDeals(now);
     renderActiveRentals(now);
     renderExpiredRentals(now);
@@ -57,7 +58,8 @@
   const SHOWCASES = [
     { key: 'vitrine',  icon: '🏷️', label: 'Özel Fırsatlar',  desc: "Admin'in seçtiği kitap + yüzde indirimleri" },
     { key: 'deals',    icon: '🔥', label: 'Günün İndirimi',  desc: `Her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da değişen 3'lü seri indirimi` },
-    { key: 'newBooks', icon: '★',  label: 'Yeni Kitap',      desc: `Yeni çıkan kitaplara ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim` }
+    { key: 'newBooks', icon: '★',  label: 'Yeni Kitap',      desc: `Yeni çıkan kitaplara ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim` },
+    { key: 'museum',   icon: '🏛️', label: 'Müze Vitrini',    desc: 'Müze\'deki kitaplar belirlenen süre ve fiyatla sergilenip kiralanır' }
   ];
 
   /* Ana sayfada yalnızca küçük bir buton (kapalı vitrin sayısıyla) · ayarlar pencerede */
@@ -287,6 +289,64 @@
             ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`
             : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz özel fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Adminler görür.</span></p>`}
         </div>
+      </div>`;
+  }
+
+  /* --- 8.1.8 Müze Vitrini · Müze'deki kitaplar camekânda sergilenir, sergi süresince kiralanabilir ---
+     Loş müze salonu · kadife zeminli cam kutu, tepeden spot ışık, cam yansıması, ahşap kaide üstünde pirinç etiket */
+  function renderMuseumShowcase(now) {
+    const box = $('#museumShowcaseSection');
+    const admin = isAdmin();
+    const list = exhibitBooks(now.getTime());
+    if (!showcaseOn('museum') || (!list.length && !admin)) { box.innerHTML = ''; return; }
+    const canAdd = admin && museumBooks.some((b) => isExhibitable(b) && !isOnExhibit(b, now.getTime()));
+
+    const caseHTML = (b) => {
+      const rented = isBookRented(b, now.getTime());
+      const end = exhibitEndMs(b);
+      return `
+        <div data-open-museum="${b.id}" role="button" tabindex="0" class="museum-case group cursor-pointer focus:outline-none">
+          <div class="mc-glass">
+            <div class="mc-back"></div>
+            <div class="mc-floor"></div>
+            <div class="mc-light"></div>
+            <div class="mc-specimen">${museumCoverHTML(b, 'case')}</div>
+            <span class="mc-tag">No. ${String(b.id).padStart(3, '0')}</span>
+            ${rented ? '<span class="mc-rented">Ödünç verildi</span>' : ''}
+            <div class="mc-shine"></div>
+          </div>
+          <div class="mc-plinth">
+            <div class="mc-plaque">
+              <p class="mc-plaque-title">${escapeHTML(b.title)}</p>
+              <p class="mc-plaque-sub">${escapeHTML(museumStyle(b).label)}${isDateKey(b.releaseDate) ? ` · ${b.releaseDate.slice(0, 4)}` : ''}</p>
+              <div class="mc-plaque-row">
+                <span>⏳ ${formatRemaining(end - now.getTime())}</span>
+                <b>${formatMoney(b.exhibitPrice)}</b>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    };
+
+    box.innerHTML = `
+      <div class="museum-hall relative rounded-3xl overflow-hidden shadow-soft-lg mb-6 p-4 sm:p-6">
+        <div class="museum-hall-lamps absolute inset-x-0 top-0 pointer-events-none"></div>
+        <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div class="flex items-center gap-3">
+            <span class="w-11 h-11 rounded-full bg-gradient-to-br from-amber-200 via-amber-500 to-amber-800 p-[1.5px] shadow-soft shrink-0">
+              <span class="w-full h-full rounded-full bg-stone-900 flex items-center justify-center text-lg">🏛️</span>
+            </span>
+            <div>
+              <h2 class="museum-gold text-lg sm:text-xl font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Müze Vitrini</h2>
+              <p class="text-[11px] text-stone-400">Müzemizden seçilen eserler kısa bir süreliğine sergide · sergi bitince yeniden Müze'ye döner</p>
+            </div>
+          </div>
+          ${admin ? `<button type="button" data-add-exhibit ${canAdd ? '' : 'disabled'}
+            class="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-bold text-stone-900 bg-gradient-to-r from-amber-200 to-amber-400 hover:from-amber-100 hover:to-amber-300 shadow-soft transition disabled:opacity-40 disabled:cursor-not-allowed">${icon('plus', 'w-3.5 h-3.5')}Sergiye Koy</button>` : ''}
+        </div>
+        ${list.length
+          ? `<div class="relative grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-7 sm:gap-x-6">${list.map(caseHTML).join('')}</div>`
+          : `<p class="relative text-center text-xs text-stone-400 py-8 border border-dashed border-amber-200/20 rounded-2xl">Şu an sergide eser yok · <b class="text-amber-300">Sergiye Koy</b> ile Müze'den sergilenebilir bir kitap seçebilirsin.<br/><span class="text-[10px] text-stone-500">Bu boş alanı yalnızca Adminler görür.</span></p>`}
       </div>`;
   }
 
@@ -533,6 +593,7 @@
       deal:   { label: '🔥 Günün İndirimi',      tone: 'bg-rose-50 text-rose-600' },
       new:    { label: '⭐ Yeni Kitap İndirimi', tone: 'bg-amber-50 text-amber-700' },
       custom: { label: '🏷️ Özel Fırsat',         tone: 'bg-indigo-50 text-indigo-600' },
+      museum: { label: '🏛️ Müze Vitrini',         tone: 'bg-amber-50 text-amber-700' },
       winter: { label: '❄️ Kış Fırsatı',          tone: 'bg-sky-50 text-sky-600' },
       winterNew: { label: '✨ Kış · Yeni Kitap',  tone: 'bg-cyan-50 text-cyan-700' },
       cheque: { label: '🎁 Hediye çekiyle',       tone: 'bg-emerald-50 text-emerald-600' }

@@ -412,8 +412,8 @@
     if (!r || r.userId !== state.currentUserId) return 'Yalnızca kendi kiralamanı iade edebilirsin.';
     if (!isActiveRental(r, now.getTime()) || r.cancelledAt) return 'Bu kiralama artık aktif değil.';
     if (r.purchaseId || r.offerId) return 'Özel teklifle alınan kitaplar iade edilemez.';
+    if (r.discountSource === 'museum' || getBook(r.bookId)?.museum) return '🏛️ Müze\'deki kitaplar iade edilemez.';
     if (r.couponId || r.discountSource || r.discount > 0) return 'İndirimle alınan kitaplar iade edilemez.';
-    if (getBook(r.bookId)?.museum) return '🏛️ Müze\'deki kitaplar iade edilemez.';
     if (!sameLocalDay(r.rentedAt, now)) return 'İade yalnızca kiralandığı gün (gece 00:00\'a kadar) yapılabilir.';
     return '';
   }

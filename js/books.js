@@ -192,13 +192,23 @@
     return typeTabBar('data-book-tab', state.bookTab, (k) => shown.filter((b) => b.type === k).length, 'mb-5', false, museumTab);
   }
 
+  /* Sergi durumu (herkes görür): yeşil = Sergilenebilir (sergide olsa da) · kırmızı = Sergilenemez
+     Kartta yalnızca sol üstte nokta · kitap penceresinde yazılı rozet */
+  const exhibitStateDot = (b) => `<span class="block w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-soft ${isExhibitable(b) ? 'bg-emerald-500' : 'bg-rose-500'}"
+    title="${isExhibitable(b) ? 'Sergilenebilir' : 'Sergilenemez'}" aria-label="${isExhibitable(b) ? 'Sergilenebilir' : 'Sergilenemez'}"></span>`;
+  function exhibitStateChip(b) {
+    return isExhibitable(b)
+      ? '<span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Sergilenebilir</span>'
+      : '<span class="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Sergilenemez</span>';
+  }
+
   function museumHTML() {
     const intro = `
       <div class="flex items-start gap-3 bg-gradient-to-br from-amber-50 via-white to-stone-50 border border-amber-100 rounded-2xl px-4 py-3.5 mb-5">
         <span class="text-2xl leading-none">🏛️</span>
         <div class="text-xs text-stone-600 leading-relaxed">
           <b class="text-stone-800">Müze</b> · Önceden yazılan ama artık kitaplıkta olmayan kitaplarımız burada sergilenir.
-          Bilgilerine bakabilirsin; <b>kiralanamazlar</b>.
+          Bilgilerine bakabilirsin; <b>kiralanamazlar</b> · yalnızca ana sayfadaki <b>Müze Vitrini</b>'nde sergilendikleri süre boyunca kiralanabilirler.
         </div>
       </div>`;
     if (!museumBooks.length) return intro + emptyState('Müzede henüz kitap yok.');
@@ -211,13 +221,13 @@
     /* Dikey sergi kartı: kapak üstte, altında tür · ad · yıl ve sayfa (açıklama ve dönem kitap penceresinde) */
     const card = (b) => `
       <button type="button" data-open-museum="${b.id}"
-        class="group text-left bg-white rounded-2xl shadow-soft border border-stone-100 p-3 flex flex-col items-center hover:shadow-soft-lg hover:-translate-y-0.5 transition">
+        class="group relative text-left bg-white rounded-2xl shadow-soft border border-stone-100 p-3 flex flex-col items-center hover:shadow-soft-lg hover:-translate-y-0.5 transition">
+        <span class="absolute top-3 left-3">${exhibitStateDot(b)}</span>
         <span class="py-1">${museumCoverHTML(b, 'md')}</span>
         <span class="w-full min-w-0 flex flex-col items-center text-center mt-2.5">
           ${museumChip(b)}
           <span class="text-xs sm:text-[13px] font-bold text-slate-800 leading-snug mt-1.5 line-clamp-2">${escapeHTML(b.title)}</span>
-          <span class="text-[10px] text-slate-400 mt-0.5">${[isDateKey(b.releaseDate) ? b.releaseDate.slice(0, 4) : '', b.pages ? `${b.pages} sayfa` : ''].filter(Boolean).join(' · ')}</span>
-        </span>
+          <span class="text-[10px] text-slate-400 mt-0.5">${[isDateKey(b.releaseDate) ? b.releaseDate.slice(0, 4) : '', b.pages ? `${b.pages} sayfa` : ''].filter(Boolean).join(' · ')}</span>        </span>
       </button>`;
     return intro + groups.map(({ t, list }) => `
       <section class="mb-6">
@@ -268,13 +278,91 @@
       ${museum && b.museumAt ? info('Müzeye Giriş', formatLongDate(new Date(b.museumAt)), 'calendar') : ''}`;
   }
 
-  /* Müze kitabı: yalnızca bilgi (kiralama yok) · Admin bilgilerini düzenleyebilir, türü kategorilerde varsa müzeden çıkarabilir */
+  /* Müze Vitrini'nde kiralanabilir mi (sergide, boşta, kiralama yetkisi ve bakiye) */
+  function exhibitRentCheck(b, u, now = Date.now()) {
+    if (!isOnExhibit(b, now)) return { ok: false, reason: 'Bu kitap şu an Müze Vitrini\'nde sergide değil.' };
+    if (!canRent(u)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
+    if (isBookRented(b, now) || isBookLocked(b, now)) return { ok: false, reason: 'Bu eser şu an ödünç verildi (kirada).' };
+    if (u.balance < b.exhibitPrice) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(round2(b.exhibitPrice - u.balance))} eksik.` };
+    return { ok: true };
+  }
+
+  /* Sergideki kitabın kiralama alanı (fiyat, kalan süre, bakiye, Kirala) */
+  function exhibitBlockHTML(b, u, now = Date.now()) {
+    const check = exhibitRentCheck(b, u, now);
+    const active = activeRentalOf(b, now);
+    const holder = active ? getUser(active.userId) : null;
+    return `
+      <div class="rounded-2xl overflow-hidden border border-amber-200/70 shadow-soft">
+        <div class="flex items-center justify-between gap-3 px-4 py-3 bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-amber-100">
+          <div class="min-w-0">
+            <p class="museum-gold text-sm font-extrabold italic" style="font-family:'Playfair Display',Georgia,serif">Müze Vitrini'nde sergide</p>
+            <p class="text-[10px] text-stone-400">⏳ ${formatRemaining(exhibitEndMs(b) - now)} · ${formatDate(new Date(exhibitEndMs(b)).toISOString(), true)}'a kadar</p>
+          </div>
+          <p class="museum-gold text-2xl font-black shrink-0">${formatMoney(b.exhibitPrice)}</p>
+        </div>
+        <div class="p-3 space-y-2.5 bg-amber-50/40">
+          ${active && holder ? `
+            <div class="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white border border-amber-100 text-[11px] text-amber-800">
+              ${avatarHTML(holder, 'w-6 h-6 text-[10px]')}<span class="min-w-0"><b>${escapeHTML(holder.name)}</b> ödünç aldı · ${formatRemaining(new Date(active.dueAt) - now)}</span>
+            </div>` : ''}
+          ${canRent(u) ? `
+            <div class="flex items-center justify-between rounded-xl bg-white border border-amber-100 px-3 py-2 text-xs">
+              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
+              <span class="font-semibold text-slate-700">${formatMoney(u.balance)}${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-amber-700">${formatMoney(round2(u.balance - b.exhibitPrice))}</span>` : ''}</span>
+            </div>` : ''}
+          ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${escapeHTML(check.reason)}</p>`}
+          <button type="button" data-rent-museum="${b.id}" ${check.ok ? '' : 'disabled'}
+            class="w-full py-2.5 rounded-xl text-xs font-bold text-stone-900 bg-gradient-to-r from-amber-200 via-amber-400 to-amber-300 hover:shadow-soft-lg transition disabled:from-slate-200 disabled:via-slate-200 disabled:to-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">
+            🏛️ ${formatMoney(b.exhibitPrice)} · ${b.rentalDays || DEFAULT_RENTAL_DAYS} gün Kirala</button>
+          <p class="text-[10px] text-stone-400 text-center">Müze Vitrini kiralamaları puan kazandırmaz ve iade edilemez · kiralayanlar sergi boyunca puan verebilir.</p>
+        </div>
+      </div>`;
+  }
+
+  /* Admin: kitabın sergi geçmişi (ne zaman, ne kadara, kaç kez kiralandı) */
+  function exhibitHistoryHTML(b) {
+    const list = exhibitsOf(b.id);
+    if (!list.length) return '';
+    const now = Date.now();
+    return `
+      <details class="rounded-2xl border border-stone-100 p-3.5" ${isOnExhibit(b) ? 'open' : ''}>
+        <summary class="cursor-pointer text-xs font-bold text-slate-700">🏛️ Sergi Geçmişi <span class="text-slate-400 font-medium">· ${list.length} sergi</span></summary>
+        <ul class="mt-3 space-y-1.5">${list.map((e) => {
+          const live = b.exhibitId === e.id && isOnExhibit(b, now);
+          const end = e.endedAt ? new Date(e.endedAt) : e.endsAt?.toDate?.() || null;
+          const n = exhibitRentCount(e.id);
+          return `
+            <li class="flex items-center gap-2.5 p-2 rounded-xl ${live ? 'bg-amber-50 border border-amber-100' : 'bg-stone-50'}">
+              <span class="min-w-0 flex-1">
+                <span class="block text-[11px] font-semibold text-slate-700">${formatDate(e.startAt, true)} → ${end ? formatDate(end.toISOString(), true) : '—'}</span>
+                <span class="block text-[10px] text-slate-400">${formatMoney(e.price)} · ${e.rentalDays || DEFAULT_RENTAL_DAYS} gün · ${n ? `${n} kez kiralandı` : 'kiralanmadı'}</span>
+              </span>
+              ${live ? '<span class="text-[9px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full shrink-0">SERGİDE</span>' : ''}
+            </li>`;
+        }).join('')}</ul>
+      </details>`;
+  }
+
+  /* Müze kitabı: bilgi · Müze Vitrini'nde sergideyse kiralama ve puan · Admin: düzenle, sergiye koy / kaldır, sergi geçmişi,
+     türü kategorilerde varsa müzeden çıkar */
   function openMuseumModal(bookId) {
     const b = museumBooks.find((x) => x.id === Number(bookId));
     if (!b) return;
     const admin = isAdmin();
-    const canLeave = canLeaveMuseum(b);
+    const u = currentUser();
+    const now = Date.now();
+    const onExhibit = isOnExhibit(b, now);
+    const canLeave = canLeaveMuseum(b) && !onExhibit && !isBookRented(b, now);
     const logCount = priceLogs.filter((l) => l.bookId === b.id).length;
+    const exhibitAdmin = !admin ? '' : onExhibit
+      ? `<div class="grid grid-cols-2 gap-2.5">
+          <button type="button" data-edit-exhibit="${b.id}" class="${BTN_SOFT} !py-2.5">🏛️ Sergiyi Düzenle</button>
+          <button type="button" data-end-exhibit="${b.id}" class="${BTN_SOFT} !py-2.5 !text-rose-500 !border-rose-100">Sergiden Kaldır</button>
+        </div>`
+      : isExhibitable(b) && showcaseOn('museum')
+        ? `<button type="button" data-edit-exhibit="${b.id}" class="w-full py-2.5 rounded-xl text-xs font-bold text-amber-100 bg-gradient-to-r from-stone-800 to-stone-900 hover:from-stone-700 transition">🏛️ Müze Vitrini'nde Sergile</button>`
+        : '';
     openModal(`
       <div class="relative p-5 sm:p-6 bg-gradient-to-br from-amber-50 via-white to-stone-50">
         <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
@@ -288,13 +376,17 @@
             <div class="flex items-center gap-1.5 flex-wrap">
               ${museumChip(b)}
               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-800 text-amber-100">🏛️ Müze</span>
+              ${exhibitStateChip(b)}
             </div>
             <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
-            <p class="text-[11px] text-stone-500 mt-1">Bu kitap artık kitaplıkta yok · yalnızca sergileniyor, kiralanamaz.</p>
+            <p class="text-[11px] text-stone-500 mt-1">${onExhibit
+              ? 'Bu kitap artık kitaplıkta yok · şu an Müze Vitrini\'nde sergide, sergi süresince kiralanabilir.'
+              : 'Bu kitap artık kitaplıkta yok · Müze\'de sergileniyor, kiralanamaz.'}</p>
           </div>
         </div>
       </div>
       <div class="p-5 sm:p-6 pt-4 space-y-4">
+        ${onExhibit ? exhibitBlockHTML(b, u, now) : ''}
         ${b.period ? `
           <div class="rounded-2xl px-4 py-3 ${museumStyle(b).chip}">
             <p class="text-[10px] font-semibold opacity-70">Okunduğu Dönem</p>
@@ -306,7 +398,10 @@
             <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line mt-0.5">${escapeHTML(b.description)}</p>
           </div>` : ''}
         ${bookInfoHTML(b)}
+        ${onExhibit || ratingSummary(b.id) ? `<div id="ratingBox">${ratingBoxHTML(b)}</div>` : ''}
         ${logCount ? `<button type="button" data-all-logs="${b.id}" class="${BTN_SOFT} w-full !py-2.5">${icon('price-logs', 'w-3.5 h-3.5')}Fiyat Değişim Geçmişi · ${logCount} kayıt →</button>` : ''}
+        ${admin ? exhibitHistoryHTML(b) : ''}
+        ${exhibitAdmin}
         <div class="grid ${admin ? (canLeave ? 'grid-cols-3' : 'grid-cols-2') : 'grid-cols-1'} gap-2.5">
           ${admin ? `<button type="button" data-edit-museum="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>` : ''}
           ${admin && canLeave ? `<button type="button" data-leave-museum="${b.id}" title="Kitaplığa geri al" class="${BTN_SOFT} !py-2.5">↩️ Müzeden Çıkar</button>` : ''}
@@ -861,6 +956,31 @@
 
     closeModal();
     await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);
+  }
+
+  /* Müze Vitrini'nden kirala: sergi fiyatıyla tekli kiralama (indirimsiz, puan yok) · kayıtta discountSource 'museum' + exhibitId
+     (kural: kitap sergide, fiyat = sergi fiyatı, sergi kimliği aynı) */
+  async function rentMuseumBook(bookId) {
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    const u = currentUser();
+    if (!b || !u) return;
+    const check = exhibitRentCheck(b, u);
+    if (!check.ok) return toast(check.reason, 'error');
+    const price = b.exhibitPrice;
+    const now = Date.now();
+    const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
+    const ref = col('rentals').doc();
+    const batch = db.batch();
+    batch.set(ref, {
+      bookId: b.id, userId: u.id,
+      listPrice: price, price, discount: 0, discountSource: 'museum', exhibitId: b.exhibitId,
+      offerId: null, purchaseId: null, offerPrice: null, couponId: null,
+      rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
+    });
+    batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
+    batch.update(col('users').doc(u.id), { balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental' });
+    closeModal();
+    await run(batch.commit(), `🏛️ "${b.title}" Müze Vitrini'nden kiralandı · ${formatMoney(price)}`);
   }
 
   /* Kitabı sil (Admin) · her yerden temizlenir: duyurular, kiralamalar (ana sayfa +

@@ -67,6 +67,10 @@
       if ((m = el('[data-open-museum]')))      return openMuseumModal(m.dataset.openMuseum);
       if ((m = el('[data-edit-museum]')))      return openMuseumEditModal(m.dataset.editMuseum);
       if ((m = el('[data-leave-museum]')))     return m.disabled ? null : leaveMuseum(m.dataset.leaveMuseum);
+      if ((m = el('[data-add-exhibit]')))      return m.disabled ? null : openExhibitModal();
+      if ((m = el('[data-edit-exhibit]')))     return openExhibitModal(m.dataset.editExhibit);
+      if ((m = el('[data-end-exhibit]')))      return endExhibit(m.dataset.endExhibit);
+      if ((m = el('[data-rent-museum]')))      return m.disabled ? null : rentMuseumBook(m.dataset.rentMuseum);
       if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
       if ((m = el('[data-add-vitrine]')))      return openVitrineModal();
       if ((m = el('[data-buy-coupon]')))       return m.disabled ? null : buyCoupon(m.dataset.buyCoupon);
@@ -136,6 +140,7 @@
         case 'saveType':    return handleSaveType(fd, editId);
         case 'moveToMuseum': return handleMoveToMuseum(fd, editId);
         case 'saveMuseumBook': return handleSaveMuseumBook(fd, editId);
+        case 'saveExhibit': return handleSaveExhibit(fd, editId);
         case 'saveNews':    return handleSaveNews(fd, editId);
         case 'saveName':    return handleSaveName(fd);
         case 'resetStats':  return handleResetStats(form);
@@ -234,6 +239,7 @@
     ['ratings', ratings, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['couponShop', couponShop, null, (d) => ({ id: d.id, ...d.data(), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],
+    ['museumExhibits', museumExhibits, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['settings', appSettings]
   ];
   let unsubscribers = [];
@@ -252,6 +258,7 @@
       expireStaleRefunds();
       expireSeason();
       migrateSpecialToMuseum();
+      expireExhibits();
       renderProfile();
       renderCurrentPage();
       showChequePopup(); // yeni gelen hediye çeki varsa önüne çıkar

@@ -47,7 +47,9 @@
   function ratingBoxHTML(b) {
     const s = ratingSummary(b.id);
     const mine = myRatingOf(b.id);
-    const canRate = !!userRentalOf(b.id);
+    // Müze kitabına yalnızca Müze Vitrini'nde sergideyken puan verilir (kural da denetler)
+    const closed = !!b.museum && !isOnExhibit(b);
+    const canRate = !!userRentalOf(b.id) && !closed;
     const stars = [1, 2, 3, 4, 5].map((n) => `
       <button type="button" data-rate-book="${b.id}" data-score="${n}" title="${n} puan" aria-label="${n} puan"
         class="text-2xl leading-none transition hover:scale-110 ${mine && n <= mine.score ? 'text-amber-400' : 'text-slate-200 hover:text-amber-300'}">★</button>`).join('');
@@ -71,7 +73,9 @@
             <div class="flex items-center gap-1">${stars}</div>
           </div>
           ${mine ? `<button type="button" data-unrate-book="${b.id}" class="text-[10px] font-semibold text-slate-400 hover:text-rose-500">Puanımı kaldır</button>` : ''}`
-          : `<p class="text-[10px] text-slate-400 pt-2 border-t border-dashed border-slate-100">Puan verebilmek için bu kitabı en az bir kez kiralamış olmalısın.</p>`}
+          : `<p class="text-[10px] text-slate-400 pt-2 border-t border-dashed border-slate-100">${closed
+            ? '🏛️ Müze kitaplarına yalnızca Müze Vitrini\'nde sergideyken puan verilebilir.'
+            : 'Puan verebilmek için bu kitabı en az bir kez kiralamış olmalısın.'}</p>`}
       </div>`;
   }
 
@@ -83,6 +87,7 @@
     if (!b || !u || !(score >= 1 && score <= 5)) return;
     const rental = userRentalOf(b.id, u.id);
     if (!rental) return toast('Puan verebilmek için bu kitabı en az bir kez kiralamış olmalısın.', 'error');
+    if (b.museum && !isOnExhibit(b)) return toast('Müze kitaplarına yalnızca sergideyken puan verilebilir.', 'error');
     const prev = myRatingOf(b.id, u.id);
     if (prev?.score === score) return;
     const now = isoAt(Date.now());
@@ -380,7 +385,7 @@
   const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', winter: 'Kış Fırsatı', winterNew: 'Kış · Yeni Kitap', coupon: 'Kupon', cheque: 'Hediye Çeki' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', museum: 'Müze Vitrini', winter: 'Kış Fırsatı', winterNew: 'Kış · Yeni Kitap', coupon: 'Kupon', cheque: 'Hediye Çeki' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -647,6 +652,7 @@
     custom: { label: '🏷️ Özel Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
     winter: { label: '❄️ Kış Fırsatı kiralamaları', pick: (r) => !r.purchaseId && ['winter', 'winterNew'].includes(r.discountSource) },
     cheque: { label: '🎁 Hediye çekli kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'cheque' },
+    museum: { label: '🏛️ Müze Vitrini kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'museum' },
     coupon: { label: '🎟️ Kuponlar ve kuponlu kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'coupon' }, // + kupon kayıtları
     offer:  { label: '🎁 Özel teklif paketleri', pick: null } // satın alım + paket kiralamaları
   };
@@ -705,6 +711,38 @@
       museum: FieldValue.delete(), museumType: FieldValue.delete(), museumAt: FieldValue.delete(),
       type, status: 'kiradisi', seriesNo: keepSeries ? book.seriesNo ?? null : null
     })];
+  }
+
+  /* --- Müze Vitrini: Müze'deki kitap sergi süresince (bitiş anına kadar) Admin'in belirlediği fiyatla kiralanabilir ---
+     Kitaba exhibitId / exhibitPrice / exhibitEndsAt yazılır (kural kiralamayı ve puanı bunlarla denetler) ·
+     her sergi museumExhibits'te kalır (sergi geçmişi) · Sergilenemez (exhibitable: false) kitap vitrine konamaz */
+  const isExhibitable = (b) => !!b?.museum && b.exhibitable !== false;
+  const exhibitEndMs = (b) => b?.exhibitEndsAt?.toMillis?.() ?? null;
+  const isOnExhibit = (b, now = Date.now()) => isExhibitable(b) && showcaseOn('museum') && !!b.exhibitId && exhibitEndMs(b) > now;
+  const exhibitBooks = (now = Date.now()) => museumBooks.filter((b) => isOnExhibit(b, now)).sort((a, b) => exhibitEndMs(a) - exhibitEndMs(b));
+  const exhibitKey = (now = Date.now()) => exhibitBooks(now).map((b) => b.id).join(',');
+  const exhibitsOf = (bookId) => museumExhibits.filter((e) => e.bookId === Number(bookId))
+    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
+  const exhibitRentCount = (exhibitId) => rentals.filter((r) => r.exhibitId === exhibitId).length;
+
+  /* Sergiyi bitir: kitaptaki sergi alanları silinir, sergi kaydına bitiş anı yazılır (geçmişte kalır) */
+  function endExhibitOps(b, endedAt = isoAt(Date.now())) {
+    const ops = [(bt) => bt.update(bookRef(b.id), { exhibitId: FieldValue.delete(), exhibitPrice: FieldValue.delete(), exhibitEndsAt: FieldValue.delete() })];
+    if (b.exhibitId && museumExhibits.some((e) => e.id === b.exhibitId)) {
+      ops.push((bt) => bt.update(col('museumExhibits').doc(b.exhibitId), { endedAt }));
+    }
+    return ops;
+  }
+
+  /* Süresi dolan sergiler: gerçek Admin açınca kitaptan kalkar, sergi kaydına bitiş anı yazılır (bir kez) */
+  function expireExhibits() {
+    if (!isRealAdmin()) return;
+    const now = Date.now();
+    const due = museumBooks.filter((b) => b.exhibitId && (exhibitEndMs(b) ?? 0) <= now && !state.purgePending.has(`exhibit:${b.exhibitId}`));
+    if (!due.length) return;
+    due.forEach((b) => state.purgePending.add(`exhibit:${b.exhibitId}`));
+    commitOps(due.flatMap((b) => endExhibitOps(b, isoAt(exhibitEndMs(b) ?? now))))
+      .catch((e) => { console.error(e); due.forEach((b) => state.purgePending.delete(`exhibit:${b.exhibitId}`)); });
   }
 
   /* Eski "Özel" (döneme özel) türü kaldırıldı: o türdeki kitaplar Müze'ye (Özel) taşınır, tür silinir · gerçek Admin açınca bir kez */

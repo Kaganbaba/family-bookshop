@@ -57,6 +57,14 @@ service cloud.firestore {
     function showcaseOn(key) {
       return !exists(path('settings', 'showcase')) || get(path('settings', 'showcase')).data.get(key, true) != false;
     }
+    // Müze Vitrini: Müze'deki kitap sergide mi (sergilenebilir, bitiş anı gelmemiş, vitrin açık)
+    // · sergi süresince kiralanabilir ve puanlanabilir (kitapta exhibitId / exhibitPrice / exhibitEndsAt)
+    function onExhibit(b) {
+      return b.get('museum', false) == true && b.get('exhibitable', true) != false
+        && b.get('exhibitId', null) is string
+        && b.get('exhibitEndsAt', null) is timestamp && request.time < b.exhibitEndsAt
+        && showcaseOn('museum');
+    }
     // Kuruş yuvarlaması toleranslı eşitlik (yüzdeyle hesaplanan fiyatlar)
     function nearC(a, b) { return math.abs(a - b) < 0.006; }
 
@@ -202,9 +210,10 @@ service cloud.firestore {
         let after = request.resource.data;
         return canRent()
           && changedKeys().hasOnly(['lockUntil', 'lockBy', 'lockRental'])
-          // yalnızca "Kiralık" (durumu olmayan eski kayıtlar = Kiralık) kitap kiralanabilir · Müze'deki kitap asla
-          && resource.data.get('status', 'kiralik') == 'kiralik'
-          && resource.data.get('museum', false) != true
+          // yalnızca "Kiralık" (durumu olmayan eski kayıtlar = Kiralık) kitap kiralanabilir ·
+          // Müze'deki kitap yalnızca Müze Vitrini'nde sergideyken
+          && ((resource.data.get('status', 'kiralik') == 'kiralik' && resource.data.get('museum', false) != true)
+            || onExhibit(resource.data))
           && (resource.data.get('lockUntil', null) == null || resource.data.lockUntil < request.time)
           && after.lockBy == uid()
           && after.lockUntil is timestamp
@@ -225,9 +234,12 @@ service cloud.firestore {
       function validRental() {
         let r = request.resource.data;
         let bookPath = path('books', string(r.bookId));
+        let book = get(bookPath).data;
         return r.userId == uid()
           && r.bookId is int
-          && r.listPrice == get(bookPath).data.price
+          // Müze kitabı yalnızca Müze Vitrini kiralamasıyla (liste fiyatı = sergi fiyatı), diğerleri hiçbir zaman onunla
+          && (book.get('museum', false) == true) == (r.discountSource == 'museum')
+          && r.listPrice == (book.get('museum', false) == true ? book.get('exhibitPrice', -1) : book.price)
           && r.price is number && r.price >= 0 && r.price <= r.listPrice + 0.001
           && r.returnedAt == null
           // aynı batch'te kitap bu kiralamayla kilitlenmiş olmalı (kitap boştaydı)
@@ -237,13 +249,20 @@ service cloud.firestore {
           && !('pointsMult' in r)
           && (singleRental(r) || packageRental(r) || couponRental(r));
       }
-      // Tekli: ödeme kullanıcı belgesinde; indirim standart (en fazla %50), özel fırsat ya da hediye çeki
+      // Tekli: ödeme kullanıcı belgesinde; indirim standart (en fazla %50), özel fırsat, hediye çeki ya da Müze Vitrini
       function singleRental(r) {
         return r.purchaseId == null && r.offerId == null
           && r.discount is int && r.discount >= 0
           && (standardDiscount(r) || (r.discountSource == 'custom' && vitrineDiscount(r))
-            || (r.discountSource == 'cheque' && chequeRental(r)))
+            || (r.discountSource == 'cheque' && chequeRental(r))
+            || (r.discountSource == 'museum' && museumRental(r, get(path('books', string(r.bookId))).data)))
           && getAfter(path('users', uid())).data.lastTx == rentalId;
+      }
+      // Müze Vitrini: kitap sergide, indirimsiz, fiyat = sergi fiyatı, kayıt bu sergiye ait
+      function museumRental(r, b) {
+        return onExhibit(b) && r.discount == 0
+          && r.price == b.exhibitPrice
+          && r.get('exhibitId', null) == b.exhibitId;
       }
       // Hediye çeki: kendi, açılmış, kullanılmamış, süresi dolmamış çek; aynı batch'te bu kiralamayla kullanılır ·
       // fiyat en fazla çek tutarı kadar düşer
@@ -351,6 +370,11 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // Müze Vitrini sergi geçmişi · { bookId, price, rentalDays, startAt, endsAt, endedAt, createdBy } · yalnızca Admin yazar
+    match /museumExhibits/{exhibitId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
     // Vitrin İndirimi · belge adı = kitap numarası · { bookId, name, rate (1–100, 100 = bedava), endsAt, createdAt, createdBy }
     match /discounts/{bookId} {
       allow read: if signedIn();
@@ -379,8 +403,11 @@ service cloud.firestore {
           && ratingId == string(r.bookId) + '_' + uid()
           && r.score is int && r.score >= 1 && r.score <= 5
           && r.rentalId is string
-          && rentedBy(get(path('rentals', r.rentalId)).data, r.bookId);
+          && rentedBy(get(path('rentals', r.rentalId)).data, r.bookId)
+          // Müze kitabına yalnızca Müze Vitrini'nde sergideyken puan verilir
+          && ratableBook(get(path('books', string(r.bookId))).data);
       }
+      function ratableBook(b) { return b.get('museum', false) != true || onExhibit(b); }
       function rentedBy(rent, bookId) { return rent.userId == uid() && rent.bookId == bookId; }
     }
 

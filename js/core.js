@@ -51,7 +51,11 @@
   const users = [];
   const bookTypes = [];      // bookTypes/{id}  · order alanına göre sıralı
   const books = [];          // books/{id}      · id sayısal, belge adı String(id) · Müze'dekiler hariç
-  const museumBooks = [];    // books/{id} içinde museum: true olanlar · kiralanamaz, yalnızca sergilenir (museumType, museumAt)
+  /* books/{id} içinde museum: true olanlar · kitaplıkta kiralanamaz (museumType, museumAt) · exhibitable: false → asla sergilenemez
+     Müze Vitrini'ndeyken (sergide) kitapta: exhibitId, exhibitPrice, exhibitEndsAt (Timestamp) · bu süre boyunca kiralanabilir ve puanlanabilir */
+  const museumBooks = [];
+  /* museumExhibits/{id} · sergi geçmişi: { bookId, price, rentalDays, startAt (ISO), endsAt (Timestamp), endedAt (ISO | null), createdBy } */
+  const museumExhibits = [];
   const rentals = [];        // rentals/{id}
   const offerPurchases = []; // offerPurchases/{id}
   const priceLogs = [];      // priceLogs/{id}
@@ -199,6 +203,7 @@
     modalOpen: false,
     lastDealDay: null,
     lastNewKey: '',        // ana sayfadaki Yeni Kitap vitrininde gösterilen kitaplar
+    lastExhibitKey: '',    // Müze Vitrini'nde sergide olan kitaplar (süre dolunca yeniden çizilir)
     statsUserId: null,     // açık istatistik modalındaki kullanıcı
     statsPage: { rentals: 1 },
     confirmAction: null,
@@ -315,10 +320,10 @@
   const museumDot = (t, size = 'w-2 h-2') => `<span class="${size} rounded-full shrink-0 ${t.dot}"></span>`;
   const museumChip = (b) => `<span class="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${museumStyle(b).chip}">${museumDot(museumStyle(b))}${museumStyle(b).label}</span>`;
   /* Müze kapağı: görsel kırpılmadan tam görünür (beyaz zemin + ince çerçeve) · görsel yoksa degrade kapak */
-  const MUSEUM_COVER = { md: 'w-20 h-28 rounded-xl', lg: 'w-28 h-40 rounded-2xl' };
+  const MUSEUM_COVER = { md: 'w-20 h-28 rounded-xl', lg: 'w-28 h-40 rounded-2xl', case: 'w-[5.5rem] h-32 sm:w-24 sm:h-36 rounded-md' };
   const museumCoverHTML = (b, size = 'md') => (b.cover
     ? `<img src="${escapeHTML(b.cover)}" alt="${escapeHTML(b.title)} kapağı" class="${MUSEUM_COVER[size]} shrink-0 object-contain bg-white border border-stone-200 shadow-soft" />`
-    : coverHTML(b, size));
+    : coverHTML(b, size === 'case' ? 'lg' : size));
 
   /* Kitap durumları (Admin ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
   const BOOK_STATUSES = {
@@ -355,26 +360,24 @@
   /* Haber türleri (Duyurular → Haberler)
      Duyuru: Admin'in genel yazısı · Yeni Kitap: yeni kitap eklendi / yayına girdi
      İndirim: vitrin indirimi, özel teklif · Bilgilendirme: kitap durumu değişti, kitap silindi
-     Etkinlik: kupon eklendi */
+     (kupon ve Müze Vitrini haberleri Duyuru'dur · eski "Etkinlik" haberleri Duyuru sayılır) */
   const NEWS_CATEGORIES = {
     'Duyuru':        'bg-brand-50 text-brand-600',
     'Yeni Kitap':    'bg-emerald-50 text-emerald-600',
     'İndirim':       'bg-rose-50 text-rose-600',
-    'Bilgilendirme': 'bg-sky-50 text-sky-600',
-    'Etkinlik':      'bg-amber-50 text-amber-700'
+    'Bilgilendirme': 'bg-sky-50 text-sky-600'
   };
   /* Liste satırındaki tür simgesi ve renk zemini */
   const NEWS_ICONS = {
     'Duyuru':        { emoji: '📣', bg: 'from-brand-100 to-brand-50' },
     'Yeni Kitap':    { emoji: '📚', bg: 'from-emerald-100 to-emerald-50' },
     'İndirim':       { emoji: '🏷️', bg: 'from-rose-100 to-rose-50' },
-    'Bilgilendirme': { emoji: 'ℹ️', bg: 'from-sky-100 to-sky-50' },
-    'Etkinlik':      { emoji: '🎉', bg: 'from-amber-100 to-amber-50' }
+    'Bilgilendirme': { emoji: 'ℹ️', bg: 'from-sky-100 to-sky-50' }
   };
   /* Eski türler güncel türlere eşlenir · bir dönem "İndirim" olarak kaydedilen yeni kitap haberleri → Yeni Kitap */
   const newsCategoryOf = (a) => {
     if (a?.category === 'İndirim' && /^Yeni kitap:/.test(a.title || '')) return 'Yeni Kitap';
-    return { 'Kitap Durumu': 'Bilgilendirme' }[a?.category] || (NEWS_CATEGORIES[a?.category] ? a.category : 'Duyuru');
+    return { 'Kitap Durumu': 'Bilgilendirme', 'Etkinlik': 'Duyuru' }[a?.category] || (NEWS_CATEGORIES[a?.category] ? a.category : 'Duyuru');
   };
   const newsChipCls = (c) => NEWS_CATEGORIES[c] || 'bg-slate-100 text-slate-600';
   /* Otomatik haberler yalnızca Admin işaretlerse atılır */
@@ -682,6 +685,7 @@
 
   function renderCurrentPage() {
     if (!state.ready || !currentUser()) return;
+    state.lastExhibitKey = exhibitKey(); // sergi süresi dolunca tick() yeniden çizdirir
     applySeasonTheme();
     PAGE_RENDERERS[state.route]?.();
     updateBadges();
@@ -843,6 +847,8 @@
     if (now.getSeconds() === 0) applyDuePrices(now.getTime());
     // Süreli sezon bittiyse tema kalkar (her şey yeniden çizilir)
     if (state.renderedSeason !== undefined && activeSeason() !== state.renderedSeason) return scheduleRender();
+    // Müze Vitrini'nde süresi dolan sergi kalkar (Admin açıksa sergi geçmişine bitiş yazılır)
+    if (exhibitKey() !== state.lastExhibitKey && !state.modalOpen) return scheduleRender();
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
     if (purgeExpiredOffers(now) && state.route === 'offers' && !state.modalOpen) renderCurrentPage();
     if (!['dashboard', 'rentals'].includes(state.route) || document.hidden) return;
