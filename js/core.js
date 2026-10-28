@@ -94,7 +94,7 @@
      addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya ''
      lockUntil / lockBy / lockRental: kiralama kilidi (güvenlik kuralı boşta olmayı bununla denetler)
      status: kiralik | kiradisi | listedisi | planlaniyor | yakinda (yoksa kiralik) · description: açıklama
-     museum: true → Müze'de (kiralanamaz) · museumType: MUSEUM_TYPES anahtarı · period: eski özel kitabın dönemi */
+     museum: true → Müze'de (kiralanamaz) · museumType: kategori id'si ya da MUSEUM_TYPES anahtarı · period: eski özel kitabın dönemi */
   const SEED_BOOKS = [
     { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri', seriesNo: 1,  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
     { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri', seriesNo: 2,  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
@@ -294,14 +294,23 @@
   const typeLabel = (t) => getType(t)?.label || 'Kitap';
   const defaultTypeId = () => bookTypes[0]?.id || '';
 
-  /* Müze türleri (kitaplıktan kaldırılan, artık kiralanmayan kitaplar · Müze bunlara göre gruplanır)
-     Özel: eski Özel türünün rengi · Dönemsel: mavi–mor–sarı–yeşil (css/styles.css → .museum-rainbow) */
+  /* Müze türü = kitabın kategorisi (Seri, Albüm… · kitap müzeye kendi türüyle girer) ya da kategorilerde
+     artık olmayan eski müze türleri: Özel (eski Özel kategorisinin rengi: amber) · Dönemsel (mavi–mor–sarı–yeşil, css → .museum-rainbow)
+     Müze bu türlere göre gruplanır · kitap yalnızca türü kategorilerde varsa müzeden çıkarılabilir */
   const MUSEUM_TYPES = {
-    ozel:     { label: 'Özel',     grad: TYPE_PALETTES.rose.grad, chip: TYPE_PALETTES.rose.chip,       dot: TYPE_PALETTES.rose.dot },
+    ozel:     { label: 'Özel',     grad: TYPE_PALETTES.amber.grad, chip: TYPE_PALETTES.amber.chip,     dot: TYPE_PALETTES.amber.dot },
     donemsel: { label: 'Dönemsel', grad: 'museum-rainbow',        chip: 'bg-violet-50 text-violet-600', dot: 'museum-rainbow' }
   };
-  const museumTypeOf = (b) => (MUSEUM_TYPES[b?.museumType] ? b.museumType : 'ozel');
-  const museumStyle = (b) => MUSEUM_TYPES[museumTypeOf(b)];
+  const museumTypeOf = (b) => b?.museumType || b?.type || 'ozel';
+  const isMuseumTypeKey = (k) => !!(getType(k) || MUSEUM_TYPES[k]);
+  const museumTypeInfo = (k) => (getType(k)
+    ? { ...typeStyle(k), label: getType(k).label } // palette'in renk adı değil, kategorinin adı
+    : MUSEUM_TYPES[k] || { ...TYPE_PALETTES.slate, label: 'Diğer' });
+  const museumStyle = (b) => museumTypeInfo(museumTypeOf(b));
+  /* Müze türü seçenekleri: önce kategoriler, sonra kategorilerde olmayan eski müze türleri */
+  const museumTypeKeys = () => [...bookTypes.map((t) => t.id), ...Object.keys(MUSEUM_TYPES).filter((k) => !getType(k))];
+  /* Müzeden çıkarılabilir mi: türü kategorilerde olmalı (kitaplıkta o türe döner) */
+  const canLeaveMuseum = (b) => !!getType(museumTypeOf(b));
   /* Tür rozeti: türün renginde nokta + adı (Dönemsel: noktası çok renkli) */
   const museumDot = (t, size = 'w-2 h-2') => `<span class="${size} rounded-full shrink-0 ${t.dot}"></span>`;
   const museumChip = (b) => `<span class="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${museumStyle(b).chip}">${museumDot(museumStyle(b))}${museumStyle(b).label}</span>`;

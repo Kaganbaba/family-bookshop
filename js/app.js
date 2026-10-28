@@ -66,6 +66,7 @@
       if ((m = el('[data-move-museum]')))      return openMoveToMuseumModal(m.dataset.moveMuseum);
       if ((m = el('[data-open-museum]')))      return openMuseumModal(m.dataset.openMuseum);
       if ((m = el('[data-edit-museum]')))      return openMuseumEditModal(m.dataset.editMuseum);
+      if ((m = el('[data-leave-museum]')))     return m.disabled ? null : leaveMuseum(m.dataset.leaveMuseum);
       if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
       if ((m = el('[data-add-vitrine]')))      return openVitrineModal();
       if ((m = el('[data-buy-coupon]')))       return m.disabled ? null : buyCoupon(m.dataset.buyCoupon);

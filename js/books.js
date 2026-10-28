@@ -203,8 +203,10 @@
       </div>`;
     if (!museumBooks.length) return intro + emptyState('Müzede henüz kitap yok.');
     const sorted = (list) => [...list].sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.title.localeCompare(b.title, 'tr'));
-    const groups = Object.entries(MUSEUM_TYPES)
-      .map(([key, t]) => ({ key, t, list: sorted(museumBooks.filter((b) => museumTypeOf(b) === key)) }))
+    // Gruplar: kategoriler (kendi sırasıyla) → eski müze türleri (Özel, Dönemsel) → bilinmeyen tür (Diğer)
+    const keys = [...new Set([...museumTypeKeys(), ...museumBooks.map(museumTypeOf)])];
+    const groups = keys
+      .map((key) => ({ key, t: museumTypeInfo(key), list: sorted(museumBooks.filter((b) => museumTypeOf(b) === key)) }))
       .filter((g) => g.list.length);
     /* Dikey sergi kartı: kapak üstte, altında tür · ad · yıl ve sayfa (açıklama ve dönem kitap penceresinde) */
     const card = (b) => `
@@ -228,16 +230,51 @@
       </section>`).join('');
   }
 
-  /* Müze kitabı: yalnızca bilgi (kiralama yok) · Admin bilgilerini düzenleyebilir */
+  /* Kitap bilgileri · kitaplıktaki ve Müze'deki pencerede aynı içerik ve sıra
+     (sol: tür · fiyat · sayfa · kira süresi · sağ: mekan · çıkış tarihi · çıkış yılı · yazar · altta kiralanma sayısı)
+     Müze'de: fiyat "Son Fiyatı" · kiralanma sayısı yalnızca en az 1 kez kiralandıysa · altta Müzeye Giriş (tarihi varsa) */
+  function bookInfoHTML(b) {
+    const museum = !!b.museum;
+    const t = museum ? museumStyle(b) : { ...typeStyle(b.type), label: typeLabel(b.type) };
+    const rentCount = bookRentCount(b.id);
+    const info = (label, value, iconKey) => `
+      <div class="flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl bg-slate-50/80">
+        <span class="hidden sm:flex w-8 h-8 rounded-lg bg-white text-brand-500 shadow-soft items-center justify-center shrink-0">${icon(iconKey)}</span>
+        <div class="min-w-0">
+          <p class="text-[10px] text-slate-400">${label}</p>
+          <p class="text-xs font-semibold text-slate-700 truncate">${value}</p>
+        </div>
+      </div>`;
+    const rentRow = `
+      <button type="button" data-book-rentals="${b.id}" class="w-full text-left rounded-xl hover:ring-2 hover:ring-brand-100 transition">
+        ${info('Kiralanma Sayısı', `${rentCount} kez kiralandı${rentCount ? ' · kimler kiraladı →' : ''}`, 'books')}
+      </button>`;
+    return `
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="space-y-2.5">
+          ${info('Türü', `<span class="inline-flex items-center gap-1.5">${museumDot(t)}${escapeHTML(t.label)}</span>`, 'tag')}
+          ${info(museum ? 'Son Fiyatı' : 'Fiyatı', hasPrice(b) ? formatMoney(b.price) : '—', 'wallet')}
+          ${info('Sayfa Sayısı', b.pages ? `${b.pages} sayfa` : '—', 'pages')}
+          ${info('Kira Süresi', b.rentalDays ? `${b.rentalDays} gün` : '—', 'rentals')}
+        </div>
+        <div class="space-y-2.5">
+          ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'), 'pin')}
+          ${info('Çıkış Tarihi', isDateKey(b.releaseDate) ? formatLongDate(dateFromKey(b.releaseDate)) : '—', 'calendar')}
+          ${info('Çıkış Yılı', isDateKey(b.releaseDate) ? b.releaseDate.slice(0, 4) : '—', 'calendar')}
+          ${info('Yazar', escapeHTML(authorName(b)), 'pencil')}
+        </div>
+      </div>
+      ${!museum || rentCount ? rentRow : ''}
+      ${museum && b.museumAt ? info('Müzeye Giriş', formatLongDate(new Date(b.museumAt)), 'calendar') : ''}`;
+  }
+
+  /* Müze kitabı: yalnızca bilgi (kiralama yok) · Admin bilgilerini düzenleyebilir, türü kategorilerde varsa müzeden çıkarabilir */
   function openMuseumModal(bookId) {
     const b = museumBooks.find((x) => x.id === Number(bookId));
     if (!b) return;
     const admin = isAdmin();
-    const info = (label, value) => `
-      <div class="p-2.5 sm:p-3 rounded-xl bg-stone-50">
-        <p class="text-[10px] text-stone-400">${label}</p>
-        <p class="text-xs font-semibold text-slate-700 truncate">${value}</p>
-      </div>`;
+    const canLeave = canLeaveMuseum(b);
+    const logCount = priceLogs.filter((l) => l.bookId === b.id).length;
     openModal(`
       <div class="relative p-5 sm:p-6 bg-gradient-to-br from-amber-50 via-white to-stone-50">
         <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
@@ -268,19 +305,11 @@
             <p class="text-[10px] text-stone-400">Açıklama</p>
             <p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line mt-0.5">${escapeHTML(b.description)}</p>
           </div>` : ''}
-        <div class="grid grid-cols-2 gap-2.5">
-          ${info('Türü', `<span class="inline-flex items-center gap-1.5">${museumDot(museumStyle(b))}${museumStyle(b).label}</span>`)}
-          ${info('Son Fiyatı', hasPrice(b) ? formatMoney(b.price) : '—')}
-          ${info('Sayfa Sayısı', b.pages ? `${b.pages} sayfa` : '—')}
-          ${info('Kira Süresi', b.rentalDays ? `${b.rentalDays} gün` : '—')}
-          ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'))}
-          ${info('Çıkış Tarihi', isDateKey(b.releaseDate) ? formatLongDate(dateFromKey(b.releaseDate)) : '—')}
-          ${info('Yazar', escapeHTML(authorName(b)))}
-          ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`)}
-          ${info('Müzeye Giriş', b.museumAt ? formatDate(b.museumAt) : '—')}
-        </div>
-        <div class="grid ${admin ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5">
+        ${bookInfoHTML(b)}
+        ${logCount ? `<button type="button" data-all-logs="${b.id}" class="${BTN_SOFT} w-full !py-2.5">${icon('price-logs', 'w-3.5 h-3.5')}Fiyat Değişim Geçmişi · ${logCount} kayıt →</button>` : ''}
+        <div class="grid ${admin ? (canLeave ? 'grid-cols-3' : 'grid-cols-2') : 'grid-cols-1'} gap-2.5">
           ${admin ? `<button type="button" data-edit-museum="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>` : ''}
+          ${admin && canLeave ? `<button type="button" data-leave-museum="${b.id}" title="Kitaplığa geri al" class="${BTN_SOFT} !py-2.5">↩️ Müzeden Çıkar</button>` : ''}
           <button type="button" data-modal-close class="${BTN_SOFT} !py-2.5">Kapat</button>
         </div>
       </div>`, 'lg');
@@ -406,15 +435,6 @@
     const backOfferId = opts.backOfferId || '';
     const logs = priceLogs.filter((l) => l.bookId === b.id).sort((x, y) => new Date(y.changedAt) - new Date(x.changedAt));
 
-    const info = (label, value, iconKey) => `
-      <div class="flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl bg-slate-50/80">
-        <span class="hidden sm:flex w-8 h-8 rounded-lg bg-white text-brand-500 shadow-soft items-center justify-center shrink-0">${icon(iconKey)}</span>
-        <div class="min-w-0">
-          <p class="text-[10px] text-slate-400">${label}</p>
-          <p class="text-xs font-semibold text-slate-700 truncate">${value}</p>
-        </div>
-      </div>`;
-
     // Fiyat geçmişi: ilk 5 kayıt; fazlası "Tümünü gör" penceresinde (filtreli)
     const timeline = logs.length
       ? `<ol class="relative border-l-2 border-brand-100 ml-1.5 space-y-2.5">
@@ -513,23 +533,7 @@
             <p class="text-xs leading-relaxed">${bookStatus(b) === 'planlaniyor' ? 'Bu kitabın gelmesi <b>planlanıyor</b>.' : 'Bu kitap <b>yazılmaya başlandı</b>, yakında geliyor.'} Bazı bilgiler henüz belli değil; şimdilik kiralanamaz.</p>
           </div>` : ''}
         ${b.description ? `<p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line bg-slate-50/80 rounded-2xl px-4 py-3">${escapeHTML(b.description)}</p>` : ''}
-        <div class="grid grid-cols-2 gap-2.5">
-          <div class="space-y-2.5">
-            ${info('Türü', typeLabel(b.type), 'tag')}
-            ${info('Fiyatı', hasPrice(b) ? formatMoney(b.price) : '—', 'wallet')}
-            ${info('Sayfa Sayısı', b.pages ? `${b.pages} sayfa` : '—', 'pages')}
-            ${info('Kira Süresi', b.rentalDays ? `${b.rentalDays} gün` : '—', 'rentals')}
-          </div>
-          <div class="space-y-2.5">
-            ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'), 'pin')}
-            ${info('Çıkış Tarihi', isDateKey(b.releaseDate) ? formatLongDate(dateFromKey(b.releaseDate)) : '—', 'calendar')}
-            ${info('Çıkış Yılı', isDateKey(b.releaseDate) ? b.releaseDate.slice(0, 4) : '—', 'calendar')}
-            ${info('Yazar', escapeHTML(authorName(b)), 'pencil')}
-          </div>
-        </div>
-        <button type="button" data-book-rentals="${b.id}" class="w-full text-left rounded-xl hover:ring-2 hover:ring-brand-100 transition">
-          ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı${bookRentCount(b.id) ? ' · kimler kiraladı →' : ''}`, 'books')}
-        </button>
+        ${bookInfoHTML(b)}
 
         <div id="ratingBox">${ratingBoxHTML(b)}</div>
 

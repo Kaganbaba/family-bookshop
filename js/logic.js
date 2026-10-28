@@ -686,12 +686,25 @@
 
   /* --- Müze: kitap kitaplıktan kaldırılır, bilgileri sergilenir (kiralanamaz) ---
      Kayıt silinmez (geçmiş kiralamalar, fiyat logu adını göstermeye devam eder): museum + museumType yazılır,
-     durum Kira dışı olur (kural kiralamayı ayrıca museum bayrağıyla reddeder). Günün İndirimi / Özel Fırsat kaydı kalkar. */
-  function museumOps(book, museumType) {
+     durum Kira dışı olur (kural kiralamayı ayrıca museum bayrağıyla reddeder). Günün İndirimi / Özel Fırsat kaydı kalkar.
+     museumType verilmezse kitabın kendi kategorisi (Seri kitap Müze'de de Seri). */
+  function museumOps(book, museumType = book.type) {
     return [
-      (bt) => bt.update(bookRef(book.id), { museum: true, museumType, museumAt: isoAt(Date.now()), status: 'kiradisi', special: firebase.firestore.FieldValue.delete() }),
+      (bt) => bt.update(bookRef(book.id), { museum: true, museumType, museumAt: isoAt(Date.now()), status: 'kiradisi', special: FieldValue.delete() }),
       ...discounts.filter((d) => d.bookId === book.id).map((d) => (bt) => bt.delete(col('discounts').doc(d.id)))
     ];
+  }
+
+  /* Müzeden çıkar: kitap müze türündeki kategoriye döner, Kira dışı olarak kitaplıkta görünür (Admin durumunu sonra açar).
+     Seri No başka bir kitapta kullanılıyorsa boşaltılır. */
+  function leaveMuseumOps(book) {
+    const type = museumTypeOf(book);
+    const clash = Number.isInteger(book.seriesNo) && books.some((x) => x.seriesNo === book.seriesNo && getType(x.type)?.inDeals);
+    const keepSeries = getType(type)?.inDeals && !clash;
+    return [(bt) => bt.update(bookRef(book.id), {
+      museum: FieldValue.delete(), museumType: FieldValue.delete(), museumAt: FieldValue.delete(),
+      type, status: 'kiradisi', seriesNo: keepSeries ? book.seriesNo ?? null : null
+    })];
   }
 
   /* Eski "Özel" (döneme özel) türü kaldırıldı: o türdeki kitaplar Müze'ye (Özel) taşınır, tür silinir · gerçek Admin açınca bir kez */
@@ -723,6 +736,8 @@
     }
     const batch = db.batch();
     inUse.forEach((b) => batch.update(bookRef(b.id), { type: target.id }));
+    // Müze'deki bu türden kitaplar da aynı türe geçer (yoksa türsüz kalıp müzeden çıkarılamazlar)
+    if (target) museumBooks.filter((b) => museumTypeOf(b) === typeId).forEach((b) => batch.update(bookRef(b.id), { museumType: target.id }));
     batch.delete(col('bookTypes').doc(typeId));
     return { ok: true, moved: inUse.length, target, done: batch.commit() };
   }

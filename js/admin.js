@@ -879,9 +879,7 @@
             <p class="text-[11px] text-slate-400">${escapeHTML(typeLabel(b.type))}${hasPrice(b) ? ` · ${formatMoney(b.price)}` : ''}</p>
           </div>
         </div>
-        ${field('Müze Türü', `<select name="museumType" class="${INPUT_CLS}">
-          ${Object.entries(MUSEUM_TYPES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
-        </select>`, 'Müze bu türe göre gruplanır')}
+        <p class="text-[11px] text-stone-600 bg-stone-50 rounded-xl px-3 py-2">Müze'de kendi türüyle (<b>${escapeHTML(typeLabel(b.type))}</b>) sergilenir · türü kategorilerde durdukça Müze'den geri çıkarılabilir.</p>
         ${active ? '<p class="text-[11px] text-amber-700 bg-amber-50 rounded-xl px-3 py-2">⏳ Kitap şu an kirada · kiralama süresince sürer, sonra kitap yeniden kiralanamaz.</p>' : ''}
         ${formFooter('Müzeye Taşı')}
       </form>`);
@@ -891,10 +889,30 @@
     if (!requireAdmin()) return;
     const b = getBook(bookId);
     if (!b || b.museum) return;
-    const type = MUSEUM_TYPES[fd.museumType] ? fd.museumType : 'ozel';
     closeModal();
     state.bookTab = MUSEUM_TAB;
-    run(commitOps(museumOps(b, type)), `🏛️ "${b.title}" Müze'ye taşındı (${MUSEUM_TYPES[type].label}).`);
+    run(commitOps(museumOps(b)), `🏛️ "${b.title}" Müze'ye taşındı (${typeLabel(b.type)}).`);
+  }
+
+  /* Müzeden çıkar: yalnızca türü kategorilerde olan kitap · kitaplığa o türde, Kira dışı olarak döner */
+  function leaveMuseum(bookId) {
+    if (!requireAdmin()) return;
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    if (!b) return;
+    if (!canLeaveMuseum(b)) return toast(`"${museumStyle(b).label}" türü kategorilerde yok; bu kitap Müze'den çıkarılamaz.`, 'error');
+    const type = getType(museumTypeOf(b));
+    openConfirm({
+      title: 'Müze\'den çıkarılsın mı?',
+      message: `"${escapeHTML(b.title)}" kitaplığa <b>${escapeHTML(type.label)}</b> türünde, <b>Kira dışı</b> olarak döner. Kiralanabilmesi için durumunu sonra Kiralık yaparsın.`,
+      confirmLabel: 'Müzeden Çıkar',
+      positive: true,
+      iconKey: 'books',
+      onConfirm: () => {
+        closeModal();
+        state.bookTab = type.id;
+        run(commitOps(leaveMuseumOps(b)), `↩️ "${b.title}" Müze'den çıkarıldı · ${type.label} · Kira dışı.`);
+      }
+    });
   }
 
   /* Müze kitabını düzenle: kapak, ad, müze türü ve sergilenen bilgiler (kiralama alanları yok) */
@@ -920,9 +938,9 @@
         </div>
         ${field('Kitap Adı', `<input name="title" id="bf-title" required maxlength="80" value="${escapeHTML(b.title)}" class="${INPUT_CLS}" />`)}
         <div class="grid grid-cols-2 gap-3">
-          ${field('Müze Türü', `<select name="museumType" id="bf-museum-type" class="${INPUT_CLS}">
-            ${Object.entries(MUSEUM_TYPES).map(([k, t]) => `<option value="${k}" ${museumTypeOf(b) === k ? 'selected' : ''}>${t.label}</option>`).join('')}
-          </select>`)}
+          ${field('Türü', `<select name="museumType" id="bf-museum-type" class="${INPUT_CLS}">
+            ${museumTypeKeys().map((k) => `<option value="${k}" ${museumTypeOf(b) === k ? 'selected' : ''}>${escapeHTML(museumTypeInfo(k).label)}${getType(k) ? '' : ' (yalnızca Müze)'}</option>`).join('')}
+          </select>`, 'Kategorilerden biri seçilirse kitap Müze\'den çıkarılabilir')}
           ${field('Son Fiyatı (₺)', `<input name="price" type="number" min="0" step="0.01" value="${hasPrice(b) ? b.price : ''}" class="${INPUT_CLS}" />`)}
         </div>
         <div class="grid grid-cols-2 gap-3">
@@ -933,7 +951,10 @@
           ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${escapeHTML(b.place || '')}" class="${INPUT_CLS}" />`)}
           ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" max="${localDateKey()}" value="${isDateKey(b.releaseDate) ? b.releaseDate : ''}" class="${INPUT_CLS}" />`)}
         </div>
-        ${field('Okunduğu Dönem', `<input name="period" maxlength="80" value="${escapeHTML(b.period || '')}" class="${INPUT_CLS}" />`, 'Boş bırakırsan Müze\'de gösterilmez')}
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Okunduğu Dönem', `<input name="period" maxlength="80" value="${escapeHTML(b.period || '')}" class="${INPUT_CLS}" />`, 'Boşsa gösterilmez')}
+          ${field('Müzeye Giriş', `<input name="museumAt" type="date" max="${localDateKey()}" value="${b.museumAt ? localDateKey(new Date(b.museumAt)) : ''}" class="${INPUT_CLS}" />`, 'Boşsa gösterilmez · ileri tarih olamaz')}
+        </div>
         ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed">${escapeHTML(b.description || '')}</textarea>`)}
         ${formFooter('Değişiklikleri Kaydet')}
       </form>`);
@@ -947,9 +968,16 @@
     const title = (fd.title || '').trim();
     if (!title) return toast('Kitap adı zorunlu.', 'error');
     const pos = (v, int = false) => { const n = int ? parseInt(v, 10) : round2(parseFloat(v)); return n > 0 ? n : null; };
+    // Müzeye giriş: boşsa kayıttan silinir · ileri tarih olamaz · gün değişmediyse saat korunur
+    const enteredKey = isDateKey(fd.museumAt) ? fd.museumAt : '';
+    if (enteredKey && enteredKey > localDateKey()) return toast('Müzeye giriş tarihi ileri bir gün olamaz.', 'error');
+    const museumAt = !enteredKey ? FieldValue.delete()
+      : b.museumAt && localDateKey(new Date(b.museumAt)) === enteredKey ? b.museumAt
+        : isoAt(dateFromKey(enteredKey).setHours(12, 0, 0, 0));
     const data = {
       title,
-      museumType: MUSEUM_TYPES[fd.museumType] ? fd.museumType : museumTypeOf(b),
+      museumAt,
+      museumType: isMuseumTypeKey(fd.museumType) ? fd.museumType : museumTypeOf(b),
       price: pos(fd.price),
       pages: pos(fd.pages, true),
       rentalDays: pos(fd.rentalDays, true),
