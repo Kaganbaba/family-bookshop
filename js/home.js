@@ -56,7 +56,7 @@
      Kapalı vitrin hiç yokmuş gibidir (bkz. showcaseOn). Günün İndirimi kapatılırken o anki grup saklanır;
      başka bir gün açılırsa o gruptan devam eder ve yine sonraki 10:00'a kadar sürer. */
   const SHOWCASES = [
-    { key: 'vitrine',  icon: '🏷️', label: 'Özel Fırsatlar',  desc: "Admin'in seçtiği kitap + yüzde indirimleri" },
+    { key: 'vitrine',  icon: '🏷️', label: 'Fırsatlar',  desc: "Admin'in seçtiği kitap + yüzde indirimleri" },
     { key: 'deals',    icon: '🔥', label: 'Günün İndirimi',  desc: `Her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da değişen 3'lü seri indirimi` },
     { key: 'newBooks', icon: '★',  label: 'Yeni Kitap',      desc: `Yeni çıkan kitaplara ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim` },
     { key: 'museum',   icon: '🏛️', label: 'Müze Vitrini',    desc: 'Müze\'deki kitaplar belirlenen süre ve fiyatla sergilenip kiralanır' }
@@ -211,8 +211,8 @@
       </div>`;
   }
 
-  /* --- 8.1.7 Özel Fırsatlar (eski adı Vitrin İndirimleri · gece mavisi + altın) · Admin ekler/siler --- */
-  /* Süresi biten özel fırsatlar: herkes için gizlenir, siteyi açan herkes Firestore'dan da siler
+  /* --- 8.1.7 Fırsatlar (eski adları Vitrin İndirimleri, Özel Fırsatlar · açık çivit mavisi + altın) · Admin ekler/siler --- */
+  /* Süresi biten fırsatlar: herkes için gizlenir, siteyi açan herkes Firestore'dan da siler
      (kural süre dolmuş mu denetler · reddedilirse bu oturumda yeniden denenmez) */
   function purgeExpiredVitrine(now = new Date()) {
     if (!currentUser()) return;
@@ -247,22 +247,22 @@
             <p class="text-[8px] font-extrabold tracking-[.2em] text-amber-900/80">${free ? 'BEDAVA' : 'İNDİRİM'}</p>
             <p class="text-xl font-black text-amber-950 leading-none mt-0.5">%${eff.rate}</p>
           </div>
-          <p class="relative z-[1] vitrine-gold text-base font-extrabold italic leading-tight truncate pr-20 ${admin ? 'pl-7' : ''} mb-3" style="font-family:'Playfair Display',Georgia,serif">${escapeHTML(d.name || 'Özel Fırsat')}</p>
-          ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Özel fırsatı kaldır" aria-label="Özel fırsatı kaldır"
-            class="absolute top-2 left-2 z-[3] w-7 h-7 rounded-full bg-white/10 text-indigo-200 hover:bg-rose-500 hover:text-white flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
+          <p class="relative z-[1] vitrine-gold text-base font-extrabold italic leading-tight truncate pr-20 ${admin ? 'pl-7' : ''} mb-3" style="font-family:'Playfair Display',Georgia,serif">${escapeHTML(d.name || 'Fırsat')}</p>
+          ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Fırsatı kaldır" aria-label="Fırsatı kaldır"
+            class="absolute top-2 left-2 z-[3] w-7 h-7 rounded-full bg-white/20 text-white hover:bg-rose-500 hover:text-white flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
           <div class="relative z-[1] flex gap-3">
-            <div class="shrink-0 rounded-xl ring-1 ring-amber-300/40 shadow-[0_10px_25px_-10px_rgba(251,191,36,.5)]">${coverHTML(b, 'md')}</div>
+            <div class="shrink-0 self-start rounded-xl ring-1 ring-amber-300/40 shadow-[0_10px_25px_-10px_rgba(251,191,36,.5)]">${coverHTML(b, 'md')}</div>
             <div class="flex-1 min-w-0">
-              <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300/80 truncate">${escapeHTML(typeLabel(b.type))}</p>
+              <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-200 truncate">${escapeHTML(typeLabel(b.type))}</p>
               <p class="text-sm font-semibold text-white mt-0.5 line-clamp-2 leading-snug">${escapeHTML(b.title)}</p>
-              <p class="text-[11px] text-indigo-200/70 truncate mt-0.5">${escapeHTML(authorName(b))}</p>
+              ${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<p class="text-[11px] font-bold text-amber-200 mt-0.5">#${b.seriesNo}</p>` : ''}
               ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
             </div>
           </div>
-          <div class="relative z-[1] flex items-end justify-between mt-4 pt-3 border-t border-white/10">
-            <p class="text-[10px] text-indigo-200/70 leading-snug min-w-0">${vitrineEndText(d, now)}</p>
+          <div class="relative z-[1] flex items-end justify-between mt-4 pt-3 border-t border-white/25">
+            <p class="text-[10px] text-indigo-50/90 leading-snug min-w-0">${vitrineEndText(d, now)}</p>
             <div class="text-right shrink-0">
-              <p class="text-[11px] text-indigo-200/50 line-through">${formatMoney(b.price)}</p>
+              <p class="text-[11px] text-indigo-100/75 line-through">${formatMoney(b.price)}</p>
               <p class="vitrine-gold text-2xl font-black leading-none tracking-tight">${free ? 'BEDAVA' : formatMoney(newPrice)}</p>
             </div>
           </div>
@@ -276,11 +276,11 @@
           <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
             <div class="flex items-center gap-3">
               <span class="vitrine-rim w-10 h-10 rounded-full p-[1.5px] shadow-soft shrink-0">
-                <span class="w-full h-full rounded-full bg-indigo-950 flex items-center justify-center text-lg">🏷️</span>
+                <span class="w-full h-full rounded-full bg-indigo-600 flex items-center justify-center text-lg">🏷️</span>
               </span>
               <div>
-                <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Özel Fırsatlar</h2>
-                <p class="text-[11px] text-indigo-200/70">Admin'in seçtiği özel fırsatlar · süreleri dolunca kendiliğinden kalkar</p>
+                <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Fırsatlar</h2>
+                <p class="text-[11px] text-indigo-50/90">Admin'in seçtiği fırsatlar · süreleri dolunca kendiliğinden kalkar</p>
               </div>
             </div>
             ${admin ? `<button type="button" data-add-vitrine
@@ -288,7 +288,7 @@
           </div>
           ${list.length
             ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`
-            : `<p class="relative text-center text-xs text-indigo-200/70 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz özel fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-200/50">Bu boş alanı yalnızca Adminler görür.</span></p>`}
+            : `<p class="relative text-center text-xs text-indigo-50/90 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-100/75">Bu boş alanı yalnızca Adminler görür.</span></p>`}
         </div>
       </div>`;
   }
@@ -351,7 +351,7 @@
       </div>`;
   }
 
-  /* Admin: özel fırsat ekle (aynı kitaba yeniden eklemek indirimi günceller).
+  /* Admin: fırsat ekle (aynı kitaba yeniden eklemek indirimi günceller).
      Başka bir indirimdeki kitap (günün indirimi, yeni kitap, aktif özel teklif) seçilemez. */
   function openVitrineModal() {
     if (!requireAdmin()) return;
@@ -362,18 +362,18 @@
       .filter((b) => hasPrice(b) && isRentableStatus(b))
       .map((b) => ({ b, other: customDiscountOf(b, now) ? null : otherDiscountOf(b, now, dealIds) }))
       .sort((x, y) => !!x.other - !!y.other || x.b.title.localeCompare(y.b.title, 'tr'));
-    if (!pickable.some((x) => !x.other)) return toast('Özel Fırsatlar\'a eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
+    if (!pickable.some((x) => !x.other)) return toast('Fırsatlar\'a eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
     const defaultEnd = localDateKey(new Date(Date.now() + 7 * DAY_MS));
     openModal(`
-      ${modalHeader('Özel Fırsat Ekle 🏷️', 'Ana sayfadaki Özel Fırsatlar\'da görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
+      ${modalHeader('Fırsat Ekle 🏷️', 'Ana sayfadaki Fırsatlar\'da görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
       <form data-form="saveVitrine" class="p-5 space-y-3.5" autocomplete="off">
         ${field('İndirim Adı', `<input name="name" maxlength="60" required autofocus class="${INPUT_CLS}" placeholder="Örn. Kış Fırsatı ❄️" />`)}
         ${field('Kitap', `<select name="bookId" id="vd-book" required class="${INPUT_CLS}">
           ${pickable.map(({ b, other }) => {
             const cur = customDiscountOf(b, now);
-            return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (özel fırsatta %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
+            return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (fırsatta %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
           }).join('')}
-        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Zaten özel fırsatta olan kitabı seçersen indirimi güncellenir.')}
+        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Zaten fırsatta olan kitabı seçersen indirimi güncellenir.')}
         ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" class="${INPUT_CLS}" placeholder="Örn. 30" />`,
           `1–${CUSTOM_DISCOUNT_MAX} arası tam sayı · %100 = bedava`)}
         <div class="grid grid-cols-[1fr_auto] gap-3">
@@ -382,7 +382,7 @@
         </div>
         <div id="vd-preview" class="rounded-2xl bg-gradient-to-br from-indigo-950 to-slate-900 text-white px-4 py-3 text-xs"></div>
         ${announceCheckHTML('vd-announce', 'İndirim')}
-        ${formFooter('Özel Fırsatlar\'a Ekle')}
+        ${formFooter('Fırsatlar\'a Ekle')}
       </form>`);
     updateVitrinePreview();
   }
@@ -405,7 +405,7 @@
     const name = (fd.name || '').trim();
     if (!name) return toast('İndirime bir ad verin.', 'error');
     if (!b || !hasPrice(b)) return toast('Fiyatı olan bir kitap seçin.', 'error');
-    if (!isRentableStatus(b)) return toast('Özel Fırsatlar\'a yalnızca Kiralık durumdaki kitaplar eklenebilir.', 'error');
+    if (!isRentableStatus(b)) return toast('Fırsatlar\'a yalnızca Kiralık durumdaki kitaplar eklenebilir.', 'error');
     if (!(rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX)) return toast(`İndirim yüzdesi 1–${CUSTOM_DISCOUNT_MAX} arası olmalı.`, 'error');
     if (!isDateKey(fd.endDate) || !isTimeKey(fd.endTime)) return toast('Geçerli bir bitiş tarihi ve saati seçin.', 'error');
     const end = dateFromKey(fd.endDate);
@@ -413,7 +413,7 @@
     if (end.getTime() <= Date.now()) return toast('Bitiş anı geçmiş olamaz.', 'error');
     const prev = customDiscountOf(b);
     const other = prev ? null : otherDiscountOf(b);
-    if (other) return toast(`"${b.title}" şu an ${other}; Özel Fırsatlar'a eklenemez.`, 'error');
+    if (other) return toast(`"${b.title}" şu an ${other}; Fırsatlar'a eklenemez.`, 'error');
 
     const batch = db.batch();
     batch.set(col('discounts').doc(String(b.id)), {
@@ -425,12 +425,12 @@
       batch.set(col('announcements').doc(), {
         type: 'news', category: 'İndirim',
         title: `${name}: ${b.title} ${rate === 100 ? 'bedava' : `%${rate} indirimli`}`,
-        body: `🏷️ ${name}\n"${b.title}" Özel Fırsatlar'da! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
+        body: `🏷️ ${name}\n"${b.title}" Fırsatlar'da! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
         bookId: b.id, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
       });
     }
     closeModal();
-    run(batch.commit(), prev ? `"${b.title}" özel fırsatı güncellendi · ${name} %${rate}` : `"${b.title}" ${name} ile %${rate} indirimle Özel Fırsatlar'a eklendi 🏷️`);
+    run(batch.commit(), prev ? `"${b.title}" fırsatı güncellendi · ${name} %${rate}` : `"${b.title}" ${name} ile %${rate} indirimle Fırsatlar'a eklendi 🏷️`);
   }
 
   function deleteVitrine(id) {
@@ -439,12 +439,12 @@
     if (!d) return;
     const b = getBook(d.bookId);
     openConfirm({
-      title: 'Özel fırsat kaldırılsın mı?',
-      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabındaki %${d.rate} özel fırsat indirimi kaldırılacak. <b>Kitap kitaplıkta kalır</b>, normal fiyatından kiralanabilir. Önceki kiralamalar etkilenmez.`,
+      title: 'Fırsat kaldırılsın mı?',
+      message: `"${escapeHTML(b?.title || 'Kitap')}" kitabındaki %${d.rate} fırsat indirimi kaldırılacak. <b>Kitap kitaplıkta kalır</b>, normal fiyatından kiralanabilir. Önceki kiralamalar etkilenmez.`,
       confirmLabel: 'Kaldır',
       onConfirm: () => {
         closeModal();
-        run(col('discounts').doc(d.id).delete(), 'Özel fırsat kaldırıldı.', 'info');
+        run(col('discounts').doc(d.id).delete(), 'Fırsat kaldırıldı.', 'info');
       }
     });
   }
@@ -593,7 +593,7 @@
     const map = {
       deal:   { label: '🔥 Günün İndirimi',      tone: 'bg-rose-50 text-rose-600' },
       new:    { label: '⭐ Yeni Kitap İndirimi', tone: 'bg-amber-50 text-amber-700' },
-      custom: { label: '🏷️ Özel Fırsat',         tone: 'bg-indigo-50 text-indigo-600' },
+      custom: { label: '🏷️ Fırsat',         tone: 'bg-indigo-50 text-indigo-600' },
       museum: { label: '🏛️ Müze Vitrini',         tone: 'bg-amber-50 text-amber-700' },
       winter: { label: '❄️ Kış Fırsatı',          tone: 'bg-sky-50 text-sky-600' },
       winterNew: { label: '✨ Kış · Yeni Kitap',  tone: 'bg-cyan-50 text-cyan-700' },

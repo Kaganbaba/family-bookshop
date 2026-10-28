@@ -516,7 +516,8 @@
     const src = overrideCover || b.cover;
     let cover;
     if (src) {
-      cover = `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="${COVER_SIZES[size]} object-cover shadow-soft shrink-0 bg-slate-100" />`;
+      // kapak kırpılmadan tam görünür (oranı farklıysa kenarları beyaz kalır)
+      cover = `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="block ${COVER_SIZES[size]} object-contain shadow-soft shrink-0 bg-white" />`;
     } else {
       const grad = b.museum ? museumStyle(b).grad : getType(b.type) ? typeStyle(b.type).grad : 'from-brand-400 to-brand-600';
       const letters = initials(String(b.title).replace(/[^\p{L}\p{N}\s]/gu, '') || b.title);

@@ -358,7 +358,7 @@
     }
     return { rate, source };
   }
-  /* Özel Fırsat (eski adı Vitrin İndirimi): Admin'in kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek).
+  /* Fırsat (eski adı Vitrin İndirimi): Admin'in kitaba elle verdiği indirim (belge adı = kitap numarası, kitap başına tek).
      %100 = bedava · bitiş anı (endsAt) geçince kendiliğinden düşer · Vitrin Ayarları'nda kapalıysa uygulanmaz. */
   const CUSTOM_DISCOUNT_MAX = 100;
   const isVitrineActive = (d, now = new Date()) => Number.isInteger(d.rate) && d.rate > 0 && (d.endsMs == null || d.endsMs > now.getTime());
@@ -385,7 +385,7 @@
   const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
-  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Özel Fırsat', museum: 'Müze Vitrini', winter: 'Kış Fırsatı', winterNew: 'Kış · Yeni Kitap', coupon: 'Kupon', cheque: 'Hediye Çeki' }[s] || 'İndirim');
+  const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Fırsat', museum: 'Müze Vitrini', winter: 'Kış Fırsatı', winterNew: 'Kış · Yeni Kitap', coupon: 'Kupon', cheque: 'Hediye Çeki' }[s] || 'İndirim');
 
   function formatCountdown(ms) {
     const t = Math.max(0, Math.floor(ms / 1000));
@@ -649,7 +649,7 @@
     normal: { label: '📚 İndirimsiz kiralamalar', pick: (r) => !r.purchaseId && !r.discountSource },
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
-    custom: { label: '🏷️ Özel Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
+    custom: { label: '🏷️ Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
     winter: { label: '❄️ Kış Fırsatı kiralamaları', pick: (r) => !r.purchaseId && ['winter', 'winterNew'].includes(r.discountSource) },
     cheque: { label: '🎁 Hediye çekli kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'cheque' },
     museum: { label: '🏛️ Müze Vitrini kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'museum' },
@@ -692,7 +692,7 @@
 
   /* --- Müze: kitap kitaplıktan kaldırılır, bilgileri sergilenir (kiralanamaz) ---
      Kayıt silinmez (geçmiş kiralamalar, fiyat logu adını göstermeye devam eder): museum + museumType yazılır,
-     durum Kira dışı olur (kural kiralamayı ayrıca museum bayrağıyla reddeder). Günün İndirimi / Özel Fırsat kaydı kalkar.
+     durum Kira dışı olur (kural kiralamayı ayrıca museum bayrağıyla reddeder). Günün İndirimi / Fırsat kaydı kalkar.
      museumType verilmezse kitabın kendi kategorisi (Seri kitap Müze'de de Seri). */
   function museumOps(book, museumType = book.type) {
     return [
