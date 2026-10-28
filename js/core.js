@@ -67,8 +67,17 @@
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
-  /* settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları
-     'season': { active: 'winter' | null, endsAt (Timestamp | null) } (yalnızca tema) */
+  /* bookThemes/{id} · tema (etiket): { label, emoji, color ('#rrggbb'), order } · kitapta themes: [temaId…] ·
+     'kis-sezonu' sabit temadır (silinemez, Kış Fırsatları'na yalnızca bu temadaki kitaplar girer) */
+  const bookThemes = [];
+  /* winterDeals/{bookId} · Kış Fırsatları indirimi: { bookId, rate (0 | 15 | 25 | 50), updatedAt, updatedBy } ·
+     Kış Sezonu temalı her kitap vitrinde görünür; kaydı yoksa indirimsizdir */
+  const winterDeals = [];
+  /* giftClaims/{boxId_gün_uid} · Hediye Kutusu'ndan alınan günlük ödül: { userId, boxId, day (1–7), reward, claimedAt } */
+  const giftClaims = [];
+  /* settings/{id} · 'giftBox': Hediye Kutusu { enabled, boxId, startAt, day2At (Timestamp), rewards: [7 ödül] } ·
+     'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları
+     'season': { active: 'winter' | null, endsAt (Timestamp | null), startedAt (ISO, sezon açıldığı an) } */
   const appSettings = [];
   /* feedback/{id} · { userId, type, message, createdAt, status ('open'|'answered'), replies: [{ by, text, at }],
      adminSeen, lastReplyAt, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
@@ -84,7 +93,7 @@
      1.1) ÖRNEK KATALOG (Admin panelinden bir kez Firestore'a yüklenir)
      ========================================================== */
 
-  /* Kitap türleri · palette: TYPE_PALETTES anahtarı
+  /* Kitap türleri · color: '#rrggbb' (renk seçiciyle) · eski kayıtlarda palette: TYPE_PALETTES anahtarı
      inDeals: false → bu türdeki kitaplar günlük indirim döngüsüne girmez
      Günün İndirimleri yalnızca Seri kitaplar üzerinden döner. */
   const SEED_TYPES = [
@@ -184,9 +193,40 @@
     bogo:    { label: 'Al-Öde Kuponu', hint: 'Kaç kitap alınacak (2–5)', min: 2, max: 5, step: 1 }
   };
   const COUPON_DAYS = 7; // alınan kupon 1 hafta içinde kullanılmalı
-  /* Sezonlar (Admin profil panelindeki Sezonlar butonundan seçer) · sezon açıkken yalnızca arayüz temalanır */
+  /* Sezonlar (Admin profil panelindeki Sezonlar butonundan seçer) · Kış: karlı tema + Kış Fırsatları vitrini;
+     sezon boyunca Günün İndirimi, Yeni Kitap ve Fırsatlar kapalıdır */
   const SEASONS = {
-    winter: { label: 'Kış', icon: '❄️', desc: 'Kar yağışı ve karlı tema' }
+    winter: { label: 'Kış', icon: '❄️', desc: 'Karlı tema · Kış Fırsatları açılır, Günün İndirimi ve Fırsatlar kapanır' }
+  };
+  /* Kış Fırsatları indirim seçenekleri (0 = indirimsiz) */
+  const WINTER_RATES = [0, 15, 25, 50];
+  /* Hediye Kutusu: 7 günlük ödül havuzu · her gün 10:00'da sıradaki gün açılır (kaçırılan gün geri gelmez) */
+  const GIFT_DAYS = 7;
+  const GIFT_REWARD_TYPES = {
+    none:    { label: 'Ödül yok',     icon: '—' },
+    balance: { label: 'Bakiye',       icon: '💰' },
+    cheque:  { label: 'Hediye Çeki',  icon: '🎁' },
+    coupon:  { label: 'Kupon',        icon: '🎟️' }
+  };
+
+  /* --- Temalar (kitap etiketleri) · Kış Sezonu teması her zaman vardır (belgesi yoksa varsayılanı kullanılır) --- */
+  const WINTER_THEME_ID = 'kis-sezonu';
+  const WINTER_THEME_DEFAULT = { id: WINTER_THEME_ID, label: 'Kış Sezonu', emoji: '❄️', color: '#0ea5e9', order: 0 };
+  const isHexColor = (s) => /^#[0-9a-f]{6}$/i.test(s || '');
+  const allThemes = () => (bookThemes.some((t) => t.id === WINTER_THEME_ID) ? [...bookThemes] : [WINTER_THEME_DEFAULT, ...bookThemes]);
+  const getTheme = (id) => allThemes().find((t) => t.id === id) || null;
+  const themeIdsOf = (b) => (Array.isArray(b?.themes) ? b.themes : []);
+  const bookThemesOf = (b) => allThemes().filter((t) => themeIdsOf(b).includes(t.id));
+  const hasWinterTheme = (b) => themeIdsOf(b).includes(WINTER_THEME_ID);
+  /* Tema rozeti: emoji + ad, kendi renginde yazı, açık tonlu zemin */
+  const themeChipHTML = (t) => {
+    const c = isHexColor(t.color) ? t.color : '#64748b';
+    return `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+      style="color:color-mix(in srgb, ${c} 80%, #0f172a);background:${c}1f;box-shadow:inset 0 0 0 1px ${c}45">${t.emoji ? `<span>${escapeHTML(t.emoji)}</span>` : ''}${escapeHTML(t.label)}</span>`;
+  };
+  const themeChipsHTML = (b, cls = '') => {
+    const list = bookThemesOf(b);
+    return list.length ? `<span class="flex items-center gap-1 flex-wrap ${cls}">${list.map(themeChipHTML).join('')}</span>` : '';
   };
   const CHEQUE_DAYS = 30;     // hediye çekinin varsayılan geçerliliği
   const DEFAULT_RENTAL_DAYS = 7;
@@ -297,7 +337,34 @@
     slate:   { label: 'Gri',    grad: 'from-slate-400 to-slate-600',   chip: 'bg-slate-100 text-slate-600',    dot: 'bg-slate-400' }
   };
   const getType = (id) => bookTypes.find((t) => t.id === id);
-  const typeStyle = (id) => TYPE_PALETTES[getType(id)?.palette] || TYPE_PALETTES.slate;
+  /* Eski kayıtlardaki palet adının renk karşılığı (renk seçici bununla açılır) */
+  const PALETTE_HEX = { blue: '#3b82f6', rose: '#fb7185', violet: '#8b5cf6', emerald: '#10b981', amber: '#f59e0b', slate: '#64748b' };
+  const typeColorOf = (t) => (isHexColor(t?.color) ? t.color : PALETTE_HEX[t?.palette] || PALETTE_HEX.slate);
+  /* Kategori rengi serbest seçilir (color: '#rrggbb'): her kategoriye degrade / rozet / nokta sınıfı üretilir
+     (sınıflar <style id="typeColors"> içinde · kategoriler değişince yenilenir) · eski kayıtlarda palette sınıfları */
+  let typeColorKey = '';
+  function syncTypeColorCSS() {
+    const list = bookTypes.filter((t) => isHexColor(t.color));
+    const key = list.map((t) => t.id + t.color).join('|');
+    if (key === typeColorKey) return;
+    typeColorKey = key;
+    let el = document.getElementById('typeColors');
+    if (!el) { el = document.createElement('style'); el.id = 'typeColors'; document.head.appendChild(el); }
+    el.textContent = list.map((t) => {
+      const k = typeClassKey(t.id), c = t.color;
+      return `.tc-${k}-g{background-image:linear-gradient(to bottom right,color-mix(in srgb,${c} 60%,#fff),${c})!important}`
+        + `.tc-${k}-c{background-color:color-mix(in srgb,${c} 12%,#fff)!important;color:color-mix(in srgb,${c} 80%,#0f172a)!important}`
+        + `.tc-${k}-d{background-color:${c}!important}`;
+    }).join('\n');
+  }
+  const typeClassKey = (id) => String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const typeStyle = (id) => {
+    const t = getType(id);
+    if (!isHexColor(t?.color)) return TYPE_PALETTES[t?.palette] || TYPE_PALETTES.slate;
+    syncTypeColorCSS();
+    const k = typeClassKey(t.id);
+    return { label: t.label, grad: `tc-${k}-g`, chip: `tc-${k}-c`, dot: `tc-${k}-d` };
+  };
   const typeLabel = (t) => getType(t)?.label || 'Kitap';
   const defaultTypeId = () => bookTypes[0]?.id || '';
 
@@ -866,6 +933,8 @@
       // Yeni kitap indirimi biten kitap vitrinden düşsün
       if (newBooksKey(now) !== state.lastNewKey) return renderDashboard();
       updateCountdown(now);
+      // Hediye Kutusu: kalan süre · 10:00'da yeni gün açılınca kutu yeniden çizilir
+      updateGiftBoxFab(now);
     }
 
     const root = $(`#page-${state.route}`);

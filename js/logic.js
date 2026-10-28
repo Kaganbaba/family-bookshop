@@ -290,7 +290,7 @@
   const showcaseDoc = () => appSettings.find((s) => s.id === 'showcase') || {};
   const showcaseOn = (key) => showcaseDoc()[key] !== false;
 
-  /* Sezon (settings/season) · yalnızca tema (kar yağışı vb.) · süreli açıldıysa endsAt geçince kendiliğinden kapalı sayılır */
+  /* Sezon (settings/season) · süreli açıldıysa endsAt geçince kendiliğinden kapalı sayılır */
   const seasonDoc = () => appSettings.find((x) => x.id === 'season') || {};
   const seasonEndsMs = () => seasonDoc().endsAt?.toMillis?.() ?? null;
   const activeSeason = () => {
@@ -299,11 +299,30 @@
     return SEASONS[d.active] && (end == null || end > Date.now()) ? d.active : null;
   };
 
+  /* --- Kış sezonu (kural da aynısını denetler) ---
+     • Günün İndirimi ve Fırsatlar sezon boyunca kapalı · Yeni Kitap açık (kış temalı kitaba yeni kitap indirimi yok)
+     • Kış Sezonu temalı her kitap kendiliğinden Kış Fırsatları'nda · indirimi Admin seçer (winterDeals/{kitap}, yoksa indirimsiz)
+     • Sezon içinde gelen kış kitabı o sezon boyunca indirimsiz (indirimi değiştirilemez) */
+  const WINTER_PAUSED = ['deals', 'vitrine'];
+  const winterOn = () => activeSeason() === 'winter';
+  const winterShowcaseOn = () => winterOn() && showcaseOn('winter');
+  /* Vitrin şu an çalışıyor mu: Vitrin Ayarları'nda açık ve (kış sezonundaysa) kışın kapanan vitrinlerden değil */
+  const showcaseLive = (key) => showcaseOn(key) && !(winterOn() && WINTER_PAUSED.includes(key));
+  /* Sezonun açıldığı an (eski kayıtlarda sezon ayarının son değiştiği an) */
+  const winterStartMs = () => new Date(seasonDoc().startedAt || seasonDoc().changedAt || 0).getTime();
+  /* Bu sezon gelen kış kitabı: sezon boyunca indirimsiz */
+  const isWinterNewBook = (book) => winterOn() && hasWinterTheme(book) && new Date(book?.addedAt || 0).getTime() >= winterStartMs();
+  /* Kış Fırsatı yüzdesi (0 = indirimsiz) · yalnızca kış temalı kitapta ve vitrin açıkken */
+  const winterRateOf = (book) => {
+    if (!winterShowcaseOn() || !hasWinterTheme(book) || isWinterNewBook(book)) return 0;
+    return winterDeals.find((d) => d.bookId === book?.id)?.rate || 0;
+  };
+
   function getDailyDeals(now = new Date()) {
     const size = DISCOUNT_SETTINGS.groupSize;
     const today = discountDayNumber(now);
     let day = anchorDayNumber();
-    if (today < day || !showcaseOn('deals')) return { ids: [], group: 0, groupCount: 0, listSize: 0, pinned: false };
+    if (today < day || !showcaseLive('deals')) return { ids: [], group: 0, groupCount: 0, listSize: 0, pinned: false };
 
     // Başlangıç: Admin'in en son seçimi (bugün veya önce yapıldıysa), yoksa ilk gün 1. grup
     const d = dealsDoc();
@@ -348,6 +367,11 @@
   /* Kitaba o an uygulanacak indirim: vitrin indirimi varsa o; yoksa günün indirimi / yeni kitaptan yüksek olan */
   /* dealIds verilirse günün indirimleri yeniden hesaplanmaz (listelerde tek sefer hesap) */
   function getEffectiveDiscount(book, now = new Date(), dealIds = null) {
+    // Kış sezonunda kış temalı kitapta yalnızca Kış Fırsatları indirimi (diğerlerinde Günün İndirimi ve Fırsatlar kapalı)
+    if (winterOn() && hasWinterTheme(book)) {
+      const w = winterRateOf(book);
+      return w > 0 ? { rate: w, source: 'winter' } : { rate: 0, source: null };
+    }
     // Vitrin indirimindeki kitap başka indirime girmez (günün indirimi o kitabı atlar)
     const custom = customDiscountOf(book, now);
     if (custom) return { rate: custom.rate, source: 'custom' };
@@ -362,7 +386,7 @@
      %100 = bedava · bitiş anı (endsAt) geçince kendiliğinden düşer · Vitrin Ayarları'nda kapalıysa uygulanmaz. */
   const CUSTOM_DISCOUNT_MAX = 100;
   const isVitrineActive = (d, now = new Date()) => Number.isInteger(d.rate) && d.rate > 0 && (d.endsMs == null || d.endsMs > now.getTime());
-  const customDiscountOf = (book, now = new Date()) => (showcaseOn('vitrine')
+  const customDiscountOf = (book, now = new Date()) => (showcaseLive('vitrine')
     && discounts.find((d) => d.bookId === book?.id && isVitrineActive(d, now))) || null;
   /* Kitap şu an başka bir indirimde mi (vitrine eklenemez): günün indirimi, yeni kitap, aktif özel teklif */
   function otherDiscountOf(book, now = new Date(), dealIds = getDailyDeals(now).ids) {
@@ -382,7 +406,7 @@
   }
   /* Vitrin Ayarları'nda Yeni Kitap kapalıysa hiçbir kitap yeni kitap indirimine girmez; açılınca süresi
      dolmamış kitaplar kalan süreleriyle girer */
-  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseOn('newBooks') && !!end && end > now.getTime(); };
+  const isNewBook = (book, now = new Date()) => { const end = newDiscountEnd(book); return showcaseLive('newBooks') && !(winterOn() && hasWinterTheme(book)) && !!end && end > now.getTime(); };
   const newDiscountLeftMs = (book, now = new Date()) => (newDiscountEnd(book) || 0) - now.getTime();
   const newBooksKey = (now = new Date()) => books.filter((b) => isNewBook(b, now) && isVisibleBook(b)).map((b) => b.id).join(',');
   const discountSourceLabel = (s) => ({ deal: 'Günün İndirimi', new: 'Yeni Kitap İndirimi', offer: 'Özel Teklif', custom: 'Fırsat', museum: 'Müze Vitrini', winter: 'Kış Fırsatı', winterNew: 'Kış · Yeni Kitap', coupon: 'Kupon', cheque: 'Hediye Çeki' }[s] || 'İndirim');
@@ -676,7 +700,7 @@
     if (cats.includes('coupon')) {
       const cs = coupons.filter((c) => c.userId === userId);
       cs.forEach((c) => ex.coupons.add(c.id));
-      ops.push(...cs.map((c) => (bt) => bt.delete(col('coupons').doc(c.id))));
+      ops.push(...cs.map((c) => (bt) => bt.delete(col('coupons').doc(c.id))), ...cs.flatMap((c) => giftClaimDeleteOps(c.id)));
     }
     removed.forEach((r) => ex.rentals.add(r.id));
     // Kitaba hiç kiralaması kalmayan kullanıcının oyu da silinir · puan defteri yeniden hesaplanır
@@ -685,9 +709,9 @@
   }
 
   /* Kitap türü ekle / düzenle / sil */
-  function addBookType({ label, palette, inDeals }) {
+  function addBookType({ label, color, inDeals }) {
     const order = bookTypes.reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
-    return col('bookTypes').doc(uid('t')).set({ label, palette, inDeals, order });
+    return col('bookTypes').doc(uid('t')).set({ label, color, inDeals, order });
   }
 
   /* --- Müze: kitap kitaplıktan kaldırılır, bilgileri sergilenir (kiralanamaz) ---
@@ -697,7 +721,8 @@
   function museumOps(book, museumType = book.type) {
     return [
       (bt) => bt.update(bookRef(book.id), { museum: true, museumType, museumAt: isoAt(Date.now()), status: 'kiradisi', special: FieldValue.delete() }),
-      ...discounts.filter((d) => d.bookId === book.id).map((d) => (bt) => bt.delete(col('discounts').doc(d.id)))
+      ...discounts.filter((d) => d.bookId === book.id).map((d) => (bt) => bt.delete(col('discounts').doc(d.id))),
+      ...winterDeals.filter((d) => d.bookId === book.id).map((d) => (bt) => bt.delete(col('winterDeals').doc(d.id)))
     ];
   }
 
@@ -873,8 +898,8 @@
      • Kazanma: indirimli kiralama / paket ödemesiyle aynı batch'te artar (kural kazancı doğrular).
      • Harcama: kupon alımıyla aynı batch'te artar (kural: harcanan ≤ kazanılan).
      • Admin kayıt silince defter kayıtlardan yeniden hesaplanır; defteri olmayanınki Admin açınca kurulur.
-     • 'winter' / 'winterNew' ve pointsMult yalnızca kaldırılan Kış Fırsatları'nın eski kayıtlarındadır
-       (defter tutarlı kalsın diye eski kazançları sayılır; yeni kayıtta kural bu alanları reddeder). */
+     • 'winter': Kış Fırsatları indirimi (diğer indirimler gibi puan kazandırır) ·
+       'winterNew' ve pointsMult yalnızca eski Kış Fırsatları kayıtlarındadır (yeni kayıtta kural pointsMult'ı reddeder). */
   const POINT_SOURCES = ['deal', 'new', 'custom', 'winter', 'winterNew'];
   const pointsMultOf = (x) => (Number.isInteger(x?.pointsMult) && x.pointsMult > 1 ? x.pointsMult : 1);
   const rentalGain = (r) => (!r.offerId && POINT_SOURCES.includes(r.discountSource) ? Math.max(0, round2(((r.listPrice ?? r.price) - r.price) * pointsMultOf(r))) : 0);
@@ -979,6 +1004,89 @@
             : '<p class="text-[10px] text-slate-400 mt-1.5">Kullanmak için: kiralık bir kitabın detayında kuponu seç → Kirala</p>') : ''}
         </div>
       </li>`;
+  }
+
+  /* --- Hediye Kutusu: 7 günlük günlük ödül (settings/giftBox) ---
+     1. gün kutu açıldığı anda başlar, sonraki her gün 10:00'da açılır (day2At = açılıştan sonraki ilk 10:00).
+     Her gün yalnızca o günün ödülü alınabilir; kaçırılan günün ödülü geri gelmez. Kural aynı hesabı yapar. */
+  const giftBoxDoc = () => appSettings.find((s) => s.id === 'giftBox') || {};
+  const giftRewards = () => {
+    const list = Array.isArray(giftBoxDoc().rewards) ? giftBoxDoc().rewards : [];
+    return Array.from({ length: GIFT_DAYS }, (_, i) => list[i] || { type: 'none' });
+  };
+  /* Kutunun zamanları (ms) · yoksa null */
+  function giftBoxTimes() {
+    const g = giftBoxDoc();
+    const start = g.startAt?.toMillis?.();
+    const day2 = g.day2At?.toMillis?.();
+    return start && day2 ? { start, day2, end: day2 + (GIFT_DAYS - 1) * DAY_MS } : null;
+  }
+  /* Açılış anından sonraki ilk 10:00 */
+  function giftDay2From(ms) {
+    const d = new Date(ms);
+    d.setHours(DISCOUNT_SETTINGS.resetHour, 0, 0, 0);
+    if (d.getTime() <= ms) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  /* Yeni 7 günlük kutu verisi (Admin başlatınca ya da kış sezonu açılınca) */
+  const newGiftBoxData = (now = Date.now()) => ({
+    enabled: true, boxId: `b${now}`, startAt: Timestamp.fromMillis(now), day2At: Timestamp.fromMillis(giftDay2From(now)), startedAt: isoAt(now)
+  });
+  /* Kutu şu an açık mı (Admin açtı ve 7 gün dolmadı) */
+  const giftBoxLive = (now = Date.now()) => {
+    const t = giftBoxTimes();
+    return giftBoxDoc().enabled === true && !!t && now >= t.start && now < t.end;
+  };
+  /* Bugün kutunun kaçıncı günü (1–7) */
+  const giftDayAt = (now = Date.now()) => {
+    const t = giftBoxTimes();
+    if (!t) return 0;
+    return now < t.day2 ? 1 : 2 + Math.floor((now - t.day2) / DAY_MS);
+  };
+  /* Günün başladığı an */
+  const giftDayStart = (day) => { const t = giftBoxTimes(); return day === 1 ? t.start : t.day2 + (day - 2) * DAY_MS; };
+  const giftClaimOf = (day, userId = state.currentUserId) => giftClaims.find((c) => c.boxId === giftBoxDoc().boxId && c.day === day && c.userId === userId) || null;
+  /* Kullanıcı bugünün ödülünü alabilir mi */
+  const giftClaimable = (now = Date.now()) => giftBoxLive(now) && giftRewards()[giftDayAt(now) - 1]?.type !== 'none' && !giftClaimOf(giftDayAt(now));
+  /* Hediye Kutusu'ndan gelen kupon / çek (belge adı = alım kaydı) silinince alım kaydı da silinir (kayıt tamamen kalkar) */
+  const giftClaimDeleteOps = (docId) => (giftClaims.some((c) => c.id === docId) ? [(bt) => bt.delete(col('giftClaims').doc(docId))] : []);
+  /* Ödülün kısa adı (ör. ₺10 bakiye · %20 kupon · ₺15 hediye çeki) */
+  function giftRewardLabel(r) {
+    if (!r || r.type === 'none') return 'Ödül yok';
+    if (r.type === 'balance') return `${formatMoney(r.amount)} bakiye`;
+    if (r.type === 'cheque') return `${formatMoney(r.amount)} hediye çeki`;
+    return `${couponBadge({ type: r.couponType, value: r.value, free: r.free })} kupon${r.name ? ` · ${r.name}` : ''}`;
+  }
+
+  /* Bugünün ödülünü al · tek batch: alım kaydı + ödül (bakiye / çek / kupon) · kural günü, ödülü ve tek alımı denetler */
+  function claimGift() {
+    const u = currentUser();
+    const now = Date.now();
+    if (!u || !giftBoxLive(now)) return toast('Hediye kutusu şu an kapalı.', 'info');
+    const day = giftDayAt(now);
+    const reward = giftRewards()[day - 1];
+    if (!reward || reward.type === 'none') return toast('Bugün için ödül yok.', 'info');
+    if (giftClaimOf(day)) return toast('Bugünün hediyesini zaten aldın 🎁', 'info');
+    const g = giftBoxDoc();
+    const claimId = `${g.boxId}_${day}_${u.id}`;
+    const batch = db.batch();
+    batch.set(col('giftClaims').doc(claimId), { userId: u.id, boxId: g.boxId, day, reward, claimedAt: isoAt(now) });
+    if (reward.type === 'balance') {
+      batch.update(col('users').doc(u.id), { balance: round2(u.balance + reward.amount), lastTx: claimId, lastTxType: 'gift' });
+    } else if (reward.type === 'cheque') {
+      batch.set(col('giftCheques').doc(claimId), {
+        userId: u.id, amount: reward.amount, cost: 0, name: reward.name || `Hediye Kutusu · ${day}. gün`,
+        createdAt: isoAt(now), createdBy: u.id, expiresAt: Timestamp.fromMillis(now + CHEQUE_DAYS * DAY_MS),
+        openedAt: isoAt(now), seenAt: isoAt(now), usedAt: null, rentalId: null
+      });
+    } else {
+      batch.set(col('coupons').doc(claimId), {
+        userId: u.id, shopId: null, type: reward.couponType, value: reward.value, free: reward.free ?? null, name: reward.name || '',
+        cost: 0, boughtAt: isoAt(now), expiresAt: Timestamp.fromMillis(now + COUPON_DAYS * DAY_MS),
+        usedAt: null, rentalIds: null, bookIds: null, freeBookIds: null, paidTotal: null
+      });
+    }
+    return run(batch.commit(), `🎁 ${day}. günün hediyesi alındı · ${giftRewardLabel(reward)}`);
   }
 
   function computeLeaderboard() {

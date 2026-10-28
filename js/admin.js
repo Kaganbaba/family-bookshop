@@ -53,6 +53,17 @@
               'Günün İndirimleri bu sıraya göre döner (1-2-3, 4-5-6…)')}
           </div>
         </div>
+        <div>
+          <span class="block text-[11px] font-medium text-slate-500 mb-1.5">Temalar <span class="text-slate-400 font-normal">· kitabın konusu (birden çok seçilebilir)</span></span>
+          <div class="flex flex-wrap gap-1.5">
+            ${allThemes().map((t) => `
+              <label class="cursor-pointer">
+                <input type="checkbox" name="theme:${t.id}" ${themeIdsOf(b).includes(t.id) ? 'checked' : ''} class="peer sr-only" />
+                <span class="block rounded-full transition opacity-40 grayscale hover:opacity-70 peer-checked:opacity-100 peer-checked:grayscale-0 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300">${themeChipHTML(t)}</span>
+              </label>`).join('')}
+          </div>
+          ${winterOn() && !b ? `<p class="text-[10px] text-sky-600 mt-1">❄️ Kış sezonu açık · "${escapeHTML(getTheme(WINTER_THEME_ID).label)}" temalı yeni kitap yeni kitap indirimi almaz, sezon boyunca Kış Fırsatları'nda indirimsiz durur.</p>` : ''}
+        </div>
         ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Kitap hakkında kısa bilgi (isteğe bağlı)">${escapeHTML(b?.description || '')}</textarea>`)}
         <p class="text-[10px] text-slate-400 -mt-1.5">Planlanıyor / Yakında durumunda yalnızca ad ve tür zorunludur; diğer bilgiler boş kalabilir. Kiralık olmayan kitaplarda çıkış tarihi boş kalabilir.</p>
         <label class="flex items-center gap-2 text-[11px] text-slate-600">
@@ -128,7 +139,8 @@
       title, type, status, seriesNo, price, pages, rentalDays, releaseDate,
       place: (fd.place || '').trim(),
       description: (fd.description || '').trim(),
-      cover: state.bookDraftCover || ''
+      cover: state.bookDraftCover || '',
+      themes: Object.keys(fd).filter((k) => k.startsWith('theme:')).map((k) => k.slice(6)).filter(getTheme)
     };
 
     if (editId) {
@@ -160,6 +172,9 @@
         extra = ' · Duyurular\'a haber düştü 📣';
       }
       batch.update(bookRef(b.id), data);
+      // Kış Sezonu teması kalktıysa Kış Fırsatları indirimi de silinir
+      const winterDeal = winterDeals.find((d) => d.bookId === b.id);
+      if (winterDeal && !hasWinterTheme(data)) batch.delete(col('winterDeals').doc(winterDeal.id));
       closeModal();
       run(batch.commit(), `"${title}" güncellendi · ${BOOK_STATUSES[status].label}${extra}.`);
       return;
@@ -168,6 +183,8 @@
     const { book, done } = addBook(data, announce);
     if (state.bookTab !== type) state.bookTab = type;
     closeModal();
+    // Kış sezonunda gelen kış kitabı yeni kitap indirimi yerine Kış Fırsatları'nda indirimsiz
+    if (!draft && winterOn() && hasWinterTheme(book)) return run(done, `"${book.title}" eklendi · ❄️ kış sezonu boyunca Kış Fırsatları'nda indirimsiz`);
     run(done, draft
       ? `"${book.title}" ${BOOK_STATUSES[status].label} olarak eklendi.`
       : book.newDiscountUntil
@@ -402,8 +419,8 @@
   const endedLabel = (r) => (r.cancelledAt ? 'İptal Edildi' : 'Süresi Doldu');
 
   /* --- Kategorileri (kitap türlerini) yönet --- */
-  const paletteOptions = (sel) => Object.entries(TYPE_PALETTES)
-    .map(([k, p]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${p.label}</option>`).join('');
+  /* Kategori rengi: renk seçici (eski kayıtlarda paletin karşılığı olan renkle açılır) */
+  const paletteOptions = (t) => colorPickerField(typeColorOf(t));
 
   function openTypeManager() {
     if (!requireAdmin()) return;
@@ -430,10 +447,8 @@
         <ul class="space-y-2">${rows || `<li>${emptyState('Henüz tür yok.')}</li>`}</ul>
         <form data-form="saveType" class="p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
           <p class="text-[11px] font-semibold text-slate-600">Yeni Tür Ekle</p>
-          <div class="flex gap-2">
-            <input name="label" required maxlength="24" class="${INPUT_CLS} !py-1.5 flex-1 min-w-0" placeholder="Örn. Şiir" />
-            <select name="palette" aria-label="Renk" class="${INPUT_CLS} !py-1.5 !w-24 shrink-0">${paletteOptions('emerald')}</select>
-          </div>
+          <input name="label" required maxlength="24" class="${INPUT_CLS} !py-1.5" placeholder="Örn. Şiir" />
+          ${paletteOptions({ color: '#10b981' })}
           <label class="flex items-center gap-2 text-[11px] text-slate-500">
             <input type="checkbox" name="inDeals" class="rounded border-slate-300 text-brand-600" />
             Günün indirimi döngüsüne girsin
@@ -441,7 +456,193 @@
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Türü Ekle</button>
         </form>
         <p class="text-[10px] text-slate-400 leading-relaxed">Ad ve renk ayarı için türün yanındaki ⚙️ simgesine bas. İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
+        <button type="button" data-quick="bookSettings" class="${BTN_SOFT} w-full !py-2.5">← Kitap Ayarları</button>
       </div>`);
+  }
+
+  /* --- Kitap Ayarları: Kategorileri Yönet · Temaları Yönet --- */
+  function openBookSettings() {
+    if (!requireAdmin()) return;
+    const opt = (quick, ic, label, desc) => `
+      <button type="button" data-quick="${quick}"
+        class="w-full flex items-center gap-3 p-3 rounded-2xl border border-slate-100 bg-white hover:border-brand-200 hover:bg-brand-50/40 text-left transition">
+        <span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center text-lg shrink-0">${ic}</span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-xs font-bold text-slate-700">${label}</span>
+          <span class="block text-[10px] text-slate-400">${desc}</span>
+        </span>
+        <span class="text-slate-300">›</span>
+      </button>`;
+    openModal(`
+      ${modalHeader('Kitap Ayarları ⚙️', 'Kategoriler ve temalar', 'cog')}
+      <div class="p-5 space-y-2.5">
+        ${opt('manageTypes', '📚', 'Kategorileri Yönet', `${bookTypes.length} kategori · kitap türleri, renkleri ve indirim döngüsü`)}
+        ${opt('manageThemes', '🏷️', 'Temaları Yönet', `${allThemes().length} tema · kitabın konusunu gösteren renkli etiketler`)}
+        <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5 mt-2">Kapat</button>
+      </div>`);
+  }
+
+  /* --- Temaları (kitap etiketlerini) yönet · Kış Sezonu teması silinemez (Kış Fırsatları buna bağlı) --- */
+  /* Renk seçici: istenen renk serbestçe seçilir (tema ve kategori) */
+  const colorPickerField = (value, attrs = '') => `
+    <label class="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 bg-white cursor-pointer hover:border-brand-200 transition">
+      <input type="color" name="color" value="${isHexColor(value) ? value : '#0ea5e9'}" ${attrs}
+        class="w-11 h-11 p-0.5 rounded-lg border border-slate-200 bg-white cursor-pointer shrink-0" />
+      <span class="min-w-0">
+        <span class="block text-[11px] font-semibold text-slate-600">Renk</span>
+        <span class="block text-[10px] text-slate-400">Kutucuğa tıkla, renk paletinden istediğin rengi seç</span>
+      </span>
+    </label>`;
+  const themeColorInput = (value) => colorPickerField(value, 'data-theme-preview="1"');
+  const themeEmojiInput = (value) => `
+    <input name="emoji" maxlength="8" value="${escapeHTML(value || '')}" data-theme-preview="1" aria-label="Emoji" placeholder="🙂"
+      class="${INPUT_CLS} !py-1.5 !w-14 shrink-0 text-center" />`;
+  const themeBookCount = (id) => [...books, ...museumBooks].filter((b) => themeIdsOf(b).includes(id)).length;
+
+  /* Tema formundaki önizleme rozeti (ad + renk) */
+  function updateThemePreview(form) {
+    const box = form?.querySelector('[data-theme-chip]');
+    if (!box) return;
+    box.innerHTML = themeChipHTML({ label: form.elements.label.value.trim() || 'Tema', emoji: form.elements.emoji.value.trim(), color: form.elements.color.value });
+  }
+
+  function openThemeManager() {
+    if (!requireAdmin()) return;
+    const rows = allThemes().map((t) => `
+      <li class="flex items-center gap-2.5 p-2.5 pl-3.5 rounded-xl border border-slate-100">
+        <div class="flex-1 min-w-0">
+          ${themeChipHTML(t)}
+          <p class="text-[10px] text-slate-400 mt-1">${themeBookCount(t.id)} kitap${t.id === WINTER_THEME_ID ? ' · Kış Fırsatları\'na yalnızca bu temadaki kitaplar girer' : ''}</p>
+        </div>
+        <button type="button" data-edit-theme="${t.id}" title="Ayarlar" aria-label="${escapeHTML(t.label)} ayarları" class="${BTN_ICON} text-slate-400 hover:text-brand-600 hover:bg-brand-50">${icon('cog', 'w-4 h-4')}</button>
+        ${t.id === WINTER_THEME_ID ? '<span class="w-9 shrink-0"></span>'
+          : `<button type="button" data-delete-theme="${t.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-4 h-4')}</button>`}
+      </li>`).join('');
+    openModal(`
+      ${modalHeader('Temaları Yönet 🏷️', 'Kitabın konusunu gösteren renkli etiketler · kitap adının yanında ve kitap penceresinde görünür.', 'tag')}
+      <div class="p-5 space-y-4">
+        <ul class="space-y-2">${rows}</ul>
+        <form data-form="saveTheme" class="p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[11px] font-semibold text-slate-600">Yeni Tema Ekle</p>
+            <span data-theme-chip>${themeChipHTML({ label: 'Tema', color: '#7c3aed' })}</span>
+          </div>
+          <div class="flex gap-2">
+            ${themeEmojiInput('')}
+            <input name="label" required maxlength="24" data-theme-preview="1" class="${INPUT_CLS} !py-1.5 flex-1 min-w-0" placeholder="Örn. Macera" />
+          </div>
+          ${themeColorInput('#7c3aed')}
+          <p class="text-[10px] text-slate-400 -mt-1">Emoji isteğe bağlı · Windows'ta Win + . ile emoji seçebilirsin.</p>
+          <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Temayı Ekle</button>
+        </form>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Kitaplara tema, kitabı düzenlerken eklenir. Ad ve renk için temanın yanındaki ⚙️ simgesine bas. Silinen tema kitaplardan da kalkar.</p>
+        <button type="button" data-quick="bookSettings" class="${BTN_SOFT} w-full !py-2.5">← Kitap Ayarları</button>
+      </div>`);
+  }
+
+  function openThemeEditor(id) {
+    if (!requireAdmin()) return;
+    const t = getTheme(id);
+    if (!t) return;
+    openModal(`
+      ${modalHeader(`${escapeHTML(t.label)} · Ayarlar ⚙️`, `${themeBookCount(t.id)} kitap`, 'cog')}
+      <form data-form="saveTheme" data-edit-id="${t.id}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-medium text-slate-500">Önizleme</span>
+          <span data-theme-chip>${themeChipHTML(t)}</span>
+        </div>
+        <div class="flex gap-2 items-end">
+          ${themeEmojiInput(t.emoji)}
+          <div class="flex-1 min-w-0">${field('Tema adı', `<input name="label" required maxlength="24" value="${escapeHTML(t.label)}" data-theme-preview="1" class="${INPUT_CLS}" />`)}</div>
+        </div>
+        ${themeColorInput(t.color)}
+        <p class="text-[10px] text-slate-400 -mt-1.5">Emoji isteğe bağlı (boş bırakılabilir) · Windows'ta Win + . ile emoji seçebilirsin.</p>
+        ${t.id === WINTER_THEME_ID ? winterRatesHTML() : ''}
+        <div class="grid grid-cols-2 gap-2.5 pt-2">
+          <button type="button" data-quick="manageThemes" class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">← Geri</button>
+          <button type="submit" class="${BTN_PRIMARY} !py-2.5">Kaydet</button>
+        </div>
+      </form>`);
+  }
+
+  /* Kış Sezonu teması ayarında: bu temadaki kitaplar ve Kış Fırsatları indirimleri (sezon kapalıyken de ayarlanır,
+     kış açılınca kendiliğinden uygulanır · kaydı olmayan kitap indirimsiz) · bu kışın kitabı sezon boyunca indirimsiz */
+  function winterRatesHTML() {
+    const list = [...books].filter((b) => hasWinterTheme(b)).sort(bySeriesThenTitle);
+    const rows = list.map((b) => {
+      const locked = isWinterNewBook(b);
+      const cur = winterDeals.find((d) => d.bookId === b.id)?.rate || 0;
+      return `
+        <li class="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-sky-100">
+          ${coverHTML(b, 'xs')}
+          <span class="flex-1 min-w-0">
+            <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(b.title)}</span>
+            <span class="block text-[10px] text-slate-400">${escapeHTML(seriesLabel(b))}${hasPrice(b) ? ` · ${formatMoney(b.price)}` : ''}${locked ? ' · <b class="text-sky-600">❄️ bu kışın kitabı</b>' : ''}</span>
+          </span>
+          <select name="rate:${b.id}" ${locked ? 'disabled title="Bu kışın kitabı · sezon boyunca indirimsiz"' : ''} aria-label="${escapeHTML(b.title)} indirimi"
+            class="shrink-0 text-xs font-semibold rounded-lg border border-sky-200 bg-white px-2 py-1.5 text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:bg-slate-50 disabled:text-slate-400">
+            ${WINTER_RATES.map((r) => `<option value="${r}" ${!locked && r === cur ? 'selected' : ''}>${r ? `%${r}` : 'İndirimsiz'}</option>`).join('')}
+          </select>
+        </li>`;
+    }).join('');
+    return `
+      <div class="rounded-2xl bg-sky-50/60 border border-sky-100 p-3 space-y-2">
+        <p class="text-[11px] font-bold text-sky-800">❄️ Kış Fırsatları indirimleri</p>
+        <p class="text-[10px] text-sky-800/70 leading-relaxed">Bu temadaki kitaplar kış sezonunda Kış Fırsatları'nda görünür. Seçtiğin indirim kış açılınca kendiliğinden uygulanır${winterOn() ? ' (şu an kış sezonu açık)' : ''}. Kış sezonunda gelen kitap o sezon boyunca indirimsiz kalır.</p>
+        ${list.length ? `<ul class="space-y-1.5 max-h-72 overflow-y-auto soft-scroll">${rows}</ul>`
+          : '<p class="text-[11px] text-slate-400 bg-white rounded-xl px-3 py-2.5">Bu temada henüz kitap yok · kitaba temayı Düzenle\'den ekleyebilirsin.</p>'}
+      </div>`;
+  }
+
+  async function handleSaveTheme(fd, editId) {
+    if (!requireAdmin()) return;
+    const label = (fd.label || '').trim();
+    if (!label) return toast('Tema adı boş olamaz.', 'error');
+    if (allThemes().some((t) => t.id !== editId && t.label.toLocaleLowerCase('tr') === label.toLocaleLowerCase('tr')))
+      return toast(`"${label}" adında bir tema zaten var.`, 'error');
+    const color = isHexColor(fd.color) ? fd.color.toLowerCase() : '#64748b';
+    const emoji = (fd.emoji || '').trim().slice(0, 8);
+    let done;
+    if (editId) {
+      if (!getTheme(editId)) return;
+      const batch = db.batch();
+      // Kış Sezonu teması henüz kaydedilmediyse ilk düzenlemede oluşturulur
+      batch.set(col('bookThemes').doc(editId), { label, emoji, color, order: getTheme(editId).order ?? 0 }, { merge: true });
+      // Kış Fırsatları indirimleri: yalnızca değişenler yazılır
+      if (editId === WINTER_THEME_ID) {
+        Object.keys(fd).filter((k) => k.startsWith('rate:')).forEach((k) => {
+          const b = getBook(k.slice(5));
+          const rate = Number(fd[k]);
+          if (!b || !hasWinterTheme(b) || !WINTER_RATES.includes(rate)) return;
+          if ((winterDeals.find((d) => d.bookId === b.id)?.rate || 0) === rate) return;
+          batch.set(col('winterDeals').doc(String(b.id)), { bookId: b.id, rate, updatedAt: isoAt(Date.now()), updatedBy: state.currentUserId });
+        });
+      }
+      done = batch.commit();
+    } else {
+      const order = allThemes().reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
+      done = col('bookThemes').doc(uid('th')).set({ label, emoji, color, order });
+    }
+    const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" teması eklendi.`);
+    if (ok && state.modalOpen) openThemeManager();
+  }
+
+  function deleteTheme(id) {
+    if (!requireAdmin()) return;
+    const t = getTheme(id);
+    if (!t || id === WINTER_THEME_ID) return;
+    const tagged = [...books, ...museumBooks].filter((b) => themeIdsOf(b).includes(id));
+    openConfirm({
+      title: `"${escapeHTML(t.label)}" silinsin mi?`,
+      message: tagged.length ? `Bu tema ${tagged.length} kitaptan da kaldırılacak.` : 'Bu temada kitap yok, güvenle silinebilir.',
+      onConfirm: async () => {
+        await run(commitOps([
+          ...tagged.map((b) => (bt) => bt.update(bookRef(b.id), { themes: FieldValue.arrayRemove(id) })),
+          (bt) => bt.delete(col('bookThemes').doc(id))
+        ]), `"${t.label}" silindi.`, 'info');
+        if (state.modalOpen) openThemeManager();
+      }
+    });
   }
 
   /* Tür ayarları: ad, renk (kaydedince / geri dönünce yönetim listesine döner) */
@@ -454,7 +655,7 @@
       ${modalHeader(`${escapeHTML(t.label)} · Ayarlar ⚙️`, `${count} kitap · ${t.inDeals ? 'günün indirimi döngüsünde' : 'indirimsiz'} (indirim ayarı değişmez)`, 'cog')}
       <form data-form="saveType" data-edit-id="${t.id}" class="p-5 space-y-3.5" autocomplete="off">
         ${field('Tür adı', `<input name="label" required maxlength="24" value="${escapeHTML(t.label)}" autofocus class="${INPUT_CLS}" />`)}
-        ${field('Renk', `<select name="palette" class="${INPUT_CLS}">${paletteOptions(t.palette)}</select>`)}
+        ${paletteOptions(t)}
         <div class="grid grid-cols-2 gap-2.5 pt-2">
           <button type="button" data-quick="manageTypes" class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">← Geri</button>
           <button type="submit" class="${BTN_PRIMARY} !py-2.5">Kaydet</button>
@@ -468,14 +669,14 @@
     if (!label) return toast('Tür adı boş olamaz.', 'error');
     if (bookTypes.some((t) => t.id !== editId && t.label.toLocaleLowerCase('tr') === label.toLocaleLowerCase('tr')))
       return toast(`"${label}" adında bir tür zaten var.`, 'error');
-    const palette = TYPE_PALETTES[fd.palette] ? fd.palette : 'slate';
+    const color = isHexColor(fd.color) ? fd.color.toLowerCase() : '#64748b';
     let done;
     if (editId) {
       const t = getType(editId);
       if (!t) return;
-      done = col('bookTypes').doc(editId).update({ label, palette });
+      done = col('bookTypes').doc(editId).update({ label, color });
     } else {
-      done = addBookType({ label, palette, inDeals: fd.inDeals === 'on' });
+      done = addBookType({ label, color, inDeals: fd.inDeals === 'on' });
     }
     const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" türü eklendi.`);
     if (ok && state.modalOpen) openTypeManager();
@@ -823,7 +1024,7 @@
           ${field('Bitiş Tarihi', `<input name="endDate" type="date" min="${localDateKey()}" value="${localDateKey(endDate)}" class="${INPUT_CLS} min-w-0" />`)}
           ${field('Saat', `<input name="endTime" type="time" value="${end ? `${pad(endDate.getHours())}:${pad(endDate.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
         </div>
-        <p class="text-[10px] text-slate-400 leading-relaxed">Sezon yalnızca görünümü değiştirir · indirimler, vitrinler ve kuponlar aynen sürer.</p>
+        <p class="text-[10px] text-slate-400 leading-relaxed">❄️ Kış sezonunda ana sayfaya Kış Fırsatları gelir (Kış Sezonu temalı kitaplar); Günün İndirimi ve Fırsatlar sezon boyunca kapanır. Yeni Kitap, kuponlar, özel teklifler ve Müze Vitrini aynen sürer.</p>
         ${formFooter('Kaydet')}
       </form>`);
   }
@@ -843,12 +1044,18 @@
     // Aynı sezon: yalnızca bitiş değişir
     const data = season === prev
       ? { endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId }
-      : { active: season, endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId };
+      : { active: season, endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId, startedAt: season ? isoAt(Date.now()) : null };
     const msg = season === prev
       ? (season ? `${SEASONS[season].icon} Sezon süresi güncellendi${endsAt ? ` · ${formatDate(endsAt.toDate().toISOString(), true)}'da kapanacak` : ' · süresiz'}.` : 'Sezon zaten kapalı.')
       : season ? `${SEASONS[season].icon} ${SEASONS[season].label} sezonu açıldı!${endsAt ? ` · ${formatDate(endsAt.toDate().toISOString(), true)}'da kapanacak` : ''}` : '🌤️ Sezon kapatıldı.';
+    const batch = db.batch();
+    batch.set(col('settings').doc('season'), data, { merge: true });
+    // Kış sezonu açılınca Hediye Kutusu kendiliğinden yeni 7 günle başlar (ayarında kapatılmadıysa ve ödül varsa)
+    const gift = giftBoxDoc();
+    const autoGift = season === 'winter' && prev !== 'winter' && gift.autoWinter !== false && giftRewards().some((r) => r.type !== 'none');
+    if (autoGift) batch.set(col('settings').doc('giftBox'), newGiftBoxData(), { merge: true });
     closeModal();
-    run(col('settings').doc('season').set(data, { merge: true }), msg, season ? 'success' : 'info');
+    run(batch.commit(), `${msg}${autoGift ? ` · 🎁 Hediye Kutusu başladı (${GIFT_DAYS} gün)` : ''}`, season ? 'success' : 'info');
   }
 
   /* Süreli sezon bittiyse siteyi açan herkes sezonu kapatır (kural süre dolmuş mu denetler) · bir kez */
@@ -1163,6 +1370,8 @@
     if (action === 'addOffer') return openOfferFormModal();
     if (action === 'addNews') return openNewsModal();
     if (action === 'manageTypes') return openTypeManager();
+    if (action === 'bookSettings') return openBookSettings();
+    if (action === 'manageThemes') return openThemeManager();
   }
 
   /* ==========================================================

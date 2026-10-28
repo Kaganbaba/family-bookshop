@@ -86,6 +86,12 @@
       if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
       if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
+      if ((m = el('[data-edit-winter]')))      return openWinterDealModal(m.dataset.editWinter);
+      if ((m = el('[data-open-giftbox]')))     return openGiftBoxModal();
+      if ((m = el('[data-claim-gift]')))       { m.disabled = true; return claimGiftFromModal(); }
+      if ((m = el('[data-open-giftbox-settings]'))) return openGiftBoxSettings();
+      if ((m = el('[data-delete-theme]')))     return deleteTheme(m.dataset.deleteTheme);
+      if ((m = el('[data-edit-theme]')))       return openThemeEditor(m.dataset.editTheme);
       if ((m = el('[data-open-showcase]')))    return openShowcaseModal();
       if ((m = el('[data-showcase-toggle]')))  return setShowcase(m.dataset.showcaseToggle, !showcaseOn(m.dataset.showcaseToggle));
       if ((m = el('[data-send-cheque]')))      return openSendChequeModal();
@@ -140,6 +146,9 @@
         case 'saveUpdate':  return handleSaveUpdate(fd, editId);
         case 'saveOffer':   return handleSaveOffer(fd, editId);
         case 'saveType':    return handleSaveType(fd, editId);
+        case 'saveTheme':   return handleSaveTheme(fd, editId);
+        case 'saveWinterDeal': return handleSaveWinterDeal(fd, editId);
+        case 'saveGiftBox': return handleSaveGiftBox(fd);
         case 'moveToMuseum': return handleMoveToMuseum(fd, editId);
         case 'saveMuseumBook': return handleSaveMuseumBook(fd, editId);
         case 'saveExhibit': return handleSaveExhibit(fd, editId);
@@ -165,6 +174,7 @@
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
       if (t.id === 'vd-rate') updateVitrinePreview();
       if (t.id === 'sc-value' || t.id === 'sc-free') updateShopCouponForm();
+      if (t.dataset.themePreview) updateThemePreview(t.closest('form'));
     });
     document.addEventListener('change', (e) => {
       const t = e.target;
@@ -176,8 +186,9 @@
       if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'vd-book') updateVitrinePreview();
       if (t.id === 'rentCoupon') updateRentCoupon();
-      if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
+      if (t.id === 'sc-type' || t.id === 'sc-timed' || t.id === 'sc-winter') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
+      if (t.matches('[data-gift-type]')) updateGiftRows();
       if (t.id === 'bn-cat' || t.matches('[data-bn-scope]')) updateBulkNewsPreview();
       if (t.matches('[data-filter-kind]')) { const p = t.dataset.filterKind; state[`${p}Kind`] = t.value; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if (t.matches('[data-filter-value]')) { const p = t.dataset.filterValue; state[`${p}Value`] = t.value; return rerenderFilter(p); }
@@ -242,6 +253,9 @@
     ['couponShop', couponShop, null, (d) => ({ id: d.id, ...d.data(), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],
     ['museumExhibits', museumExhibits, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
+    ['bookThemes', bookThemes, (q) => q.orderBy('order')],
+    ['winterDeals', winterDeals, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
+    ['giftClaims', giftClaims],
     ['settings', appSettings]
   ];
   let unsubscribers = [];

@@ -2,7 +2,7 @@
      9) KİTAPLAR SAYFASI
      ========================================================== */
   const manageTypesBtn = () =>
-    `<button type="button" data-quick="manageTypes" class="${BTN_SOFT}">Kategorileri Yönet ⚙️</button>`;
+    `<button type="button" data-quick="bookSettings" class="${BTN_SOFT}">Kitap Ayarları ⚙️</button>`;
 
   /* Dinamik tür sekmeleri (Kitaplar + Kiralananlar ortak). attr: data-* adı, current: seçili tür */
   /* Kitaplar listesinde çarpıcı, mavi tonlu fiyat etiketi (indirimde eski fiyat + yüzde rozeti) */
@@ -127,14 +127,20 @@
       const rented = isBookRented(b, now);
       const fresh = isNewBook(b, nowDate);
       const eff = getEffectiveDiscount(b, nowDate, dealIds);
+      // Kış sezonunda kış temalı kitap: karlı, buz mavisi desenli satır
+      const snowy = winterOn() && hasWinterTheme(b);
       return `
         <li>
           <button type="button" data-open-book="${b.id}"
-            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${fresh
-              ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
-              : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
+            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${snowy
+              ? 'winter-row border-l-4 border-sky-400'
+              : fresh
+                ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
+                : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
+            ${snowy ? '<span class="winter-drift absolute right-3 sm:right-12 top-1 text-sky-300/80 text-sm pointer-events-none select-none" aria-hidden="true">❄</span>' : ''}
             <div class="relative shrink-0">
               ${coverHTML(b, 'sm')}
+              ${snowy ? '<span class="absolute -top-1.5 -left-1.5 text-xs leading-none drop-shadow-sm" aria-hidden="true">❄️</span>' : ''}
               ${ratingBadgeHTML(b.id)}
               ${fresh ? `
                 <span class="twinkle absolute -top-1.5 -left-1.5 text-amber-400 text-xs">✦</span>
@@ -143,7 +149,10 @@
             <div class="flex-1 sm:flex-none min-w-0 sm:max-w-[42%]">
               <p class="flex items-center gap-1.5 min-w-0">
                 <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
-                ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}              </p>
+                ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
+                ${themeChipsHTML(b, 'hidden sm:flex shrink-0 !flex-nowrap')}
+              </p>
+              ${themeChipsHTML(b, 'sm:hidden mt-1')}
               <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : ''}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}${fresh
                 ? `<span class="hidden sm:inline text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(newDiscountLeftMs(b, nowDate))}</span>` : ''}</p>
             </div>
@@ -151,7 +160,7 @@
                  (sol bilgi uzasa da — ör. yeni kitap indirimi — kaymaz) -->
             <span class="hidden sm:block flex-1 min-w-0" aria-hidden="true"></span>
             <span class="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 max-w-[26%] pointer-events-none" aria-hidden="true">
-              <span class="ghost-title ${fresh ? 'is-new' : ''} block truncate text-center text-xl lg:text-2xl px-3 select-none">${escapeHTML(b.title)}</span>
+              <span class="ghost-title ${snowy ? 'is-winter' : fresh ? 'is-new' : ''} block truncate text-center text-xl lg:text-2xl px-3 select-none">${escapeHTML(b.title)}</span>
             </span>
             <!-- Sağ: çarpıcı mavi fiyat (indirim varsa eski fiyat + yüzde) · durum -->
             <div class="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3">
@@ -605,6 +614,7 @@
               ${statusChipHTML(b, now.getTime())}
             </div>
             <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
+            ${themeChipsHTML(b, 'mt-1.5')}
             <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-1">${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}</p>
             <div class="mt-3 flex items-end gap-2 flex-wrap">
               ${hasPrice(b) ? `
@@ -1003,12 +1013,14 @@
     const inOffers = offers.filter((o) => o.items.some((it) => it.bookId === b.id));
     // Fırsatlar kapalı olsa da kayıt silinsin
     const vitrine = discounts.find((d) => d.bookId === b.id);
+    const winterDeal = winterDeals.find((d) => d.bookId === b.id);
     const parts = [
       anns.length && `${anns.length} duyuru`,
       rs.length && `${rs.length} kiralama kaydı`,
       logs.length && `${logs.length} fiyat logu`,
       inOffers.length && `${inOffers.length} özel teklif`,
-      vitrine && 'fırsat'
+      vitrine && 'fırsat',
+      winterDeal && 'Kış Fırsatları kaydı'
     ].filter(Boolean);
     openConfirm({
       title: 'Kitap silinsin mi?',
@@ -1028,6 +1040,7 @@
         rs.forEach((r) => ops.push((bt) => bt.delete(col('rentals').doc(r.id))));
         logs.forEach((l) => ops.push((bt) => bt.delete(col('priceLogs').doc(l.id))));
         if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));
+        if (winterDeal) ops.push((bt) => bt.delete(col('winterDeals').doc(winterDeal.id)));
         bookRatings(b.id).forEach((x) => ops.push((bt) => bt.delete(col('ratings').doc(x.id))));
         // Silinen kiralamalar puan kazandırmış olabilir → etkilenen kullanıcıların defteri yeniden hesaplanır
         ops.push(...pointsSyncOps(rs.map((r) => r.userId), { rentals: new Set(rs.map((r) => r.id)) }));

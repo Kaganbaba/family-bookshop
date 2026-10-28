@@ -92,6 +92,16 @@
       animation: ghostShine 5.5s ease-in-out infinite;
     }
     .ghost-title.is-new { background-image: linear-gradient(105deg, rgba(217, 119, 6, .18) 30%, rgba(245, 158, 11, .65) 47%, rgba(255, 255, 255, .95) 50%, rgba(245, 158, 11, .65) 53%, rgba(217, 119, 6, .18) 70%); }
+    /* Kış temalı kitap (kış sezonunda): buz mavisi, üstünde kırağı gibi pürüzlü beyaz zerreler ve soğuk parıltı */
+    .ghost-title.is-winter {
+      background-image:
+        radial-gradient(rgba(255, 255, 255, .95) .7px, transparent 1.1px),
+        radial-gradient(rgba(224, 242, 254, .9) .6px, transparent 1px),
+        linear-gradient(105deg, rgba(14, 165, 233, .35) 25%, rgba(56, 189, 248, .8) 45%, #ffffff 50%, rgba(56, 189, 248, .8) 55%, rgba(14, 165, 233, .35) 75%);
+      background-size: 5px 5px, 7px 7px, 280% 100%;
+      filter: drop-shadow(0 0 1px rgba(125, 211, 252, .9)) drop-shadow(0 1px 3px rgba(14, 165, 233, .35));
+      -webkit-text-stroke: .4px rgba(186, 230, 253, .7);
+    }
     @keyframes ghostShine { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
     @media (prefers-reduced-motion: reduce) { .ghost-title { animation: none; background-position: 50% 0; } }
     /* Özel teklif vitrini · arka plan indirim yüzdesine göre, yıldız rozet, nokta deseni */
@@ -139,6 +149,71 @@
       transform: translateX(-130%); animation: goldSweep 6s ease-in-out infinite;
     }
     @media (prefers-reduced-motion: reduce) { .vitrine-sheen::after { animation: none; } }
+    /* Kış Fırsatları · buz mavisi zemin, kar taneleri deseni, üstü karla kaplı kartlar, süzülen kar taneleri */
+    .winter-bg { background: linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 45%, #dbeafe 100%); }
+    .winter-rim { background: linear-gradient(135deg, #e0f2fe, #7dd3fc 30%, #ffffff 55%, #38bdf8 80%, #e0f2fe); }
+    .winter-flakes {
+      background-image:
+        radial-gradient(circle, rgba(255, 255, 255, .95) 1.6px, transparent 2.1px),
+        radial-gradient(circle, rgba(125, 211, 252, .55) 1px, transparent 1.5px);
+      background-size: 28px 28px, 15px 15px;
+      background-position: 0 0, 8px 10px;
+    }
+    /* Kış kartı: buzlu cam zemin, kırağı deseni, köşede büyük kar tanesi, üstte kar örtüsü, altta buz sarkıtları */
+    .winter-card {
+      background:
+        radial-gradient(circle at 100% 0, rgba(186, 230, 253, .55), transparent 45%),
+        radial-gradient(circle at 0 100%, rgba(224, 242, 254, .9), transparent 50%),
+        radial-gradient(rgba(125, 211, 252, .28) 1px, transparent 1.4px) 0 0 / 12px 12px,
+        linear-gradient(160deg, #ffffff 0%, #f0f9ff 55%, #e0f2fe 100%);
+      border: 1px solid #bae6fd;
+      box-shadow: 0 10px 30px -18px rgba(14, 165, 233, .55), inset 0 1px 0 #fff, inset 0 0 18px rgba(186, 230, 253, .45);
+    }
+    .winter-card::after {
+      content: ''; position: absolute; left: 14px; right: 14px; bottom: -8px; height: 9px; pointer-events: none;
+      background:
+        linear-gradient(135deg, #bae6fd 25%, transparent 25%) -6px 0 / 12px 12px,
+        linear-gradient(225deg, #bae6fd 25%, transparent 25%) -6px 0 / 12px 12px;
+      opacity: .9;
+    }
+    .winter-card-flake { color: rgba(125, 211, 252, .22); line-height: 1; transform: rotate(15deg); }
+    /* Kış indirim etiketi: buz mavisi sarkan etiket */
+    .winter-tag {
+      background: linear-gradient(180deg, #e0f2fe, #38bdf8 45%, #0369a1);
+      clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
+      box-shadow: 0 8px 18px -6px rgba(3, 105, 161, .55);
+    }
+    .winter-card:hover { border-color: #7dd3fc; box-shadow: 0 18px 40px -18px rgba(14, 165, 233, .65); }
+    .winter-card::before {
+      content: ''; position: absolute; left: 10px; right: 10px; top: -7px; height: 13px; pointer-events: none;
+      background: radial-gradient(circle at 7px 7px, #fff 6.5px, transparent 7px) 0 0 / 15px 13px repeat-x;
+      filter: drop-shadow(0 1px 1px rgba(14, 165, 233, .3));
+    }
+    /* Hediye Kutusu · sağ altta hafifçe süzülen ve ara ara sallanan kutu; hediye hazırsa parlar */
+    .gift-fab { animation: giftFloat 3.2s ease-in-out infinite; }
+    .gift-fab.is-ready { animation: giftFloat 3.2s ease-in-out infinite, giftGlow 1.8s ease-in-out infinite; }
+    .gift-fab:hover { transform: scale(1.06); }
+    .gift-bob { display: inline-block; animation: giftWiggle 4s ease-in-out infinite; transform-origin: 50% 90%; }
+    .gift-today { animation: giftGlow 2s ease-in-out infinite; }
+    @keyframes giftFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -6px; } }
+    @keyframes giftWiggle { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(-12deg); } 80% { transform: rotate(10deg); } 85% { transform: rotate(-7deg); } 90% { transform: rotate(4deg); } }
+    @keyframes giftGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, .45); } 50% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); } }
+    @media (prefers-reduced-motion: reduce) { .gift-fab, .gift-fab.is-ready, .gift-bob, .gift-today { animation: none; } }
+    /* Kitaplıkta kış temalı kitap satırı (kış sezonunda): buz mavisi zemin + kar taneleri deseni */
+    .winter-row {
+      background-color: #f0f9ff;
+      background-image:
+        radial-gradient(circle, rgba(255, 255, 255, .95) 1.4px, transparent 1.9px),
+        radial-gradient(circle, rgba(125, 211, 252, .45) 1px, transparent 1.4px),
+        linear-gradient(90deg, #e0f2fe, #f0f9ff 45%, #ffffff);
+      background-size: 22px 22px, 13px 13px, 100% 100%;
+      background-position: 0 0, 6px 8px, 0 0;
+    }
+    .winter-row:hover, .winter-row:focus { background-color: #e0f2fe; filter: brightness(.98); }
+    .winter-drift { animation: winterDrift 7s ease-in-out infinite; }
+    .winter-drift-d1 { animation-duration: 9s; animation-delay: 1.5s; }
+    @keyframes winterDrift { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(8px) rotate(25deg); } }
+    @media (prefers-reduced-motion: reduce) { .winter-drift { animation: none; } }
     /* %70+ özel teklif · ŞİMŞEK FIRSAT: fırtına zemini, dallanan beyaz şimşekler (gerçek gibi titreyerek çakar), gökyüzü parlaması */
     .offer-ultra-bg { background: radial-gradient(120% 90% at 50% 0%, #334155 0%, #1e1b4b 45%, #020617 100%); }
     .ultra-bolts { position: absolute; inset: 0; pointer-events: none; z-index: 1; }

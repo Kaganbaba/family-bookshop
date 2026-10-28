@@ -6,8 +6,11 @@
        indirimi olmayan kitaba (kitap detayında Kirala'dan) uygulanır.
      • Özel tekliflere kupon uygulanmaz.
      ========================================================== */
-  /* season damgalı mağaza kuponu kaldırılan Kış Fırsatları'ndan kalmıştır: geçersiz sayılır (kural da alımı reddeder) */
-  const isShopActive = (s, now = Date.now()) => (s.endsMs == null || s.endsMs > now) && !s.season;
+  /* season damgalı mağaza kuponu kaldırılan Kış Fırsatları'ndan kalmıştır: geçersiz sayılır (kural da alımı reddeder) ·
+     winterSeason: kış sezonunda eklenen süreli kupon, kış sezonu boyunca mağazada (sezon bitince kalkar) */
+  const isShopActive = (s, now = Date.now()) => (s.endsMs == null || s.endsMs > now) && !s.season && (!s.winterSeason || winterOn());
+  /* Kupon formu kış kipinde mi: kış sezonunda yeni kupon ya da zaten kış kuponu olan / süresiz kupon düzenleniyor */
+  const shopWinterMode = (s) => winterOn() && (!s || s.winterSeason || !s.endsMs);
 
   /* Süresi biten mağaza kuponları: herkes için gizlenir, siteyi açan herkes Firestore'dan da siler
      (kural süre dolmuş mu denetler · önceden alınmış kuponlar etkilenmez · reddedilirse bu oturumda yeniden denenmez) */
@@ -38,9 +41,10 @@
 
     const items = couponShop.filter((s) => isShopActive(s, now))
       .sort((a, b) => a.cost - b.cost || new Date(b.createdAt) - new Date(a.createdAt));
-    // Süreli kuponlar en başta, özel görünümle (en yakın bitiş önce); diğerleri türe göre gruplu
-    const timed = items.filter((s) => s.endsMs).sort((a, b) => a.endsMs - b.endsMs);
-    const regular = items.filter((s) => !s.endsMs);
+    // Kış kuponları ve süreli kuponlar en başta, özel görünümle (en yakın bitiş önce); diğerleri türe göre gruplu
+    const winterItems = items.filter((s) => s.winterSeason);
+    const timed = items.filter((s) => s.endsMs && !s.winterSeason).sort((a, b) => a.endsMs - b.endsMs);
+    const regular = items.filter((s) => !s.endsMs && !s.winterSeason);
     const adminBtns = (s, tone) => (admin ? `<div class="absolute top-2 right-2 z-[2] flex gap-1">
         <button type="button" data-edit-shop-coupon="${s.id}" title="Düzenle" aria-label="Kuponu düzenle"
           class="w-7 h-7 rounded-full ${tone} hover:bg-white hover:text-brand-600 flex items-center justify-center transition">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
@@ -99,6 +103,43 @@
           </div>
         </div>`;
     };
+    /* Kış kuponu: karlı bilet · solda buz mavisi kupon kısmı (kar deseni), sağda puan / kış boyunca / al */
+    const winterCard = (s) => {
+      const type = couponTypeOf(s);
+      const end = seasonEndsMs();
+      return `
+        <div class="winter-card relative flex rounded-2xl overflow-hidden">
+          <div class="relative w-36 sm:w-40 shrink-0 bg-gradient-to-br from-sky-400 via-sky-500 to-blue-700 text-white px-3.5 py-3 flex flex-col justify-center border-r-2 border-dashed border-white/80">
+            <span class="absolute inset-0 winter-flakes opacity-70"></span>
+            <span class="winter-drift absolute right-2 top-1.5 text-white/60 text-base" aria-hidden="true">❄</span>
+            <span class="relative self-start text-[9px] font-extrabold tracking-widest text-sky-800 bg-white px-2 py-0.5 rounded-full shadow-soft">❄️ KIŞ KUPONU</span>
+            <p class="relative text-[9px] font-bold tracking-[.18em] opacity-90 mt-2">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
+            <p class="relative ${type === 'bogo' ? 'text-xl' : 'text-3xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
+            ${s.name ? `<p class="relative text-[10px] font-semibold mt-1 truncate">${escapeHTML(s.name)}</p>` : ''}
+          </div>
+          <div class="relative flex-1 min-w-0 p-3 flex flex-col gap-1.5 ${admin ? 'pr-20' : ''}">
+            ${adminBtns(s, 'bg-sky-50 text-sky-500')}
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-sm font-bold text-amber-600">⭐ ${formatPoints(s.cost)}</span>
+              <span class="text-[10px] text-slate-400">· ${COUPON_DAYS} gün geçerli</span>
+            </div>
+            ${type === 'bogo' ? `<p class="text-[10px] text-slate-500 leading-snug">${bogoText(s)}.</p>` : ''}
+            <p class="text-[11px] font-extrabold text-sky-700">❄️ Kış sezonu boyunca${end ? `<span class="font-medium text-sky-500"> · ${formatRemaining(end - now)}</span>` : ''}</p>
+            ${buyBtn(s, '!py-2 mt-auto self-start px-5')}
+          </div>
+        </div>`;
+    };
+    const winterHTML = winterItems.length ? `
+      <div class="mb-5">
+        <div class="flex items-center gap-2 mb-2.5 px-1">
+          <span class="text-sm">❄️</span>
+          <h3 class="text-xs font-bold text-slate-700">Kış Kuponları</h3>
+          <span class="text-[10px] font-semibold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full">kış sezonu boyunca</span>
+          <span class="flex-1 h-px bg-slate-200"></span>
+          <span class="text-[10px] text-slate-400">${winterItems.length} kupon</span>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-3 gap-y-5 pt-1">${winterItems.map(winterCard).join('')}</div>
+      </div>` : '';
     const grid = (list) => `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">${list.map(shopCard).join('')}</div>`;
     // Süreli kuponlar en üstte: yatay bilet kartları (koyu zemin yok)
     const timedHTML = timed.length ? `
@@ -149,7 +190,7 @@
       <div class="mb-6">
         <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası</h2>
         ${items.length
-          ? timedHTML + groupsHTML
+          ? winterHTML + timedHTML + groupsHTML
           : emptyState(admin ? 'Mağazada kupon yok · sağ üstteki <b>Kupon Ekle</b> ile yüzde, ₺ ya da Al-Öde kuponu ekleyebilirsin.' : 'Mağazada şu an kupon yok. Yakında yeni kuponlar gelecek!')}
       </div>
 
@@ -220,8 +261,12 @@
           ${field('Bedeli (puan)', `<input name="cost" id="sc-cost" type="number" min="0.01" step="0.01" required value="${s ? s.cost : ''}" class="${INPUT_CLS}" placeholder="Örn. 10" />`)}
         </div>
         ${field('Kupon Adı (isteğe bağlı)', `<input name="name" maxlength="60" value="${escapeHTML(s?.name || '')}" class="${INPUT_CLS}" placeholder="Örn. Bayram Kuponu 🎉" />`)}
-        <label class="flex items-center gap-2 text-[11px] text-slate-600">
-          <input type="checkbox" name="timed" id="sc-timed" ${s?.endsMs ? 'checked' : ''} class="rounded border-slate-300 text-brand-600" /> ⏳ Süreli kupon (mağazadan belirli bir anda kalksın)
+        ${winterOn() ? `
+        <label class="flex items-center gap-2 text-[11px] text-sky-700">
+          <input type="checkbox" name="winter" id="sc-winter" ${shopWinterMode(s) && (!s || s.winterSeason) ? 'checked' : ''} class="rounded border-sky-300 text-sky-600" /> ❄️ Kış kuponu (kış sezonu boyunca mağazada · tarih gerekmez, sezon bitince kalkar)
+        </label>` : ''}
+        <label id="sc-timed-wrap" class="flex items-center gap-2 text-[11px] text-slate-600">
+          <input type="checkbox" name="timed" id="sc-timed" ${s?.endsMs && !s.winterSeason ? 'checked' : ''} class="rounded border-slate-300 text-brand-600" /> ⏳ Süreli kupon (mağazadan belirli bir anda kalksın)
         </label>
         <div id="sc-end-wrap" class="hidden grid grid-cols-[1fr_auto] gap-3">
           ${field('Mağazada Son Gün', `<input name="endDate" type="date" min="${localDateKey()}" value="${localDateKey(end)}" class="${INPUT_CLS} min-w-0" />`)}
@@ -251,7 +296,10 @@
     freeInput.required = bogo;
     const v = Number(input.value);
     if (bogo && v >= 2) freeInput.max = v - 1;
-    $('#sc-end-wrap').classList.toggle('hidden', !$('#sc-timed').checked);
+    // Kış kuponu işaretliyse süreli kupon seçeneği ve tarih gizlenir (kış sezonu boyunca geçerli)
+    const winter = !!$('#sc-winter')?.checked;
+    $('#sc-timed-wrap').classList.toggle('hidden', winter);
+    $('#sc-end-wrap').classList.toggle('hidden', winter || !$('#sc-timed').checked);
     const free = Number(freeInput.value);
     const valid = v >= t.min && v <= t.max && (!bogo || (free >= 1 && free < v));
     $('#sc-preview').innerHTML = valid
@@ -277,7 +325,9 @@
     if (!(cost > 0)) return toast('Kupon bedeli (puan) 0\'dan büyük olmalı.', 'error');
     const name = (fd.name || '').trim();
     let endsAt = null;
-    if (fd.timed === 'on') {
+    // Kış sezonunda süreli kupon = kış kuponu: tarih yok, kış sezonu boyunca mağazada
+    const winterSeason = winterOn() && fd.winter === 'on';
+    if (!winterSeason && fd.timed === 'on') {
       if (!isDateKey(fd.endDate) || !isTimeKey(fd.endTime)) return toast('Geçerli bir bitiş tarihi ve saati seçin.', 'error');
       const end = dateFromKey(fd.endDate);
       end.setHours(...fd.endTime.split(':').map(Number), 0, 0);
@@ -288,13 +338,13 @@
 
     if (prev) {
       closeModal();
-      run(col('couponShop').doc(prev.id).update({ ...s, endsAt, updatedAt: isoAt(Date.now()) }),
+      run(col('couponShop').doc(prev.id).update({ ...s, endsAt, winterSeason: winterSeason || FieldValue.delete(), updatedAt: isoAt(Date.now()) }),
         `🎟️ Kupon güncellendi · ${couponBadge(s)} (önceden alınanlar aynen kalır)`);
       return;
     }
 
     const batch = db.batch();
-    batch.set(col('couponShop').doc(), { ...s, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
+    batch.set(col('couponShop').doc(), { ...s, endsAt, ...(winterSeason ? { winterSeason: true } : {}), createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
     // İşaretliyse "Duyuru" haberi
     if (fd.announce === 'on') batch.set(col('announcements').doc(), {
       type: 'news', category: 'Duyuru',
@@ -302,11 +352,12 @@
       body: `Hediyelerim mağazasına yeni kupon geldi! 🎉\n🎟️ ${couponTitle(s)}\n⭐ Bedeli: ${formatPoints(cost)} · alındıktan sonra ${COUPON_DAYS} gün geçerli`
         + (type === 'bogo' ? `\n📚 ${bogoText(s)}!` : '')
         + (endsAt ? `\n⏳ Mağazada son: ${formatDate(endsAt.toDate().toISOString(), true)}` : '')
+        + (winterSeason ? '\n❄️ Kış kuponu · kış sezonu boyunca mağazada' : '')
         + '\nPuanların yetiyorsa Hediyelerim sayfasından hemen al!',
       bookId: null, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
     });
     closeModal();
-    run(batch.commit(), `🎟️ ${couponBadge(s)} kuponu mağazaya eklendi${fd.announce === 'on' ? ' · Duyurular\'a haber düştü 📣' : ''}`);
+    run(batch.commit(), `🎟️ ${couponBadge(s)} ${winterSeason ? 'kış kuponu' : 'kuponu'} mağazaya eklendi${fd.announce === 'on' ? ' · Duyurular\'a haber düştü 📣' : ''}`);
   }
 
   /* --- Hediye çekleri (₺) · Admin gönderir, sahibi Kiralık + indirimsiz kitabı kiralarken seçer --- */
@@ -469,7 +520,7 @@
       message: `${escapeHTML(u?.name || 'Kullanıcı')} kullanıcısının ${formatMoney(c.amount)} çeki silinecek.${c.openedAt && c.cost > 0 && !c.usedAt ? ` Açmak için harcadığı <b>${formatPoints(c.cost)}</b> geri döner.` : ''} Çekle yapılmış kiralama varsa korunur.`,
       onConfirm: () => {
         closeModal();
-        run(commitOps([(bt) => bt.delete(col('giftCheques').doc(c.id)), ...(u ? pointsSyncOps([u.id], { cheques: new Set([c.id]) }) : [])]),
+        run(commitOps([(bt) => bt.delete(col('giftCheques').doc(c.id)), ...giftClaimDeleteOps(c.id), ...(u ? pointsSyncOps([u.id], { cheques: new Set([c.id]) }) : [])]),
           'Hediye çeki silindi.', 'info');
       }
     });

@@ -7,6 +7,8 @@
     $('#page-dashboard [data-page-desc]').textContent = `Merhaba ${u.name.split(' ')[0]} 👋 Kitaplığın genel görünümü ve günün fırsatları.`;
     renderStats(now);
     renderShowcaseSettings();
+    renderGiftBoxFab(now);
+    renderWinter(now);
     renderNewBooks(now);
     renderVitrine(now);
     renderMuseumShowcase(now);
@@ -35,7 +37,7 @@
       { label: 'Kirada',         value: active.length,             sub: `Sende ${myActive} · ${rentableNow} kitap kiralık`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
       { label: 'Toplam Bakiye',  value: formatMoney(totalBalance), sub: `Senin: ${formatMoney(currentUser().balance)}`,                                                 icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
       // Günün İndirimi vitrini kapalıysa kart hiç gösterilmez
-      showcaseOn('deals') && { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
+      showcaseLive('deals') && { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
     ].filter(Boolean);
 
     // Mobilde yazılar kesilmesin: ikon küçülür, alt satır 2 satıra kadar kayar
@@ -59,16 +61,26 @@
     { key: 'vitrine',  icon: '🏷️', label: 'Fırsatlar',  desc: "Admin'in seçtiği kitap + yüzde indirimleri" },
     { key: 'deals',    icon: '🔥', label: 'Günün İndirimi',  desc: `Her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da değişen 3'lü seri indirimi` },
     { key: 'newBooks', icon: '★',  label: 'Yeni Kitap',      desc: `Yeni çıkan kitaplara ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim` },
-    { key: 'museum',   icon: '🏛️', label: 'Müze Vitrini',    desc: 'Müze\'deki kitaplar belirlenen süre ve fiyatla sergilenip kiralanır' }
+    { key: 'museum',   icon: '🏛️', label: 'Müze Vitrini',    desc: 'Müze\'deki kitaplar belirlenen süre ve fiyatla sergilenip kiralanır' },
+    { key: 'winter',   icon: '❄️', label: 'Kış Fırsatları',  desc: 'Kış Sezonu temalı kitaplar · indirimsiz, %15, %25 ya da %50' }
   ];
+  /* Kış sezonunda: Kış Fırsatları görünür, Günün İndirimi ve Fırsatlar listede yok · normal sezonda Kış Fırsatları yok */
+  const shownShowcases = () => SHOWCASES.filter((s) => (winterOn() ? !WINTER_PAUSED.includes(s.key) : s.key !== 'winter'));
 
   /* Ana sayfada yalnızca küçük bir buton (kapalı vitrin sayısıyla) · ayarlar pencerede */
   function renderShowcaseSettings() {
     const box = $('#showcaseSettings');
     if (!isAdmin()) { box.innerHTML = ''; return; }
-    const off = SHOWCASES.filter((s) => !showcaseOn(s.key)).length;
+    const off = shownShowcases().filter((s) => !showcaseOn(s.key)).length;
+    const live = giftBoxLive();
     box.innerHTML = `
-      <div class="flex justify-end mb-4">
+      <div class="flex justify-end flex-wrap gap-2 mb-4">
+        <button type="button" data-open-giftbox-settings
+          class="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white shadow-soft border border-slate-100 hover:border-brand-200 hover:shadow-soft-lg text-xs font-semibold text-slate-700 transition">
+          <span class="w-6 h-6 rounded-full bg-gradient-to-br from-rose-400 to-amber-400 text-white flex items-center justify-center text-[11px]">🎁</span>
+          Hediye Kutusu
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${live ? 'text-emerald-700 bg-emerald-50' : 'text-slate-500 bg-slate-100'}">${live ? `${giftDayAt()}/${GIFT_DAYS}. gün` : 'kapalı'}</span>
+        </button>
         <button type="button" data-open-showcase
           class="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white shadow-soft border border-slate-100 hover:border-brand-200 hover:shadow-soft-lg text-xs font-semibold text-slate-700 transition">
           <span class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[11px]">⚙️</span>
@@ -118,7 +130,7 @@
           </span>
         </button>`;
     };
-    box.innerHTML = SHOWCASES.map(row).join('');
+    box.innerHTML = shownShowcases().map(row).join('');
   }
 
   function setShowcase(key, on) {
@@ -143,6 +155,309 @@
     batch.set(col('settings').doc('showcase'), data, { merge: true });
     run(batch.commit(), `${sc.icon} ${sc.label} ${on ? 'açıldı' : 'kapatıldı'}.`, on ? 'success' : 'info')
       .then(() => renderShowcaseList()); // pencere açıksa anahtarlar güncellenir
+  }
+
+  /* --- 8.1.35 Hediye Kutusu · sağ altta hafifçe sallanan kutu + kutunun kapanmasına kalan süre ---
+     7 gün · her gün 10:00'da yeni hediye · gelecek günler herkese "?" · kaçırılan günün hediyesi geri gelmez */
+  const giftFabKey = (now = Date.now()) => `${giftBoxLive(now)}|${giftDayAt(now)}|${giftClaimable(now)}`;
+
+  function renderGiftBoxFab(now = new Date()) {
+    const box = $('#giftBoxFab');
+    const ms = now.getTime();
+    state.lastGiftKey = giftFabKey(ms);
+    if (!giftBoxLive(ms)) { box.innerHTML = ''; return; }
+    const ready = giftClaimable(ms);
+    box.innerHTML = `
+      <div class="fixed right-3 sm:right-6 bottom-6 sm:bottom-8 z-30 flex flex-col items-center gap-1">
+        <button type="button" data-open-giftbox title="Hediye Kutusu" aria-label="Hediye Kutusu${ready ? ' · bugünün hediyesi hazır' : ''}"
+          class="gift-fab ${ready ? 'is-ready' : ''} relative w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] rounded-2xl bg-gradient-to-br from-rose-400 via-pink-500 to-amber-400 shadow-soft-lg flex items-center justify-center focus:outline-none focus:ring-4 focus:ring-rose-200">
+          <span class="gift-bob text-4xl sm:text-[2.6rem] leading-none drop-shadow">🎁</span>
+          ${ready ? '<span class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-rose-600 text-white text-xs font-black ring-2 ring-white flex items-center justify-center animate-bounce">!</span>' : ''}
+        </button>
+        <span id="giftBoxTimer" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/95 shadow-soft text-slate-700 tabular-nums whitespace-nowrap">⏳ ${formatRemaining(giftBoxTimes().end - ms)}</span>
+      </div>`;
+  }
+
+  /* Her saniye: sayaç güncellenir · gün değiştiyse / hediye alındıysa kutu yeniden çizilir */
+  function updateGiftBoxFab(now) {
+    const ms = now.getTime();
+    if (giftFabKey(ms) !== state.lastGiftKey) return renderGiftBoxFab(now);
+    const timer = $('#giftBoxTimer');
+    if (timer && giftBoxTimes()) timer.textContent = `⏳ ${formatRemaining(giftBoxTimes().end - ms)}`;
+  }
+
+  /* Hediye Kutusu penceresi: 7 gün · alınan ✓, bugün açık, kaçırılan soluk, gelecek "?" */
+  function openGiftBoxModal() {
+    const now = Date.now();
+    if (!giftBoxLive(now)) return toast('Hediye kutusu şu an kapalı.', 'info');
+    const today = giftDayAt(now);
+    const rewards = giftRewards();
+    const t = giftBoxTimes();
+    const tile = (r, i) => {
+      const day = i + 1;
+      const claim = giftClaimOf(day);
+      const base = 'relative rounded-2xl p-2.5 text-center flex flex-col items-center justify-center min-h-[6.5rem] border transition';
+      const head = `<span class="text-[10px] font-bold ${day === today ? 'text-rose-600' : 'text-slate-400'}">${day}. gün${day === today ? ' · Bugün' : ''}</span>`;
+      if (claim) return `
+        <div class="${base} bg-emerald-50 border-emerald-200">
+          ${head}
+          <span class="text-2xl mt-1">${GIFT_REWARD_TYPES[claim.reward.type]?.icon || '🎁'}</span>
+          <span class="text-[10px] font-semibold text-emerald-700 leading-tight mt-1">${escapeHTML(giftRewardLabel(claim.reward))}</span>
+          <span class="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-black flex items-center justify-center">✓</span>
+        </div>`;
+      if (day > today) return `
+        <div class="${base} bg-gradient-to-br from-slate-100 to-slate-50 border-slate-200">
+          ${head}
+          <span class="text-3xl font-black text-slate-300 mt-1">?</span>
+          <span class="text-[9px] text-slate-400 mt-1">${formatDate(new Date(giftDayStart(day)).toISOString(), true)}</span>
+        </div>`;
+      if (day < today) return `
+        <div class="${base} bg-slate-50 border-slate-100 opacity-60">
+          ${head}
+          <span class="text-2xl mt-1 grayscale">${GIFT_REWARD_TYPES[r.type]?.icon || '—'}</span>
+          <span class="text-[10px] text-slate-500 leading-tight mt-1">${r.type === 'none' ? 'Ödül yoktu' : 'Kaçırıldı'}</span>
+        </div>`;
+      return `
+        <div class="${base} bg-gradient-to-br from-rose-50 via-amber-50 to-white border-rose-300 ring-2 ring-rose-200 gift-today">
+          ${head}
+          <span class="gift-bob text-3xl mt-1">${GIFT_REWARD_TYPES[r.type]?.icon || '🎁'}</span>
+          <span class="text-[10px] font-bold text-rose-700 leading-tight mt-1">${escapeHTML(giftRewardLabel(r))}</span>
+        </div>`;
+    };
+    const claimedToday = !!giftClaimOf(today);
+    const next = today < GIFT_DAYS ? giftDayStart(today + 1) : null;
+    const todayReward = rewards[today - 1];
+    openModal(`
+      <div class="relative p-5 sm:p-6 bg-gradient-to-br from-rose-50 via-amber-50 to-white">
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>
+        <div class="flex items-center gap-3 pr-10">
+          <span class="gift-bob text-4xl">🎁</span>
+          <div>
+            <h3 class="text-base font-extrabold text-slate-800">Hediye Kutusu</h3>
+            <p class="text-[11px] text-slate-500">Her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da yeni hediye · kaçırılan günün hediyesi geri gelmez</p>
+          </div>
+        </div>
+      </div>
+      <div class="p-5 sm:p-6 pt-4 space-y-4">
+        <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">${rewards.map(tile).join('')}</div>
+        ${todayReward.type === 'none'
+          ? '<p class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2.5 text-center">Bugün için hediye yok.</p>'
+          : claimedToday
+            ? `<p class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5 text-center">✓ Bugünün hediyesini aldın${next ? ` · sıradaki hediye ${formatRemaining(next - now)} sonra` : ''}</p>`
+            : `<button type="button" data-claim-gift class="w-full py-3 rounded-xl text-sm font-extrabold text-white bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 hover:shadow-soft-lg transition">🎁 Bugünün Hediyesini Al · ${escapeHTML(giftRewardLabel(todayReward))}</button>`}
+        <p class="text-[10px] text-slate-400 text-center">⏳ Kutu ${formatRemaining(t.end - now)} sonra kapanır · ${formatDate(new Date(t.end).toISOString(), true)}</p>
+        ${isAdmin() ? `<button type="button" data-open-giftbox-settings class="${BTN_SOFT} w-full !py-2.5">⚙️ Hediye Kutusu Ayarları</button>` : ''}
+      </div>`);
+  }
+
+  async function claimGiftFromModal() {
+    const ok = await claimGift();
+    if (ok && state.modalOpen) openGiftBoxModal();
+  }
+
+  /* --- Admin: Hediye Kutusu Ayarları · açık / kapalı, kış sezonunda kendiliğinden başlama, 7 günün ödülleri --- */
+  function openGiftBoxSettings() {
+    if (!requireAdmin()) return;
+    const g = giftBoxDoc();
+    const live = giftBoxLive();
+    const t = giftBoxTimes();
+    const rewards = giftRewards();
+    const row = (r, i) => `
+      <div class="p-3 rounded-2xl border border-slate-100 bg-white space-y-2" data-gift-row="${i}">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold text-slate-700 w-12 shrink-0">${i + 1}. gün</span>
+          <select name="type_${i}" data-gift-type="${i}" class="${INPUT_CLS} !py-1.5 flex-1 min-w-0">
+            ${Object.entries(GIFT_REWARD_TYPES).map(([k, x]) => `<option value="${k}" ${r.type === k ? 'selected' : ''}>${x.icon} ${x.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2" data-gift-fields>
+          <label data-gift-show="balance cheque"><span class="block text-[10px] text-slate-500 mb-0.5">Tutar (₺)</span>
+            <input name="amount_${i}" type="number" min="0.01" max="10000" step="0.01" value="${r.amount ?? ''}" class="${INPUT_CLS} !py-1.5" /></label>
+          <label data-gift-show="coupon"><span class="block text-[10px] text-slate-500 mb-0.5">Kupon türü</span>
+            <select name="ctype_${i}" class="${INPUT_CLS} !py-1.5">${Object.entries(COUPON_TYPES).map(([k, x]) => `<option value="${k}" ${r.couponType === k ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
+          <label data-gift-show="coupon"><span class="block text-[10px] text-slate-500 mb-0.5">Değer (%, ₺ ya da kitap sayısı)</span>
+            <input name="value_${i}" type="number" min="0.01" step="0.01" value="${r.value ?? ''}" class="${INPUT_CLS} !py-1.5" /></label>
+          <label data-gift-show="coupon"><span class="block text-[10px] text-slate-500 mb-0.5">Bedava (yalnızca Al-Öde)</span>
+            <input name="free_${i}" type="number" min="1" max="4" step="1" value="${r.free ?? 1}" class="${INPUT_CLS} !py-1.5" /></label>
+          <label data-gift-show="cheque coupon" class="col-span-2"><span class="block text-[10px] text-slate-500 mb-0.5">Adı (isteğe bağlı)</span>
+            <input name="name_${i}" maxlength="40" value="${escapeHTML(r.name || '')}" class="${INPUT_CLS} !py-1.5" placeholder="Örn. Kış Kuponu ❄️" /></label>
+        </div>
+      </div>`;
+    openModal(`
+      ${modalHeader('Hediye Kutusu Ayarları 🎁', `${GIFT_DAYS} günlük ödül havuzu · her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da yeni hediye.`, 'gifts', 'bg-rose-50 text-rose-600')}
+      <form data-form="saveGiftBox" class="p-5 space-y-3.5" autocomplete="off">
+        <p class="text-[11px] rounded-xl px-3 py-2 ${live ? 'text-emerald-700 bg-emerald-50' : 'text-slate-500 bg-slate-50'}">${live
+          ? `🎁 Kutu açık · ${giftDayAt()}/${GIFT_DAYS}. gün · ${formatRemaining(t.end - Date.now())} sonra kapanır`
+          : t && Date.now() >= t.end ? `Son kutu ${formatDate(new Date(t.end).toISOString(), true)}'da kapandı.` : 'Kutu kapalı.'}</p>
+        <label class="flex items-center gap-2 text-[11px] text-slate-600">
+          <input type="checkbox" name="enabled" ${g.enabled === true ? 'checked' : ''} class="rounded border-slate-300 text-rose-600" /> Hediye Kutusu açık (kapatırsan herkesten hemen kalkar)
+        </label>
+        <label class="flex items-center gap-2 text-[11px] text-slate-600">
+          <input type="checkbox" name="restart" ${live ? '' : 'checked'} class="rounded border-slate-300 text-rose-600" /> Kaydedince yeni ${GIFT_DAYS} gün şimdi başlasın${live ? ' (süren kutu sıfırlanır)' : ''}
+        </label>
+        <label class="flex items-center gap-2 text-[11px] text-sky-700">
+          <input type="checkbox" name="autoWinter" ${g.autoWinter === false ? '' : 'checked'} class="rounded border-sky-300 text-sky-600" /> ❄️ Kış sezonu açılınca kendiliğinden başlasın
+        </label>
+        <div class="space-y-2">${rewards.map(row).join('')}</div>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Kutu kapatılıp açılınca ya da kış sezonu yeniden açılınca kutu yeni ${GIFT_DAYS} günle baştan başlar (herkes 1. günden); buradaki ödüller korunur. Bakiye hemen hesaba geçer · hediye çeki ${CHEQUE_DAYS} gün, kupon ${COUPON_DAYS} gün geçerlidir (Kiralık ve indirimsiz kitaplara). Kullanıcılar gelecek günlerin hediyesini "?" olarak görür.</p>
+        ${formFooter('Kaydet')}
+      </form>`);
+    updateGiftRows();
+  }
+
+  /* Ödül türüne göre ilgili alanlar görünür */
+  function updateGiftRows() {
+    $$('[data-gift-row]').forEach((row) => {
+      const type = row.querySelector('[data-gift-type]').value;
+      row.querySelector('[data-gift-fields]').classList.toggle('hidden', type === 'none');
+      row.querySelectorAll('[data-gift-show]').forEach((el) => el.classList.toggle('hidden', !el.dataset.giftShow.split(' ').includes(type)));
+    });
+  }
+
+  function handleSaveGiftBox(fd) {
+    if (!requireAdmin()) return;
+    const rewards = [];
+    for (let i = 0; i < GIFT_DAYS; i++) {
+      const type = GIFT_REWARD_TYPES[fd[`type_${i}`]] ? fd[`type_${i}`] : 'none';
+      const day = `${i + 1}. gün`;
+      if (type === 'none') { rewards.push({ type }); continue; }
+      if (type === 'balance' || type === 'cheque') {
+        const amount = round2(parseFloat(fd[`amount_${i}`]));
+        if (!(amount > 0 && amount <= 10000)) return toast(`${day}: geçerli bir tutar girin (₺0–10.000).`, 'error');
+        rewards.push(type === 'balance' ? { type, amount } : { type, amount, name: (fd[`name_${i}`] || '').trim() });
+        continue;
+      }
+      const couponType = COUPON_TYPES[fd[`ctype_${i}`]] ? fd[`ctype_${i}`] : 'percent';
+      const t = COUPON_TYPES[couponType];
+      const value = couponType === 'amount' ? round2(parseFloat(fd[`value_${i}`])) : parseInt(fd[`value_${i}`], 10);
+      if (!(value >= t.min && value <= t.max)) return toast(`${day}: ${t.hint} ${t.min}–${t.max} arası olmalı.`, 'error');
+      let free = null;
+      if (couponType === 'bogo') {
+        free = parseInt(fd[`free_${i}`], 10);
+        if (!(free >= 1 && free < value)) return toast(`${day}: bedava kitap sayısı 1–${value - 1} arası olmalı.`, 'error');
+      }
+      rewards.push({ type, couponType, value, free, name: (fd[`name_${i}`] || '').trim() });
+    }
+    const enabled = fd.enabled === 'on';
+    // Kapalıyken açılırsa kutu her zaman yeni 7 günle baştan başlar (ödül ayarları korunur)
+    const restart = enabled && (giftBoxDoc().enabled !== true || fd.restart === 'on');
+    if (restart && rewards.every((r) => r.type === 'none')) return toast('Kutuyu başlatmak için en az bir güne ödül koy.', 'error');
+    const data = { enabled, rewards, autoWinter: fd.autoWinter === 'on', updatedAt: isoAt(Date.now()), updatedBy: state.currentUserId, ...(restart ? newGiftBoxData() : {}) };
+    closeModal();
+    run(col('settings').doc('giftBox').set(data, { merge: true }),
+      restart ? `🎁 Hediye Kutusu başladı · ${GIFT_DAYS} gün` : enabled ? '🎁 Hediye Kutusu ayarları kaydedildi.' : '🎁 Hediye Kutusu kapatıldı.', enabled ? 'success' : 'info');
+  }
+
+  /* --- 8.1.4 Kış Fırsatları (yalnızca Kış sezonunda · buz mavisi, kar taneleri, karlı kartlar) ---
+     Kış Sezonu temalı her kitap kendiliğinden burada · Admin indirimini seçer (indirimsiz / %15 / %25 / %50) ·
+     bu sezon gelen kış kitabı sezon boyunca indirimsiz (indirimi değiştirilemez) */
+  const winterList = () => visibleBooks()
+    .filter((b) => hasWinterTheme(b) && !isDraftBook(b))
+    .map((b) => ({ b, rate: winterRateOf(b), fresh: isWinterNewBook(b) }))
+    .sort((x, y) => y.fresh - x.fresh || y.rate - x.rate || (x.b.seriesNo ?? 1e9) - (y.b.seriesNo ?? 1e9) || x.b.title.localeCompare(y.b.title, 'tr'));
+
+  function renderWinter(now) {
+    const admin = isAdmin();
+    const box = $('#winterSection');
+    const list = winterList();
+    if (!winterShowcaseOn() || (!list.length && !admin)) { box.innerHTML = ''; return; }
+    const themeLabel = escapeHTML(getTheme(WINTER_THEME_ID).label);
+
+    const cards = list.map(({ b, rate, fresh }) => {
+      const price = hasPrice(b) ? round2(b.price * (1 - rate / 100)) : 0;
+      return `
+        <div data-open-book="${b.id}" role="button" tabindex="0"
+          class="winter-card group relative cursor-pointer rounded-2xl p-4 pt-5 text-left transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-sky-300">
+          <span class="winter-card-flake absolute right-2 bottom-12 text-5xl pointer-events-none select-none" aria-hidden="true">❄</span>
+          <span class="winter-drift absolute right-[5.5rem] top-3 text-sky-200 text-sm pointer-events-none select-none" aria-hidden="true">❅</span>
+          ${fresh
+            ? '<span class="absolute -top-2.5 right-3 z-[2] text-[10px] font-bold text-sky-700 bg-white px-2.5 py-1 rounded-full shadow-soft ring-1 ring-sky-200">❄️ Bu Kışın Kitabı</span>'
+            : rate
+              ? `<div class="winter-tag absolute -top-px right-4 w-[4.25rem] pt-2 pb-4 text-center z-[2]">
+                  <p class="text-[8px] font-extrabold tracking-[.2em] text-sky-900/70">KIŞ</p>
+                  <p class="text-xl font-black text-white leading-none mt-0.5 drop-shadow">%${rate}</p>
+                  <span class="absolute left-1/2 -translate-x-1/2 bottom-1.5 text-[10px] text-white/90" aria-hidden="true">❄</span>
+                </div>`
+              : ''}
+          ${admin && !fresh ? `
+            <button type="button" data-edit-winter="${b.id}" title="İndirimi değiştir" aria-label="İndirimi değiştir"
+              class="absolute top-2 left-2 z-[3] w-7 h-7 rounded-full bg-white/90 text-sky-600 hover:bg-sky-500 hover:text-white shadow-soft flex items-center justify-center transition">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
+          <div class="relative z-[1] flex gap-3 ${admin && !fresh ? 'pt-5' : ''} ${rate && !fresh ? 'pr-16' : ''}">
+            <div class="shrink-0 self-start rounded-xl ring-1 ring-sky-200 shadow-[0_10px_25px_-12px_rgba(14,165,233,.6)]">${coverHTML(b, 'md')}</div>
+            <div class="flex-1 min-w-0">
+              ${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<p class="text-[11px] font-bold text-sky-600">#${b.seriesNo}</p>` : `<p class="text-[10px] font-semibold uppercase tracking-wider text-sky-500 truncate">${escapeHTML(typeLabel(b.type))}</p>`}
+              <p class="text-sm font-semibold text-slate-800 mt-0.5 line-clamp-2 leading-snug">${escapeHTML(b.title)}</p>
+              ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
+            </div>
+          </div>
+          <div class="relative z-[1] flex items-end justify-between mt-4 pt-3 border-t border-dashed border-sky-200">
+            ${rate ? '<p class="text-[10px] font-bold text-sky-700 leading-snug min-w-0">❄️ Kış Fırsatı · kış boyunca</p>' : '<span></span>'}
+            <div class="text-right shrink-0">
+              ${rate && hasPrice(b) ? `<p class="text-[11px] text-slate-400 line-through">${formatMoney(b.price)}</p>` : ''}
+              <p class="text-xl font-black leading-none tracking-tight bg-gradient-to-r from-sky-500 to-blue-700 bg-clip-text text-transparent">${hasPrice(b) ? formatMoney(price) : 'Fiyat yakında'}</p>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="winter-rim rounded-3xl p-[2px] shadow-soft-lg mb-6">
+        <div class="winter-bg relative rounded-[22px] overflow-hidden p-4 sm:p-5">
+          <div class="winter-flakes absolute inset-0 pointer-events-none"></div>
+          <span class="winter-drift absolute right-6 top-3 text-3xl text-sky-200 pointer-events-none select-none" aria-hidden="true">❄</span>
+          <span class="winter-drift winter-drift-d1 absolute right-24 top-10 text-lg text-sky-200 pointer-events-none select-none" aria-hidden="true">❅</span>
+          <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div class="flex items-center gap-3">
+              <span class="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 text-white flex items-center justify-center text-lg shadow-soft shrink-0">❄️</span>
+              <div>
+                <h2 class="text-lg font-extrabold italic leading-tight bg-gradient-to-r from-sky-600 to-blue-800 bg-clip-text text-transparent" style="font-family:'Playfair Display',Georgia,serif">Kış Fırsatları</h2>
+                <p class="text-[11px] text-sky-800/70">${themeLabel} kitapları · kış sezonu boyunca</p>
+              </div>
+            </div>
+          </div>
+          ${list.length
+            ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">${cards}</div>`
+            : `<p class="relative text-center text-xs text-sky-800/70 py-8 border border-dashed border-sky-300 rounded-2xl bg-white/50">Henüz "${themeLabel}" temalı kitap yok · kitaba temayı Düzenle'den eklediğinde burada kendiliğinden görünür.<br/><span class="text-[10px] text-sky-800/50">Bu boş alanı yalnızca Adminler görür.</span></p>`}
+        </div>
+      </div>`;
+  }
+
+  /* Admin: Kış Fırsatı indirimini seç · bu sezon gelen kış kitabı sezon boyunca indirimsiz kalır */
+  function openWinterDealModal(bookId) {
+    if (!requireAdmin()) return;
+    if (!winterShowcaseOn()) return toast('Kış Fırsatları yalnızca Kış sezonunda ve Vitrin Ayarları\'nda açıkken kullanılır.', 'info');
+    const fixed = getBook(bookId);
+    if (!fixed || !hasWinterTheme(fixed)) return;
+    if (isWinterNewBook(fixed)) return toast('Bu kışın kitabı · sezon boyunca indirimsiz kalır.', 'info');
+    const sel = winterRateOf(fixed);
+    openModal(`
+      ${modalHeader('Kış Fırsatı İndirimi ❄️', 'Kış sezonu boyunca geçerli · sezon bitince indirim de biter.', 'tag', 'bg-sky-50 text-sky-600')}
+      <form data-form="saveWinterDeal" data-edit-id="${fixed.id}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="flex items-center gap-3 p-3 rounded-2xl bg-sky-50/60 border border-sky-100">${coverHTML(fixed, 'sm')}<div class="min-w-0"><p class="text-xs font-bold text-slate-800 truncate">${escapeHTML(fixed.title)}</p><p class="text-[11px] text-slate-400">${escapeHTML(seriesLabel(fixed))}${hasPrice(fixed) ? ` · ${formatMoney(fixed.price)}` : ''}</p></div></div>
+        <div>
+          <span class="block text-[11px] font-medium text-slate-500 mb-1.5">İndirim</span>
+          <div class="grid grid-cols-4 gap-2">
+            ${WINTER_RATES.map((r) => `
+              <label class="cursor-pointer">
+                <input type="radio" name="rate" value="${r}" ${r === sel ? 'checked' : ''} class="peer sr-only" />
+                <span class="block text-center py-2 rounded-xl border text-xs font-bold transition border-slate-200 text-slate-500 peer-checked:border-sky-400 peer-checked:bg-sky-50 peer-checked:text-sky-700">${r ? `%${r}` : 'İndirimsiz'}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+        ${formFooter('Kaydet')}
+      </form>`);
+  }
+
+  function handleSaveWinterDeal(fd, editId) {
+    if (!requireAdmin()) return;
+    const b = getBook(editId);
+    if (!b || !hasWinterTheme(b)) return toast('Kitap bulunamadı.', 'error');
+    if (isWinterNewBook(b)) return toast('Bu kışın kitabı · sezon boyunca indirimsiz kalır.', 'info');
+    const rate = Number(fd.rate);
+    if (!WINTER_RATES.includes(rate)) return toast('Bir indirim seçin.', 'error');
+    closeModal();
+    run(col('winterDeals').doc(String(b.id)).set({ bookId: b.id, rate, updatedAt: isoAt(Date.now()), updatedBy: state.currentUserId }),
+      `❄️ "${b.title}" · ${rate ? `%${rate} Kış Fırsatı indirimi` : 'indirimsiz'}`);
   }
 
   /* --- 8.1.5 Yeni Kitap vitrini (altın parıltılı, günün indirimlerinden ayrı) --- */
@@ -234,7 +549,7 @@
       .filter(({ d, b }) => b && hasPrice(b) && isVisibleBook(b) && customDiscountOf(b, now) === d)
       .sort((x, y) => y.d.rate - x.d.rate || new Date(y.d.createdAt) - new Date(x.d.createdAt));
     const box = $('#vitrineSection');
-    if (!showcaseOn('vitrine') || (!list.length && !admin)) { box.innerHTML = ''; return; }
+    if (!showcaseLive('vitrine') || (!list.length && !admin)) { box.innerHTML = ''; return; }
 
     const cards = list.map(({ d, b }) => {
       const eff = getEffectiveDiscount(b, now);
@@ -451,8 +766,8 @@
 
   /* --- 8.2 Günün indirimleri --- */
   function renderDeals(now) {
-    // Vitrin Ayarları'nda kapalıysa bölüm hiç görünmez
-    const on = showcaseOn('deals');
+    // Vitrin Ayarları'nda kapalıysa (ya da kış sezonundaysa) bölüm hiç görünmez
+    const on = showcaseLive('deals');
     $('#dealsSection').classList.toggle('hidden', !on);
     if (!on) return;
     const deals = getDailyDeals(now);
