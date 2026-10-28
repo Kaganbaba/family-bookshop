@@ -37,11 +37,6 @@
             `<option value="${k}" ${bookStatus(b || {}) === k ? 'selected' : ''}>${s.label}</option>`).join('')}</select>`)}
         </div>
         <p id="bf-status-hint" class="text-[10px] text-slate-400 -mt-1.5">${BOOK_STATUSES[bookStatus(b || {})].desc}</p>
-        <div id="bf-special-wrap" class="${isSpecialType(selType) ? '' : 'hidden'} p-3 rounded-2xl bg-rose-50/50 border border-rose-100 space-y-2">
-          <p class="text-[11px] font-semibold text-rose-600">🔒 Özel kitap · yalnızca belirli dönemde okunabilir</p>
-          ${field('Dönem', `<input name="period" maxlength="80" value="${escapeHTML(b?.period || '')}" class="${INPUT_CLS}" placeholder='Örn. Sadece yağmurlu günlerde' />`,
-            'Kitapta "Bu kitap özel kitaptır ve sadece … okunabilir" olarak görünür. Kiralanınca otomatik Kira dışı olur.')}
-        </div>
         <div class="grid grid-cols-2 gap-3">
           ${field('Kiralama Fiyatı (₺)', `<input name="price" type="number" min="0.01" step="0.01" value="${hasPrice(b) ? b.price : ''}" class="${INPUT_CLS}" placeholder="25" />`)}
           ${field('Sayfa Sayısı', `<input name="pages" type="number" min="1" step="1" value="${b?.pages ?? ''}" class="${INPUT_CLS}" placeholder="200" />`)}
@@ -72,15 +67,14 @@
   function updateBookFormPreview() {
     const box = $('#bookCoverPreview');
     if (!box) return;
-    box.innerHTML = coverHTML({
-      title: $('#bf-title')?.value || 'Yeni Kitap',
-      type: $('#bf-type')?.value || defaultTypeId(),
-      cover: state.bookDraftCover
-    }, 'md');
+    const draft = { title: $('#bf-title')?.value || 'Yeni Kitap', type: $('#bf-type')?.value || defaultTypeId(), cover: state.bookDraftCover };
+    // Müze kitabı formu: müze türünün rengi ve kırpılmayan kapak
+    box.innerHTML = $('#bf-museum-type')
+      ? museumCoverHTML({ ...draft, museum: true, museumType: $('#bf-museum-type').value }, 'md')
+      : coverHTML(draft, 'md');
     $('#removeBookCover')?.classList.toggle('hidden', !state.bookDraftCover);
-    // Seri No yalnızca indirim döngüsüne giren türlerde; Dönem yalnızca özel türlerde
+    // Seri No yalnızca indirim döngüsüne giren türlerde
     $('#bf-series-wrap')?.classList.toggle('hidden', !getType($('#bf-type')?.value)?.inDeals);
-    $('#bf-special-wrap')?.classList.toggle('hidden', !isSpecialType($('#bf-type')?.value));
     const st = $('#bf-status')?.value;
     if (st && $('#bf-status-hint')) $('#bf-status-hint').textContent = BOOK_STATUSES[st]?.desc || '';
     // Planlanıyor / Yakında: çıkış tarihi silinir ve girilemez · yeni kitapta kendiliğinden gelen
@@ -129,12 +123,10 @@
       if (clash) return toast(`Seri #${seriesNo} zaten "${clash.title}" kitabında.`, 'error');
     }
 
-    const special = isSpecialType(type);
     const announce = fd.announce === 'on'; // yeni kitap / durum duyurusu yalnızca işaretliyse
     const data = {
-      title, type, status, special, seriesNo, price, pages, rentalDays, releaseDate,
+      title, type, status, seriesNo, price, pages, rentalDays, releaseDate,
       place: (fd.place || '').trim(),
-      period: special ? (fd.period || '').trim() : '',
       description: (fd.description || '').trim(),
       cover: state.bookDraftCover || ''
     };
@@ -425,7 +417,6 @@
             <p class="flex items-center gap-1.5 flex-wrap mt-0.5 text-[10px] text-slate-400">
               <span>${count} kitap</span>
               ${t.inDeals ? '' : '<span class="px-1.5 rounded-full bg-slate-100 text-slate-500" title="Günün indirimi döngüsüne girmez">indirimsiz</span>'}
-              ${isSpecialType(t.id) ? '<span class="px-1.5 rounded-full bg-rose-50 text-rose-500 font-semibold" title="Döneme özel: dönem alanı, kiralanınca otomatik Kira dışı, kapakta 👑 SINIRLI işareti, iade edilemez">🔒 Döneme özel</span>' : ''}
             </p>
           </div>
           <button type="button" data-edit-type="${t.id}" title="Ayarlar" aria-label="${escapeHTML(t.label)} ayarları" class="${BTN_ICON} text-slate-400 hover:text-brand-600 hover:bg-brand-50">${icon('cog', 'w-4 h-4')}</button>
@@ -434,7 +425,7 @@
     }).join('');
 
     openModal(`
-      ${modalHeader('Kategorileri Yönet 📁', 'Kitap türleri · değişiklikler tüm sekmelere anında yansır.', 'tag')}
+      ${modalHeader('Kategorileri Yönet ⚙️', 'Kitap türleri · değişiklikler tüm sekmelere anında yansır.', 'tag')}
       <div class="p-5 space-y-4">
         <ul class="space-y-2">${rows || `<li>${emptyState('Henüz tür yok.')}</li>`}</ul>
         <form data-form="saveType" class="p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
@@ -447,17 +438,13 @@
             <input type="checkbox" name="inDeals" class="rounded border-slate-300 text-brand-600" />
             Günün indirimi döngüsüne girsin
           </label>
-          <label class="flex items-center gap-2 text-[11px] text-slate-500">
-            <input type="checkbox" name="special" class="rounded border-slate-300 text-rose-500" />
-            🔒 Döneme özel tür (Dönem alanı, kiralanınca otomatik Kira dışı, kapakta 👑 SINIRLI, iade edilemez)
-          </label>
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Türü Ekle</button>
         </form>
-        <p class="text-[10px] text-slate-400 leading-relaxed">Ad, renk ve "Döneme özel" ayarı için türün yanındaki ⚙️ simgesine bas. İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Ad ve renk ayarı için türün yanındaki ⚙️ simgesine bas. İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
       </div>`);
   }
 
-  /* Tür ayarları: ad, renk, Döneme özel (kaydedince / geri dönünce yönetim listesine döner) */
+  /* Tür ayarları: ad, renk (kaydedince / geri dönünce yönetim listesine döner) */
   function openTypeEditor(id) {
     if (!requireAdmin()) return;
     const t = getType(id);
@@ -468,11 +455,6 @@
       <form data-form="saveType" data-edit-id="${t.id}" class="p-5 space-y-3.5" autocomplete="off">
         ${field('Tür adı', `<input name="label" required maxlength="24" value="${escapeHTML(t.label)}" autofocus class="${INPUT_CLS}" />`)}
         ${field('Renk', `<select name="palette" class="${INPUT_CLS}">${paletteOptions(t.palette)}</select>`)}
-        <label class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-50 transition">
-          <input type="checkbox" name="special" ${isSpecialType(t.id) ? 'checked' : ''} class="mt-0.5 rounded border-slate-300 text-rose-500" />
-          <span class="text-xs text-slate-600 leading-relaxed"><b class="text-rose-500">🔒 Döneme özel</b><br>
-            <span class="text-[11px] text-slate-400">Dönem alanı, kiralanınca otomatik Kira dışı, kapakta 👑 SINIRLI, iade edilemez. Bu türdeki tüm kitaplara uygulanır.</span></span>
-        </label>
         <div class="grid grid-cols-2 gap-2.5 pt-2">
           <button type="button" data-quick="manageTypes" class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">← Geri</button>
           <button type="submit" class="${BTN_PRIMARY} !py-2.5">Kaydet</button>
@@ -491,17 +473,9 @@
     if (editId) {
       const t = getType(editId);
       if (!t) return;
-      const special = fd.special === 'on';
-      const batch = db.batch();
-      batch.update(col('bookTypes').doc(editId), { label, palette, special });
-      // "Döneme özel" değişince bu türdeki kitapların bayrağı da eşitlenir (kural kiralamada kitaptaki bayrağa bakar)
-      if (special !== isSpecialType(editId)) {
-        books.filter((b) => b.type === editId && (b.special === true) !== special)
-          .forEach((b) => batch.update(bookRef(b.id), { special }));
-      }
-      done = batch.commit();
+      done = col('bookTypes').doc(editId).update({ label, palette });
     } else {
-      done = addBookType({ label, palette, inDeals: fd.inDeals === 'on', special: fd.special === 'on' });
+      done = addBookType({ label, palette, inDeals: fd.inDeals === 'on' });
     }
     const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" türü eklendi.`);
     if (ok && state.modalOpen) openTypeManager();
@@ -887,6 +861,107 @@
     col('settings').doc('season').set({ active: null, endsAt: null, changedAt: isoAt(Date.now()), changedBy: 'auto' }, { merge: true })
       .then(() => toast(`${SEASONS[d.active].icon} ${SEASONS[d.active].label} sezonunun süresi doldu · sezon kapatıldı.`, 'info'))
       .catch((e) => { console.error(e); state.purgePending.delete(`seasonexp:${end}`); });
+  }
+
+  /* --- Müze (kitap detayı → 🏛️) · kitap kitaplıktan kalkar, Müze'de bilgileriyle sergilenir, kiralanamaz --- */
+  function openMoveToMuseumModal(bookId) {
+    if (!requireAdmin()) return;
+    const b = getBook(bookId);
+    if (!b || b.museum) return;
+    const active = activeRentalOf(b);
+    openModal(`
+      ${modalHeader('Müzeye Taşı 🏛️', 'Kitap kitaplıktan kalkar · Müze\'de bilgileriyle sergilenir, artık kiralanamaz.', 'books', 'bg-amber-50 text-amber-700')}
+      <form data-form="moveToMuseum" data-edit-id="${b.id}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="flex items-center gap-3 p-3 rounded-2xl bg-stone-50 border border-stone-100">
+          ${coverHTML(b, 'sm')}
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-800 truncate">${escapeHTML(b.title)}</p>
+            <p class="text-[11px] text-slate-400">${escapeHTML(typeLabel(b.type))}${hasPrice(b) ? ` · ${formatMoney(b.price)}` : ''}</p>
+          </div>
+        </div>
+        ${field('Müze Türü', `<select name="museumType" class="${INPUT_CLS}">
+          ${Object.entries(MUSEUM_TYPES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
+        </select>`, 'Müze bu türe göre gruplanır')}
+        ${active ? '<p class="text-[11px] text-amber-700 bg-amber-50 rounded-xl px-3 py-2">⏳ Kitap şu an kirada · kiralama süresince sürer, sonra kitap yeniden kiralanamaz.</p>' : ''}
+        ${formFooter('Müzeye Taşı')}
+      </form>`);
+  }
+
+  function handleMoveToMuseum(fd, bookId) {
+    if (!requireAdmin()) return;
+    const b = getBook(bookId);
+    if (!b || b.museum) return;
+    const type = MUSEUM_TYPES[fd.museumType] ? fd.museumType : 'ozel';
+    closeModal();
+    state.bookTab = MUSEUM_TAB;
+    run(commitOps(museumOps(b, type)), `🏛️ "${b.title}" Müze'ye taşındı (${MUSEUM_TYPES[type].label}).`);
+  }
+
+  /* Müze kitabını düzenle: kapak, ad, müze türü ve sergilenen bilgiler (kiralama alanları yok) */
+  function openMuseumEditModal(bookId) {
+    if (!requireAdmin()) return;
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    if (!b) return;
+    state.bookDraftCover = b.cover || '';
+    openModal(`
+      ${modalHeader('Müze Kitabını Düzenle 🏛️', 'Müze\'de sergilenen bilgiler · kitap kiralanamaz.', 'books', 'bg-amber-50 text-amber-700')}
+      <form data-form="saveMuseumBook" data-edit-id="${b.id}" class="p-5 space-y-3.5" autocomplete="off">
+        <div class="flex gap-4 items-center p-3 rounded-2xl bg-stone-50 border border-stone-100">
+          <div id="bookCoverPreview">${museumCoverHTML(b, 'md')}</div>
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <p class="text-[11px] font-semibold text-slate-600">Kapak Fotoğrafı</p>
+            <div class="flex flex-wrap gap-1.5">
+              <label class="${BTN_SOFT} !py-1.5 cursor-pointer">${icon('photo', 'w-3.5 h-3.5')}Dosya Seç
+                <input type="file" accept="image/*" data-cover-input="book" class="sr-only" />
+              </label>
+              <button type="button" id="removeBookCover" data-remove-cover="book" class="${BTN_SOFT} !py-1.5 !text-rose-500 !border-rose-100 ${state.bookDraftCover ? '' : 'hidden'}">Kaldır</button>
+            </div>
+          </div>
+        </div>
+        ${field('Kitap Adı', `<input name="title" id="bf-title" required maxlength="80" value="${escapeHTML(b.title)}" class="${INPUT_CLS}" />`)}
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Müze Türü', `<select name="museumType" id="bf-museum-type" class="${INPUT_CLS}">
+            ${Object.entries(MUSEUM_TYPES).map(([k, t]) => `<option value="${k}" ${museumTypeOf(b) === k ? 'selected' : ''}>${t.label}</option>`).join('')}
+          </select>`)}
+          ${field('Son Fiyatı (₺)', `<input name="price" type="number" min="0" step="0.01" value="${hasPrice(b) ? b.price : ''}" class="${INPUT_CLS}" />`)}
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Sayfa Sayısı', `<input name="pages" type="number" min="1" step="1" value="${b.pages ?? ''}" class="${INPUT_CLS}" />`)}
+          ${field('Kira Süresi (gün)', `<input name="rentalDays" type="number" min="1" max="90" step="1" value="${b.rentalDays ?? ''}" class="${INPUT_CLS}" />`)}
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          ${field('Yazıldığı Mekan', `<input name="place" maxlength="60" value="${escapeHTML(b.place || '')}" class="${INPUT_CLS}" />`)}
+          ${field('Çıkış Tarihi', `<input name="releaseDate" type="date" max="${localDateKey()}" value="${isDateKey(b.releaseDate) ? b.releaseDate : ''}" class="${INPUT_CLS}" />`)}
+        </div>
+        ${field('Okunduğu Dönem', `<input name="period" maxlength="80" value="${escapeHTML(b.period || '')}" class="${INPUT_CLS}" />`, 'Boş bırakırsan Müze\'de gösterilmez')}
+        ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed">${escapeHTML(b.description || '')}</textarea>`)}
+        ${formFooter('Değişiklikleri Kaydet')}
+      </form>`);
+  }
+
+  function handleSaveMuseumBook(fd, bookId) {
+    if (!requireAdmin()) return;
+    if (state.coverBusy) return toast('Kapak hâlâ yükleniyor, bir saniye…', 'info');
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    if (!b) return;
+    const title = (fd.title || '').trim();
+    if (!title) return toast('Kitap adı zorunlu.', 'error');
+    const pos = (v, int = false) => { const n = int ? parseInt(v, 10) : round2(parseFloat(v)); return n > 0 ? n : null; };
+    const data = {
+      title,
+      museumType: MUSEUM_TYPES[fd.museumType] ? fd.museumType : museumTypeOf(b),
+      price: pos(fd.price),
+      pages: pos(fd.pages, true),
+      rentalDays: pos(fd.rentalDays, true),
+      place: (fd.place || '').trim(),
+      releaseDate: isDateKey(fd.releaseDate) ? fd.releaseDate : null,
+      // boş bırakılan dönem kayıttan tamamen silinir
+      period: (fd.period || '').trim() || FieldValue.delete(),
+      description: (fd.description || '').trim(),
+      cover: state.bookDraftCover || ''
+    };
+    closeModal();
+    run(bookRef(b.id).update(data), `🏛️ "${title}" güncellendi.`).then((ok) => ok && openMuseumModal(b.id));
   }
 
   function runQuick(action) {

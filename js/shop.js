@@ -324,7 +324,7 @@
             <p class="text-3xl font-black leading-none mt-1.5 drop-shadow">${formatMoney(c.amount)}</p>
             ${c.name ? `<p class="text-[11px] font-semibold mt-1 truncate">${escapeHTML(c.name)}</p>` : ''}
           </div>
-          <p class="text-[10px] text-right opacity-90 shrink-0">Son kullanma<br/><b>${formatDate(new Date(c.expiresMs).toISOString())}</b></p>
+          <p class="text-[10px] text-right opacity-90 shrink-0">Son kullanma<br/><b>${formatDate(new Date(c.expiresMs).toISOString(), true)}</b></p>
         </div>
         <p class="relative text-[10px] opacity-90 mt-2.5 leading-snug">Kiralık ve indirimsiz bir kitabı kiralarken seç · tutar fiyattan düşülür.</p>
         ${withAction && st === 'locked' ? `
@@ -398,7 +398,10 @@
           ${field('Açma bedeli (puan)', `<input name="cost" type="number" min="0" step="0.01" value="0" class="${INPUT_CLS}" />`, '0 = ücretsiz · puanlıysa kişi kendi puanıyla açar')}
         </div>
         ${field('Çek Adı (isteğe bağlı)', `<input name="name" maxlength="60" class="${INPUT_CLS}" placeholder="Örn. Doğum Günü Hediyesi 🎂" />`)}
-        ${field('Son Kullanma Tarihi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${defaultEnd}" class="${INPUT_CLS}" />`)}
+        <div class="grid grid-cols-[1fr_auto] gap-3">
+          ${field('Son Kullanma Tarihi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${defaultEnd}" class="${INPUT_CLS} min-w-0" />`)}
+          ${field('Saat', `<input name="endTime" type="time" required value="23:59" class="${INPUT_CLS} w-[6.5rem]" />`)}
+        </div>
         ${formFooter('Çeki Gönder')}
       </form>`);
   }
@@ -414,10 +417,11 @@
     if (!(amount > 0 && amount <= 10000)) return toast('Tutar 0\'dan büyük olmalı.', 'error');
     if (!(cost >= 0)) return toast('Açma bedeli 0 ya da daha büyük olmalı.', 'error');
     const key = String(fd.get('endDate') || '');
-    if (!isDateKey(key)) return toast('Geçerli bir son kullanma tarihi seçin.', 'error');
+    const time = String(fd.get('endTime') || '');
+    if (!isDateKey(key) || !isTimeKey(time)) return toast('Geçerli bir son kullanma tarihi ve saati seçin.', 'error');
     const end = dateFromKey(key);
-    end.setHours(23, 59, 59, 0);
-    if (end.getTime() <= Date.now()) return toast('Son kullanma tarihi geçmiş olamaz.', 'error');
+    end.setHours(...time.split(':').map(Number), 0, 0);
+    if (end.getTime() <= Date.now()) return toast('Son kullanma anı geçmiş olamaz.', 'error');
     const now = isoAt(Date.now());
     const batch = db.batch();
     to.forEach((userId) => batch.set(col('giftCheques').doc(), {
@@ -529,7 +533,7 @@
         offerId: null, purchaseId: null, offerPrice: null, couponId: coupon.id,
         rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
       });
-      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
+      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
     });
     const paidTotal = round2(sum(lines, (l) => l.price));
     batch.update(col('coupons').doc(coupon.id), {
@@ -929,7 +933,7 @@
         offerId: o.id, purchaseId, offerPrice: offerPrice(o),
         rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
       });
-      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
+      batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
     });
     // Paket indirimi puan kazandırır (normal toplam − paket fiyatı)
     const gain = purchaseGain({ normalTotal: normal, price: offerPrice(o) });

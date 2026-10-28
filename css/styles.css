@@ -211,3 +211,6 @@
     .cheque-card { background: linear-gradient(140deg, #10b981, #0d9488 55%, #0e7490); }
     .cheque-notch { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border-radius: 9999px; background: #f8fafc; }
     .cheque-notch.left { left: -9px; } .cheque-notch.right { right: -9px; }
+
+    /* Müze · Dönemsel türü: mavi → mor → sarı → yeşil (kapak, rozet, başlık simgesi) */
+    .museum-rainbow { background-image: linear-gradient(135deg, #38bdf8, #8b5cf6 35%, #facc15 68%, #22c55e) !important; }

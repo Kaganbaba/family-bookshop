@@ -2,7 +2,7 @@
      9) KİTAPLAR SAYFASI
      ========================================================== */
   const manageTypesBtn = () =>
-    `<button type="button" data-quick="manageTypes" class="${BTN_SOFT}">Kategorileri Yönet 📁</button>`;
+    `<button type="button" data-quick="manageTypes" class="${BTN_SOFT}">Kategorileri Yönet ⚙️</button>`;
 
   /* Dinamik tür sekmeleri (Kitaplar + Kiralananlar ortak). attr: data-* adı, current: seçili tür */
   /* Kitaplar listesinde çarpıcı, mavi tonlu fiyat etiketi (indirimde eski fiyat + yüzde rozeti) */
@@ -19,7 +19,8 @@
       </span>`;
   }
 
-  function typeTabBar(attr, current, countOf, extraCls = 'mb-5', includeAll = true) {
+  /* extraTabs: tür sekmelerinden sonra eklenen sekmeler (Kitaplar → 🏛️ Müze) */
+  function typeTabBar(attr, current, countOf, extraCls = 'mb-5', includeAll = true, extraTabs = '') {
     const tabs = includeAll ? [{ id: 'all', label: 'Tümü' }, ...bookTypes] : [...bookTypes];
     return `
       <div class="flex gap-1 p-1 bg-white rounded-2xl shadow-soft ${extraCls} overflow-x-auto soft-scroll w-full sm:w-auto sm:inline-flex">
@@ -33,6 +34,7 @@
               <span class="text-[10px] px-1.5 py-px rounded-full ${active ? 'bg-white/25' : 'bg-brand-50 text-brand-600'}">${countOf(t.id)}</span>
             </button>`;
         }).join('')}
+        ${extraTabs}
       </div>`;
   }
 
@@ -91,8 +93,9 @@
       : '');
 
     const now = Date.now();
-    // "Tümü" sekmesi yok: yalnızca kategoriler (varsayılan ilk kategori)
-    if (!getType(state.bookTab)) state.bookTab = defaultTypeId();
+    // "Tümü" sekmesi yok: yalnızca kategoriler (varsayılan ilk kategori) + en sonda Müze
+    if (state.bookTab !== MUSEUM_TAB && !getType(state.bookTab)) state.bookTab = defaultTypeId();
+    if (state.bookTab === MUSEUM_TAB) { $('#booksContent').innerHTML = booksTabBar() + museumHTML(); return; }
     const shown = visibleBooks(); // Liste dışı kitapları yalnızca Adminler görür
     const countOf = (k) => shown.filter((b) => b.type === k).length;
     // Sıra: Planlanıyor → Yakında → diğerleri (çıkış tarihi yeni → eski)
@@ -109,7 +112,7 @@
         || (b.seriesNo || 0) - (a.seriesNo || 0) || b.id - a.id);
     const rentableCount = list.filter((b) => isRentableStatus(b) && !isBookRented(b, now)).length;
 
-    const tabBar = typeTabBar('data-book-tab', state.bookTab, countOf, 'mb-5', false);
+    const tabBar = booksTabBar();
     const filterBar = inTab.length ? f.html : '';
 
     if (!list.length) {
@@ -155,7 +158,6 @@
               ${priceTagHTML(b, eff)}
               <div class="flex flex-col items-end gap-1">
                 ${statusChipHTML(b, now)}
-                ${isSpecialBook(b) && b.period ? `<span class="hidden sm:inline text-[9px] font-semibold text-rose-500 max-w-[9rem] truncate">🔒 ${escapeHTML(b.period)}</span>` : ''}
               </div>
             </div>
             <span class="hidden sm:block text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
@@ -171,6 +173,110 @@
         </div>
         <ul class="divide-y divide-slate-100">${rows}</ul>
       </div>`;
+  }
+
+  /* --- 9.0.5 Müze: kitaplıktan kaldırılan, artık kiralanmayan kitaplar · yalnızca sergilenir ---
+     Müze türüne göre gruplu (Özel · Dönemsel) · bilgiler kitabın son hâlidir (fiyat = son fiyatı) */
+  const MUSEUM_TAB = 'museum';
+
+  /* Kitaplar sekmeleri: türler + en sonda Müze */
+  function booksTabBar() {
+    const shown = visibleBooks();
+    const active = state.bookTab === MUSEUM_TAB;
+    const museumTab = `
+      <button type="button" data-book-tab="${MUSEUM_TAB}"
+        class="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${active ? 'bg-gradient-to-r from-amber-600 to-stone-700 text-white shadow-soft' : 'text-stone-600 hover:text-amber-700 hover:bg-amber-50/70'}">
+        🏛️ Müze
+        <span class="text-[10px] px-1.5 py-px rounded-full ${active ? 'bg-white/25' : 'bg-amber-50 text-amber-700'}">${museumBooks.length}</span>
+      </button>`;
+    return typeTabBar('data-book-tab', state.bookTab, (k) => shown.filter((b) => b.type === k).length, 'mb-5', false, museumTab);
+  }
+
+  function museumHTML() {
+    const intro = `
+      <div class="flex items-start gap-3 bg-gradient-to-br from-amber-50 via-white to-stone-50 border border-amber-100 rounded-2xl px-4 py-3.5 mb-5">
+        <span class="text-2xl leading-none">🏛️</span>
+        <div class="text-xs text-stone-600 leading-relaxed">
+          <b class="text-stone-800">Müze</b> · Önceden yazılan ama artık kitaplıkta olmayan kitaplarımız burada sergilenir.
+          Bilgilerine bakabilirsin; <b>kiralanamazlar</b>.
+        </div>
+      </div>`;
+    if (!museumBooks.length) return intro + emptyState('Müzede henüz kitap yok.');
+    const sorted = (list) => [...list].sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.title.localeCompare(b.title, 'tr'));
+    const groups = Object.entries(MUSEUM_TYPES)
+      .map(([key, t]) => ({ key, t, list: sorted(museumBooks.filter((b) => museumTypeOf(b) === key)) }))
+      .filter((g) => g.list.length);
+    const card = (b) => `
+      <button type="button" data-open-museum="${b.id}"
+        class="group text-left bg-white rounded-2xl shadow-soft border border-stone-100 p-3.5 flex gap-3.5 hover:shadow-soft-lg hover:-translate-y-0.5 transition">
+        <span class="shrink-0 self-start">${museumCoverHTML(b, 'md')}</span>
+        <span class="min-w-0 flex-1 flex flex-col">
+          <span class="flex items-center gap-1.5 flex-wrap">${museumChip(b)}</span>
+          <span class="text-sm font-bold text-slate-800 leading-snug mt-1.5 line-clamp-2">${escapeHTML(b.title)}</span>
+          <span class="text-[11px] text-slate-400 mt-0.5">${isDateKey(b.releaseDate) ? `${b.releaseDate.slice(0, 4)} · ` : ''}${b.pages ? `${b.pages} sayfa` : ''}${b.place ? ` · ${escapeHTML(b.place)}` : ''}</span>
+          ${b.description ? `<span class="text-[11px] text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">${escapeHTML(b.description)}</span>` : ''}
+          <span class="mt-auto pt-2 text-[10px] font-semibold text-stone-400">🏛️ Sergide · kiralanamaz</span>
+        </span>
+      </button>`;
+    return intro + groups.map(({ t, list }) => `
+      <section class="mb-6">
+        <div class="flex items-center gap-2.5 mb-3">
+          ${museumDot(t, 'w-3 h-3')}
+          <h2 class="text-sm font-bold text-slate-800">${t.label}</h2>
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-500">${list.length} kitap</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">${list.map(card).join('')}</div>
+      </section>`).join('');
+  }
+
+  /* Müze kitabı: yalnızca bilgi (kiralama yok) · Admin bilgilerini düzenleyebilir */
+  function openMuseumModal(bookId) {
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    if (!b) return;
+    const admin = isAdmin();
+    const info = (label, value) => `
+      <div class="p-2.5 sm:p-3 rounded-xl bg-stone-50">
+        <p class="text-[10px] text-stone-400">${label}</p>
+        <p class="text-xs font-semibold text-slate-700 truncate">${value}</p>
+      </div>`;
+    openModal(`
+      <div class="relative p-5 sm:p-6 bg-gradient-to-br from-amber-50 via-white to-stone-50">
+        <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
+        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>
+        <div class="flex gap-4 sm:gap-5">
+          ${b.cover ? `<button type="button" data-zoom-cover title="Kapağı büyüt" aria-label="Kapağı büyüt" class="relative shrink-0 self-start cursor-zoom-in rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-300 group">
+              ${museumCoverHTML(b, 'lg')}
+              <span class="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 shadow-soft text-slate-600 text-xs flex items-center justify-center group-hover:scale-110 transition">🔍</span>
+            </button>` : museumCoverHTML(b, 'lg')}
+          <div class="min-w-0 flex-1 pt-1 pr-8">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              ${museumChip(b)}
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-800 text-amber-100">🏛️ Müze</span>
+            </div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
+            <p class="text-[11px] text-stone-500 mt-1">Bu kitap artık kitaplıkta yok · yalnızca sergileniyor, kiralanamaz.</p>
+          </div>
+        </div>
+      </div>
+      <div class="p-5 sm:p-6 pt-4 space-y-4">
+        ${b.description ? `<p class="text-xs text-slate-600 leading-relaxed whitespace-pre-line bg-stone-50 rounded-2xl px-4 py-3">${escapeHTML(b.description)}</p>` : ''}
+        <div class="grid grid-cols-2 gap-2.5">
+          ${info('Türü', `<span class="inline-flex items-center gap-1.5">${museumDot(museumStyle(b))}${museumStyle(b).label}</span>`)}
+          ${info('Son Fiyatı', hasPrice(b) ? formatMoney(b.price) : '—')}
+          ${info('Sayfa Sayısı', b.pages ? `${b.pages} sayfa` : '—')}
+          ${info('Kira Süresi', b.rentalDays ? `${b.rentalDays} gün` : '—')}
+          ${info('Yazıldığı Mekan', escapeHTML(b.place || '—'))}
+          ${info('Çıkış Tarihi', isDateKey(b.releaseDate) ? formatLongDate(dateFromKey(b.releaseDate)) : '—')}
+          ${b.period ? info('Okunduğu Dönem', escapeHTML(b.period)) : ''}
+          ${info('Yazar', escapeHTML(authorName(b)))}
+          ${info('Kiralanma Sayısı', `${bookRentCount(b.id)} kez kiralandı`)}
+          ${info('Müzeye Giriş', b.museumAt ? formatDate(b.museumAt) : '—')}
+        </div>
+        <div class="grid ${admin ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5">
+          ${admin ? `<button type="button" data-edit-museum="${b.id}" class="${BTN_SOFT} !py-2.5">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>` : ''}
+          <button type="button" data-modal-close class="${BTN_SOFT} !py-2.5">Kapat</button>
+        </div>
+      </div>`, 'lg');
   }
 
   /* ==========================================================
@@ -274,6 +380,7 @@
   /* Kitap detay modalı (iki sütun + fiyat geçmişi zaman çizelgesi) */
   function openBookModal(bookId, opts = {}) {
     const b = getBook(bookId);
+    if (b?.museum) return openMuseumModal(b.id); // Müze'deki kitap yalnızca sergilenir
     if (!isVisibleBook(b)) return; // Liste dışı: yalnızca Admin açabilir
     const u = currentUser();
     const now = new Date();
@@ -352,6 +459,7 @@
         <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
         <div class="absolute top-3 right-3 flex gap-1.5">
           ${backOfferId ? `<button type="button" data-open-offer="${backOfferId}" class="h-8 px-3 rounded-full bg-white shadow-soft text-[11px] font-semibold text-brand-600 hover:bg-brand-50 flex items-center gap-1 transition">${icon('back', 'w-3.5 h-3.5')}Pakete dön</button>` : ''}
+          ${admin ? `<button type="button" data-move-museum="${b.id}" title="Müzeye taşı" aria-label="Müzeye taşı" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-amber-600 flex items-center justify-center transition text-sm">🏛️</button>` : ''}
           ${admin ? `<button type="button" data-delete-book="${b.id}" title="Kitabı sil" aria-label="Kitabı sil" class="w-8 h-8 rounded-full bg-white shadow-soft text-slate-400 hover:text-rose-500 flex items-center justify-center transition">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
           <button type="button" data-modal-close aria-label="Kapat" class="w-9 h-9 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>
         </div>
@@ -392,11 +500,6 @@
 
       <div class="p-5 sm:p-6 pt-4 space-y-5">
         ${rentBlock}
-        ${isSpecialBook(b) ? `
-          <div class="flex gap-3 p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
-            <span class="text-xl leading-none">🔒</span>
-            <p class="text-xs text-rose-700 leading-relaxed">Bu kitap <b>özel kitaptır</b> ve sadece <b>${escapeHTML(b.period || 'belirli dönemlerde')}</b> okunabilir.${bookStatus(b) === 'kiradisi' && !active ? ' Şu an dönem dışında olduğu için kiralanamaz.' : ''}</p>
-          </div>` : ''}
         ${isDraftBook(b) ? `
           <div class="flex gap-3 p-3.5 rounded-2xl ${bookStatus(b) === 'planlaniyor' ? 'bg-violet-50 border-violet-100 text-violet-700' : 'bg-sky-50 border-sky-100 text-sky-700'} border">
             <span class="text-xl leading-none">${bookStatus(b) === 'planlaniyor' ? '🗓️' : '✍️'}</span>
@@ -631,9 +734,6 @@
   /* Kitap kilidi hâlâ geçerli mi (güvenlik kuralı da aynı alanı denetler) */
   const isBookLocked = (book, now = Date.now()) => !!book.lockUntil && book.lockUntil.toMillis() > now;
 
-  /* Özel kitap mı (kitap kaydındaki bayrak ya da türü) */
-  const isSpecialBook = (b) => b?.special === true || isSpecialType(b?.type);
-
   function bookRentCheck(book, user, price) {
     if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
     if (isBookRented(book) || isBookLocked(book)) return { ok: false, reason: 'Bu kitap şu an kirada.' };
@@ -718,7 +818,7 @@
         offerId: null, purchaseId: null, offerPrice: null, couponId: null, chequeId: cheque.id,
         rentedAt: isoAt(nowMs), dueAt: isoAt(due), returnedAt: null
       });
-      qBatch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
+      qBatch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
       qBatch.update(col('users').doc(u.id), { balance: round2(u.balance - qPrice), lastTx: ref.id, lastTxType: 'rental' });
       qBatch.update(col('giftCheques').doc(cheque.id), { usedAt: isoAt(nowMs), rentalId: ref.id });
       closeModal();
@@ -740,8 +840,7 @@
       offerId: null, purchaseId: null, offerPrice: null, couponId: null,
       rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
     });
-    // Özel kitap: kiralandığı an "Kira dışı"; kiradayken "Kirada" görünür, süre bitince Kira dışı kalır
-    batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
+    batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
     // İndirimli kiralama puan kazandırır (defter varsa aynı batch'te; kural kazancı doğrular)
     const gain = rentalGain({ discountSource: rate ? source : null, listPrice: b.price, price });
     batch.update(col('users').doc(u.id), {

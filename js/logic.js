@@ -474,13 +474,10 @@
      Liste dışı kitap üyelere görünmediği için duyuruya kitap bağlanmaz. */
   function statusAnnouncement(book, status) {
     const name = `"${book.title}"`;
-    const special = isSpecialBook(book);
     const [title, body] = {
       kiralik: [`${book.title} artık kiralık`,
-        `${name} artık kiralanabilir! 📚${hasPrice(book) ? `\n💰 Kiralama fiyatı: ${formatMoney(book.price)}` : ''}${book.rentalDays ? ` · ⏳ ${book.rentalDays} gün` : ''}${special && book.period ? `\n🔒 Bu özel kitap sadece ${book.period} okunabilir.` : ''}`],
-      kiradisi: special
-        ? [`${book.title} dönem dışında`, `${name} özel kitabı şu an dönem dışında, kiralanamaz.${book.period ? `\n🔒 Sadece ${book.period} okunabilir.` : ''}`]
-        : [`${book.title} kira dışı`, `${name} şu an kira dışı. Kitaplıkta görünmeye devam eder ama bir süre kiralanamaz.`],
+        `${name} artık kiralanabilir! 📚${hasPrice(book) ? `\n💰 Kiralama fiyatı: ${formatMoney(book.price)}` : ''}${book.rentalDays ? ` · ⏳ ${book.rentalDays} gün` : ''}`],
+      kiradisi: [`${book.title} kira dışı`, `${name} şu an kira dışı. Kitaplıkta görünmeye devam eder ama bir süre kiralanamaz.`],
       listedisi: [`${book.title} listeden kaldırıldı`, `${name} kitaplık listesinden kaldırıldı ve şu an kiralanamaz.`],
       planlaniyor: [`${book.title} planlanıyor`, `${name} kitabının gelmesi planlanıyor! 🗓️\nBilgileri netleştikçe paylaşacağız.`],
       yakinda: [`${book.title} yakında`, `${name} yazılmaya başlandı, yakında kitaplıkta! ✍️`]
@@ -682,9 +679,35 @@
   }
 
   /* Kitap türü ekle / düzenle / sil */
-  function addBookType({ label, palette, inDeals, special = false }) {
+  function addBookType({ label, palette, inDeals }) {
     const order = bookTypes.reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
-    return col('bookTypes').doc(uid('t')).set({ label, palette, inDeals, special, order });
+    return col('bookTypes').doc(uid('t')).set({ label, palette, inDeals, order });
+  }
+
+  /* --- Müze: kitap kitaplıktan kaldırılır, bilgileri sergilenir (kiralanamaz) ---
+     Kayıt silinmez (geçmiş kiralamalar, fiyat logu adını göstermeye devam eder): museum + museumType yazılır,
+     durum Kira dışı olur (kural kiralamayı ayrıca museum bayrağıyla reddeder). Günün İndirimi / Özel Fırsat kaydı kalkar. */
+  function museumOps(book, museumType) {
+    return [
+      (bt) => bt.update(bookRef(book.id), { museum: true, museumType, museumAt: isoAt(Date.now()), status: 'kiradisi', special: firebase.firestore.FieldValue.delete() }),
+      ...discounts.filter((d) => d.bookId === book.id).map((d) => (bt) => bt.delete(col('discounts').doc(d.id)))
+    ];
+  }
+
+  /* Eski "Özel" (döneme özel) türü kaldırıldı: o türdeki kitaplar Müze'ye (Özel) taşınır, tür silinir · gerçek Admin açınca bir kez */
+  function migrateSpecialToMuseum() {
+    if (!isRealAdmin() || state.purgePending.has('museum:migrate')) return;
+    const specialTypes = bookTypes.filter((t) => t.special === true || t.id === 'ozel');
+    const specialIds = new Set(specialTypes.map((t) => t.id));
+    const toMove = books.filter((b) => b.special === true || specialIds.has(b.type));
+    if (!specialTypes.length && !toMove.length) return;
+    state.purgePending.add('museum:migrate');
+    commitOps([
+      ...toMove.flatMap((b) => museumOps(b, 'ozel')),
+      ...specialTypes.map((t) => (bt) => bt.delete(col('bookTypes').doc(t.id)))
+    ])
+      .then(() => toMove.length && toast(`🏛️ ${toMove.length} özel kitap Müze'ye taşındı · Özel türü kaldırıldı.`, 'info'))
+      .catch((e) => { console.error(e); state.purgePending.delete('museum:migrate'); });
   }
 
   /* Türü siler; o türdeki kitaplar indirim davranışı aynı olan ilk türe taşınır

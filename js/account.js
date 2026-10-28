@@ -413,7 +413,7 @@
     if (!isActiveRental(r, now.getTime()) || r.cancelledAt) return 'Bu kiralama artık aktif değil.';
     if (r.purchaseId || r.offerId) return 'Özel teklifle alınan kitaplar iade edilemez.';
     if (r.couponId || r.discountSource || r.discount > 0) return 'İndirimle alınan kitaplar iade edilemez.';
-    if (isSpecialBook(getBook(r.bookId))) return '👑 Sınırlı (döneme özel) kitaplar iade edilemez.';
+    if (getBook(r.bookId)?.museum) return '🏛️ Müze\'deki kitaplar iade edilemez.';
     if (!sameLocalDay(r.rentedAt, now)) return 'İade yalnızca kiralandığı gün (gece 00:00\'a kadar) yapılabilir.';
     return '';
   }
@@ -572,7 +572,6 @@
     const r = getRental(f.rentalId);
     const u = getUser(f.userId);
     if (!r || !u) return toast('Kiralama ya da kullanıcı bulunamadı; talep onaylanamaz.', 'error');
-    const b = getBook(r.bookId);
     const ops = [
       ...rentalDeleteOps([r]),          // kiralama silinir + kitap kilidi açılır
       ...ratingCleanupOps([r]),         // o kitaba başka kiralaması yoksa oyu da silinir
@@ -580,8 +579,6 @@
       (bt) => bt.update(col('users').doc(u.id), { balance: round2(u.balance + f.amount) }),
       (bt) => bt.update(col('refunds').doc(id), { status: 'approved', ...decided })
     ];
-    // Özel kitap kiralanınca "Kira dışı" olmuştu → iade edilince yeniden Kiralık
-    if (b && isSpecialBook(b) && bookStatus(b) === 'kiradisi' && b.lockRental === r.id) ops.push((bt) => bt.update(bookRef(b.id), { status: 'kiralik' }));
     await run(commitOps(ops), `✓ İade onaylandı · ${u.name} bakiyesine ${formatMoney(f.amount)} yüklendi.`);
   }
 

@@ -63,6 +63,9 @@
       if ((m = el('[data-quick]')))            return runQuick(m.dataset.quick);
       if ((m = el('[data-edit-book]')))        return openBookFormModal(m.dataset.editBook);
       if ((m = el('[data-delete-book]')))      return deleteBook(m.dataset.deleteBook);
+      if ((m = el('[data-move-museum]')))      return openMoveToMuseumModal(m.dataset.moveMuseum);
+      if ((m = el('[data-open-museum]')))      return openMuseumModal(m.dataset.openMuseum);
+      if ((m = el('[data-edit-museum]')))      return openMuseumEditModal(m.dataset.editMuseum);
       if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
       if ((m = el('[data-add-vitrine]')))      return openVitrineModal();
       if ((m = el('[data-buy-coupon]')))       return m.disabled ? null : buyCoupon(m.dataset.buyCoupon);
@@ -130,6 +133,8 @@
         case 'saveUpdate':  return handleSaveUpdate(fd, editId);
         case 'saveOffer':   return handleSaveOffer(fd, editId);
         case 'saveType':    return handleSaveType(fd, editId);
+        case 'moveToMuseum': return handleMoveToMuseum(fd, editId);
+        case 'saveMuseumBook': return handleSaveMuseumBook(fd, editId);
         case 'saveNews':    return handleSaveNews(fd, editId);
         case 'saveName':    return handleSaveName(fd);
         case 'resetStats':  return handleResetStats(form);
@@ -159,7 +164,7 @@
       if (t.matches('[data-quick-status]')) return setBookStatus(t.dataset.quickStatus, t.value);
       if (t.matches('[data-deal-group]')) return setDealGroup(t.value);
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
-      if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
+      if (t.id === 'bf-type' || t.id === 'bf-status' || t.id === 'bf-museum-type') return updateBookFormPreview();
       if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'vd-book') updateVitrinePreview();
       if (t.id === 'rentCoupon') updateRentCoupon();
@@ -209,11 +214,16 @@
   ];
   const colorFor = (uid) => USER_COLORS[[...uid].reduce((s, c) => s + c.charCodeAt(0), 0) % USER_COLORS.length];
 
-  /* Koleksiyon → yerel dizi eşlemesi (belge adı id olur; kitapta sayısal id alanı korunur) */
+  /* Koleksiyon → yerel dizi eşlemesi (belge adı id olur; kitapta sayısal id alanı korunur)
+     after: dizi dolunca çalışır (kitaplar: Müze'dekiler museumBooks'a ayrılır) */
+  const splitMuseum = () => {
+    museumBooks.splice(0, museumBooks.length, ...books.filter((b) => b.museum === true));
+    for (let i = books.length - 1; i >= 0; i--) if (books[i].museum === true) books.splice(i, 1);
+  };
   const SYNC = [
     ['users', users],
     ['bookTypes', bookTypes, (q) => q.orderBy('order')],
-    ['books', books, null, (d) => ({ ...d.data(), id: Number(d.data().id ?? d.id) })],
+    ['books', books, null, (d) => ({ ...d.data(), id: Number(d.data().id ?? d.id) }), splitMuseum],
     ['rentals', rentals],
     ['offerPurchases', offerPurchases],
     ['priceLogs', priceLogs],
@@ -240,6 +250,7 @@
       ensureFeedbackSync();
       expireStaleRefunds();
       expireSeason();
+      migrateSpecialToMuseum();
       renderProfile();
       renderCurrentPage();
       showChequePopup(); // yeni gelen hediye çeki varsa önüne çıkar
@@ -289,11 +300,12 @@
     return new Promise((resolve) => {
       const settle = (name) => { if (waiting.delete(name) && !waiting.size) resolve(failed); };
       setTimeout(() => { if (waiting.size) { waiting.clear(); resolve(failed); } }, 10000);
-      SYNC.forEach(([name, arr, query, map]) => {
+      SYNC.forEach(([name, arr, query, map, after]) => {
         const q = query ? query(col(name)) : col(name);
         // includeMetadataChanges: önbellekteki veri sunucuyla aynıysa da "sunucudan geldi" bildirimi alınır
         unsubscribers.push(q.onSnapshot({ includeMetadataChanges: true }, (snap) => {
           arr.splice(0, arr.length, ...snap.docs.map(map || ((d) => ({ id: d.id, ...d.data() }))));
+          after?.();
           if (!snap.metadata.fromCache) settle(name);
           scheduleRender();
         }, (err) => {
@@ -309,6 +321,7 @@
     unsubscribers.forEach((fn) => fn());
     unsubscribers = [];
     SYNC.forEach(([, arr]) => { arr.length = 0; });
+    museumBooks.length = 0;
     feedbackUnsub?.();
     refundUnsub?.();
     chequeUnsub?.();

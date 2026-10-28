@@ -50,7 +50,8 @@
      lastTx / lastTxType ('rental' | 'package'): son ödeme · güvenlik kuralı bakiye düşüşünü bununla doğrular */
   const users = [];
   const bookTypes = [];      // bookTypes/{id}  · order alanına göre sıralı
-  const books = [];          // books/{id}      · id sayısal, belge adı String(id)
+  const books = [];          // books/{id}      · id sayısal, belge adı String(id) · Müze'dekiler hariç
+  const museumBooks = [];    // books/{id} içinde museum: true olanlar · kiralanamaz, yalnızca sergilenir (museumType, museumAt)
   const rentals = [];        // rentals/{id}
   const offerPurchases = []; // offerPurchases/{id}
   const priceLogs = [];      // priceLogs/{id}
@@ -82,7 +83,6 @@
      Günün İndirimleri yalnızca Seri kitaplar üzerinden döner. */
   const SEED_TYPES = [
     { id: 'seri',  label: 'Seri',  palette: 'blue',   inDeals: true },
-    { id: 'ozel',  label: 'Özel',  palette: 'rose',   inDeals: false, special: true },
     { id: 'album', label: 'Albüm', palette: 'violet', inDeals: false }
   ];
 
@@ -93,8 +93,8 @@
      releaseDate: çıkış tarihi · liste sıralaması, çıkış yılı ve 7 günlük yeni kitap indirimi buradan
      addedAt: kitaplığa eklenme anı (indirim döngüsü) · cover: base64 görsel veya ''
      lockUntil / lockBy / lockRental: kiralama kilidi (güvenlik kuralı boşta olmayı bununla denetler)
-     status: kiralik | kiradisi | listedisi | planlaniyor | yakinda (yoksa kiralik) · special: özel kitap
-     period: özel kitabın dönemi ("Sadece yağmurlu günlerde") · description: açıklama */
+     status: kiralik | kiradisi | listedisi | planlaniyor | yakinda (yoksa kiralik) · description: açıklama
+     museum: true → Müze'de (kiralanamaz) · museumType: MUSEUM_TYPES anahtarı · period: eski özel kitabın dönemi */
   const SEED_BOOKS = [
     { id: 1,  title: 'Gece Yolcusu I: Karanlık Peron', type: 'seri', seriesNo: 1,  price: 25, pages: 212, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2019-09-01', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
     { id: 2,  title: 'Gece Yolcusu II: Son Tren',      type: 'seri', seriesNo: 2,  price: 15, pages: 236, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2020-06-10', authorId: 'u1', cover: '', addedAt: '2026-09-01T12:00:00', newDiscountUntil: null },
@@ -102,12 +102,12 @@
     { id: 4,  title: 'Karadeniz Yaz Albümü 2019',      type: 'album', price: 35, pages: 64,  rentalDays: 7,  place: 'Trabzon – Uzungöl',       releaseDate: '2019-12-15', authorId: 'u1', cover: '', addedAt: '2026-09-03T12:00:00', newDiscountUntil: null },
     { id: 5,  title: 'Rüzgârın Kızı',                  type: 'seri', seriesNo: 4,  price: 30, pages: 190, rentalDays: 14, place: 'İzmir – Urla',            releaseDate: '2022-11-01', authorId: 'u1', cover: '', addedAt: '2026-09-05T12:00:00', newDiscountUntil: null },
     { id: 6,  title: 'Rüzgârın Oğlu',                  type: 'seri', seriesNo: 5,  price: 22, pages: 204, rentalDays: 14, place: 'İzmir – Urla',            releaseDate: '2023-09-15', authorId: 'u1', cover: '', addedAt: '2026-09-06T12:00:00', newDiscountUntil: null },
-    { id: 7,  title: 'Dedemin Bahçesi',                type: 'ozel',  special: true, period: 'yaz tatillerinde', description: 'Dedemin köy evindeki bahçede geçen yaz anıları.', price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
+    { id: 7,  title: 'Dedemin Bahçesi',                type: '', museum: true, museumType: 'ozel', status: 'kiradisi', period: 'yaz tatillerinde', description: 'Dedemin köy evindeki bahçede geçen yaz anıları.', price: 60, pages: 148, rentalDays: 21, place: 'Kastamonu – Köy evi',     releaseDate: '2018-12-01', authorId: 'u1', cover: '', addedAt: '2026-09-08T12:00:00', newDiscountUntil: null },
     { id: 8,  title: 'Kapadokya Albümü 2021',          type: 'album', price: 18, pages: 48,  rentalDays: 7,  place: 'Nevşehir – Göreme',       releaseDate: '2022-01-05', authorId: 'u1', cover: '', addedAt: '2026-09-10T12:00:00', newDiscountUntil: null },
     { id: 9,  title: 'Kayıp Harita',                   type: 'seri', seriesNo: 6,  price: 45, pages: 312, rentalDays: 14, place: 'Ankara – Çalışma odası',  releaseDate: '2024-04-20', authorId: 'u1', cover: '', addedAt: '2026-09-12T12:00:00', newDiscountUntil: null },
     { id: 10, title: 'Bayram Sabahları',               type: 'album', price: 20, pages: 56,  rentalDays: 7,  place: 'Ankara – Keçiören',       releaseDate: '2024-05-01', authorId: 'u1', cover: '', addedAt: '2026-09-14T12:00:00', newDiscountUntil: null },
     { id: 11, title: 'Yıldız Tozu',                    type: 'seri', seriesNo: 7,  price: 22, pages: 176, rentalDays: 14, place: 'Bolu – Abant',            releaseDate: '2025-01-10', authorId: 'u1', cover: '', addedAt: '2026-09-15T12:00:00', newDiscountUntil: null },
-    { id: 12, title: 'Ailemizin Hikâyesi',             type: 'ozel',  special: true, period: 'bayram günlerinde', description: 'Ailemizin kuşaklar boyu anlatılan hikâyesi.', price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
+    { id: 12, title: 'Ailemizin Hikâyesi',             type: '', museum: true, museumType: 'donemsel', status: 'kiradisi', period: 'bayram günlerinde', description: 'Ailemizin kuşaklar boyu anlatılan hikâyesi.', price: 80, pages: 420, rentalDays: 21, place: 'Ankara – Çankaya',        releaseDate: '2025-06-01', authorId: 'u1', cover: '', addedAt: '2026-09-18T12:00:00', newDiscountUntil: null },
     { id: 13, title: 'Sessiz Kütüphane',               type: 'seri', seriesNo: 8,  price: 16, pages: 160, rentalDays: 14, place: 'İstanbul – Kadıköy',      releaseDate: '2026-03-01', authorId: 'u1', cover: '', addedAt: '2026-09-20T12:00:00', newDiscountUntil: null },
     { id: 14, title: 'Kış Masalları',                  type: 'seri', seriesNo: 9,  price: 38, pages: 132, rentalDays: 14, place: 'Ankara – Çankaya',        releaseDate: '2026-10-22', authorId: 'u1', cover: '', addedAt: '2026-10-22T15:00:00', newDiscountUntil: '2026-10-29T15:00:00' } // yeni → ertesi günden itibaren listeye girer
   ];
@@ -293,8 +293,23 @@
   const typeStyle = (id) => TYPE_PALETTES[getType(id)?.palette] || TYPE_PALETTES.slate;
   const typeLabel = (t) => getType(t)?.label || 'Kitap';
   const defaultTypeId = () => bookTypes[0]?.id || '';
-  /* Döneme özel tür (Özel kitaplar): dönem metni + açıklama alanları, kiralanınca kendiliğinden Kira dışı */
-  const isSpecialType = (typeId) => { const t = getType(typeId); return !!(t?.special ?? typeId === 'ozel'); };
+
+  /* Müze türleri (kitaplıktan kaldırılan, artık kiralanmayan kitaplar · Müze bunlara göre gruplanır)
+     Özel: eski Özel türünün rengi · Dönemsel: mavi–mor–sarı–yeşil (css/styles.css → .museum-rainbow) */
+  const MUSEUM_TYPES = {
+    ozel:     { label: 'Özel',     grad: TYPE_PALETTES.rose.grad, chip: TYPE_PALETTES.rose.chip,       dot: TYPE_PALETTES.rose.dot },
+    donemsel: { label: 'Dönemsel', grad: 'museum-rainbow',        chip: 'bg-violet-50 text-violet-600', dot: 'museum-rainbow' }
+  };
+  const museumTypeOf = (b) => (MUSEUM_TYPES[b?.museumType] ? b.museumType : 'ozel');
+  const museumStyle = (b) => MUSEUM_TYPES[museumTypeOf(b)];
+  /* Tür rozeti: türün renginde nokta + adı (Dönemsel: noktası çok renkli) */
+  const museumDot = (t, size = 'w-2 h-2') => `<span class="${size} rounded-full shrink-0 ${t.dot}"></span>`;
+  const museumChip = (b) => `<span class="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${museumStyle(b).chip}">${museumDot(museumStyle(b))}${museumStyle(b).label}</span>`;
+  /* Müze kapağı: görsel kırpılmadan tam görünür (beyaz zemin + ince çerçeve) · görsel yoksa degrade kapak */
+  const MUSEUM_COVER = { md: 'w-20 h-28 rounded-xl', lg: 'w-28 h-40 rounded-2xl' };
+  const museumCoverHTML = (b, size = 'md') => (b.cover
+    ? `<img src="${escapeHTML(b.cover)}" alt="${escapeHTML(b.title)} kapağı" class="${MUSEUM_COVER[size]} shrink-0 object-contain bg-white border border-stone-200 shadow-soft" />`
+    : coverHTML(b, size));
 
   /* Kitap durumları (Admin ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
   const BOOK_STATUSES = {
@@ -307,7 +322,7 @@
   const RENTED_STATUS = { label: 'Kirada', chip: 'bg-amber-50 text-amber-600', dot: 'bg-amber-400' };
   const bookStatus = (b) => (BOOK_STATUSES[b?.status] ? b.status : 'kiralik');   // eski kayıtlar → Kiralık
   const isDraftBook = (b) => ['planlaniyor', 'yakinda'].includes(bookStatus(b)); // bilgileri eksik olabilir
-  const isRentableStatus = (b) => bookStatus(b) === 'kiralik';
+  const isRentableStatus = (b) => bookStatus(b) === 'kiralik' && !b?.museum;
   const isVisibleBook = (b) => !!b && (isAdmin() || bookStatus(b) !== 'listedisi');
   const visibleBooks = () => books.filter(isVisibleBook);
   const hasPrice = (b) => typeof b?.price === 'number' && b.price > 0;
@@ -320,7 +335,8 @@
   /* Kiralanamama sebebi (duruma göre) */
   function statusBlockReason(b) {
     const st = bookStatus(b);
-    if (st === 'kiradisi') return isSpecialType(b.type) ? 'Bu özel kitap şu an dönem dışında, kiralanamaz.' : 'Bu kitap şu an kira dışı.';
+    if (b?.museum) return 'Bu kitap Müze\'de · artık kiralanamaz.';
+    if (st === 'kiradisi') return 'Bu kitap şu an kira dışı.';
     if (st === 'planlaniyor') return 'Bu kitap henüz planlanıyor, kiralanamaz.';
     if (st === 'yakinda') return 'Bu kitap yakında çıkacak, henüz kiralanamaz.';
     if (st === 'listedisi') return 'Bu kitap listede değil.';
@@ -438,7 +454,8 @@
   const sum = (arr, fn) => round2(arr.reduce((s, x) => s + fn(x), 0));
 
   const getUser = (id) => users.find((u) => u.id === id);
-  const getBook = (id) => books.find((b) => b.id === Number(id));
+  /* Müze'deki kitap da bulunur (geçmiş kiralamalar, fiyat logu vb. adını göstersin) · kiralama b.museum ile engellenir */
+  const getBook = (id) => books.find((b) => b.id === Number(id)) || museumBooks.find((b) => b.id === Number(id));
   const getRental = (id) => rentals.find((r) => r.id === id);
   const getAnn = (id) => announcements.find((a) => a.id === id);
   const getOffer = (id) => offers.find((o) => o.id === id);
@@ -483,7 +500,7 @@
     if (src) {
       cover = `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="${COVER_SIZES[size]} object-cover shadow-soft shrink-0 bg-slate-100" />`;
     } else {
-      const grad = getType(b.type) ? typeStyle(b.type).grad : 'from-brand-400 to-brand-600';
+      const grad = b.museum ? museumStyle(b).grad : getType(b.type) ? typeStyle(b.type).grad : 'from-brand-400 to-brand-600';
       const letters = initials(String(b.title).replace(/[^\p{L}\p{N}\s]/gu, '') || b.title);
       cover = `
       <div class="${COVER_SIZES[size]} shrink-0 bg-gradient-to-br ${grad} text-white font-bold shadow-soft flex items-center justify-center relative overflow-hidden">
@@ -492,26 +509,7 @@
         <span class="drop-shadow-sm">${escapeHTML(letters)}</span>
       </div>`;
     }
-    // SINIRLI / VIP işareti yalnızca "döneme özel" türdeki kitaplarda
-    return book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
-  }
-
-  /* Özel kitap kapağı: altta "SINIRLI" şeridi + köşede VIP tacı (en küçük boyutta yalnızca taç) */
-  const SPECIAL_BADGE = {
-    xs:   { strip: '',                       round: 'rounded-b-md',  crown: 'w-3.5 h-3.5 text-[7px] -top-1 -right-1' },
-    sm:   { strip: 'text-[6px] py-px',       round: 'rounded-b-lg',  crown: 'w-4 h-4 text-[8px] -top-1.5 -right-1.5' },
-    md:   { strip: 'text-[8px] py-0.5',      round: 'rounded-b-xl',  crown: 'w-5 h-5 text-[10px] -top-1.5 -right-1.5' },
-    lg:   { strip: 'text-[10px] py-1',       round: 'rounded-b-2xl', crown: 'w-7 h-7 text-sm -top-2 -right-2' },
-    fill: { strip: 'text-[10px] py-1',       round: 'rounded-b-xl',  crown: 'w-7 h-7 text-sm top-1.5 right-1.5' }
-  };
-  function specialCoverHTML(cover, size) {
-    const s = SPECIAL_BADGE[size] || SPECIAL_BADGE.md;
-    return `
-      <span class="${size === 'fill' ? 'relative block w-full h-full' : 'relative inline-flex shrink-0 align-top'}" title="Sınırlı · özel kitap">
-        ${cover}
-        ${s.strip ? `<span class="pointer-events-none absolute inset-x-0 bottom-0 z-[1] ${s.round} ${s.strip} text-center font-extrabold tracking-[.18em] leading-none text-white bg-gradient-to-r from-rose-500 via-fuchsia-500 to-amber-400 shadow-soft">SINIRLI</span>` : ''}
-        <span class="pointer-events-none absolute z-[2] ${s.crown} rounded-full bg-gradient-to-br from-amber-200 to-amber-500 ring-2 ring-white shadow-soft flex items-center justify-center leading-none" aria-label="VIP">👑</span>
-      </span>`;
+    return cover;
   }
 
   function avatarHTML(user, cls = 'w-5 h-5 text-[9px]') {
