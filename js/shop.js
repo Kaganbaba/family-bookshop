@@ -6,15 +6,14 @@
        indirimi olmayan kitaba (kitap detayında Kirala'dan) uygulanır.
      • Özel tekliflere kupon uygulanmaz.
      ========================================================== */
-  /* Kış kuponu (Kış sezonundayken eklenen, season 'winter') yalnızca sezon boyunca mağazada; sezon kapanınca silinir */
-  const isShopActive = (s, now = Date.now()) => (s.endsMs == null || s.endsMs > now) && (s.season !== 'winter' || activeSeason() === 'winter');
+  /* season damgalı mağaza kuponu kaldırılan Kış Fırsatları'ndan kalmıştır: geçersiz sayılır (kural da alımı reddeder) */
+  const isShopActive = (s, now = Date.now()) => (s.endsMs == null || s.endsMs > now) && !s.season;
 
   /* Süresi biten mağaza kuponları: herkes için gizlenir, Admin açıksa Firestore'dan da silinir
      (önceden alınmış kuponlar etkilenmez) */
   function purgeExpiredShop(now = Date.now()) {
     if (!isAdmin()) return;
-    // Kış kuponları sezon kapanışında (setSeason / expireSeason) silinir; burada yalnızca süresi biten
-    couponShop.filter((s) => s.endsMs != null && s.endsMs <= now).forEach((s) => {
+    couponShop.filter((s) => !isShopActive(s, now)).forEach((s) => {
       const key = `shop:${s.id}`;
       if (state.purgePending.has(key)) return;
       state.purgePending.add(key);
@@ -53,18 +52,14 @@
       return `<button type="button" data-buy-coupon="${s.id}" ${rentOk && enough ? '' : 'disabled'} class="${BTN_PRIMARY} ${cls}">
         ${!rentOk ? 'Kiralama yetkin yok' : enough ? 'Kuponu Al' : `${formatPoints(round2(s.cost - pts.available))} eksik`}</button>`;
     };
-    /* Süreli kupon: yatay bilet · solda renkli kupon kısmı, sağda puan / kalan süre / al
-       (kış kuponu: buz mavisi zemin, kar taneli desen, üstte kar) */
+    /* Süreli kupon: yatay bilet · solda renkli kupon kısmı, sağda puan / kalan süre / al */
     const timedCard = (s) => {
       const type = couponTypeOf(s);
-      const winter = s.season === 'winter';
       return `
-        <div class="relative flex bg-white rounded-2xl shadow-soft overflow-hidden ring-2 ${winter ? 'ring-sky-300/80' : 'ring-amber-300/70'}">
-          <div class="relative w-36 sm:w-40 shrink-0 ${winter ? 'winter-coupon-bg' : `bg-gradient-to-br ${COUPON_TONES[type]}`} text-white px-3.5 py-3 flex flex-col justify-center border-r-2 border-dashed border-white/70">
-            ${winter ? '<span class="absolute inset-0 winter-flakes"></span><span class="winter-cap winter-cap-sm absolute inset-x-0 top-0"></span>' : '<span class="absolute inset-0 offer-pattern opacity-50"></span>'}
-            ${winter
-              ? '<span class="relative self-start text-[9px] font-extrabold tracking-widest text-sky-950 bg-gradient-to-r from-white to-sky-200 px-2 py-0.5 rounded-full shadow-soft mt-1">❄️ KIŞ · SÜRELİ</span>'
-              : '<span class="relative self-start text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>'}
+        <div class="relative flex bg-white rounded-2xl shadow-soft overflow-hidden ring-2 ring-amber-300/70">
+          <div class="relative w-36 sm:w-40 shrink-0 bg-gradient-to-br ${COUPON_TONES[type]} text-white px-3.5 py-3 flex flex-col justify-center border-r-2 border-dashed border-white/70">
+            <span class="absolute inset-0 offer-pattern opacity-50"></span>
+            <span class="relative self-start text-[9px] font-extrabold tracking-widest text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 px-2 py-0.5 rounded-full shadow-soft">⏳ SÜRELİ</span>
             <p class="relative text-[9px] font-bold tracking-[.18em] opacity-90 mt-2">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
             <p class="relative ${type === 'bogo' ? 'text-xl' : 'text-3xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
             ${s.name ? `<p class="relative text-[10px] font-semibold mt-1 truncate">${escapeHTML(s.name)}</p>` : ''}
@@ -84,12 +79,10 @@
     };
     const shopCard = (s) => {
       const type = couponTypeOf(s);
-      const winter = s.season === 'winter';
       return `
-        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col h-full ${winter ? 'ring-2 ring-sky-200' : ''}">
-          <div class="relative px-4 pt-4 pb-5 ${winter ? 'winter-coupon-bg' : `bg-gradient-to-br ${COUPON_TONES[type]}`} text-white">
-            ${winter ? '<span class="absolute inset-0 winter-flakes"></span><span class="winter-cap winter-cap-sm absolute inset-x-0 top-0"></span>' : '<span class="absolute inset-0 offer-pattern opacity-60"></span>'}
-            ${winter ? '<span class="relative inline-block text-[9px] font-extrabold tracking-widest text-sky-950 bg-white/90 px-2 py-0.5 rounded-full mb-1">❄️ KIŞ KUPONU</span>' : ''}
+        <div class="relative bg-white rounded-2xl shadow-soft overflow-hidden flex flex-col h-full">
+          <div class="relative px-4 pt-4 pb-5 bg-gradient-to-br ${COUPON_TONES[type]} text-white">
+            <span class="absolute inset-0 offer-pattern opacity-60"></span>
             ${adminBtns(s, 'bg-white/20')}
             <p class="relative text-[10px] font-bold tracking-[.2em] opacity-90 ${admin ? 'pr-16' : ''}">${COUPON_TYPES[type].label.toLocaleUpperCase('tr')}</p>
             <p class="relative ${type === 'bogo' ? 'text-2xl' : 'text-4xl'} font-black leading-none mt-1">${couponBadge(s)}</p>
@@ -154,7 +147,7 @@
       ${admin ? sentChequesHTML(now) : ''}
 
       <div class="mb-6">
-        <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası${activeSeason() === 'winter' ? ' <span class="text-[10px] font-semibold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full align-middle">❄️ Kışta eklenen kuponlar sezon sonunda kalkar</span>' : ''}</h2>
+        <h2 class="text-sm font-bold text-slate-800 mb-3">🛍️ Kupon Mağazası</h2>
         ${items.length
           ? timedHTML + groupsHTML
           : emptyState(admin ? 'Mağazada kupon yok · sağ üstteki <b>Kupon Ekle</b> ile yüzde, ₺ ya da Al-Öde kuponu ekleyebilirsin.' : 'Mağazada şu an kupon yok. Yakında yeni kuponlar gelecek!')}
@@ -195,9 +188,7 @@
         const ref = col('coupons').doc();
         const batch = db.batch();
         batch.set(ref, {
-          userId: u.id, shopId: s.id, type: couponTypeOf(s), value: couponValueOf(s), free: s.free ?? null, name: s.name || '', cost: s.cost,
-          ...(s.season ? { season: s.season } : {}), // kış kuponu yalnızca sezon boyunca kullanılır
-          boughtAt: isoAt(now),
+          userId: u.id, shopId: s.id, type: couponTypeOf(s), value: couponValueOf(s), free: s.free ?? null, name: s.name || '', cost: s.cost,          boughtAt: isoAt(now),
           expiresAt: Timestamp.fromMillis(now + COUPON_DAYS * DAY_MS),
           usedAt: null, rentalIds: null, bookIds: null, freeBookIds: null, paidTotal: null
         });
@@ -303,9 +294,7 @@
     }
 
     const batch = db.batch();
-    // Kış sezonundayken eklenen kupon kış kuponudur: farklı görünür, sezon boyunca geçerli, sezon kapanınca silinir
-    const season = activeSeason() === 'winter' ? { season: 'winter' } : {};
-    batch.set(col('couponShop').doc(), { ...s, ...season, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
+    batch.set(col('couponShop').doc(), { ...s, endsAt, createdAt: isoAt(Date.now()), createdBy: state.currentUserId });
     // İşaretliyse "Etkinlik" duyurusu
     if (fd.announce === 'on') batch.set(col('announcements').doc(), {
       type: 'news', category: 'Etkinlik',
@@ -323,25 +312,24 @@
   /* --- Hediye çekleri (₺) · Admin gönderir, sahibi Kiralık + indirimsiz kitabı kiralarken seçer --- */
   function chequeCardHTML(c, now = Date.now(), withAction = true) {
     const st = chequeState(c, now);
-    const winter = c.season === 'winter';
     const pts = userPoints(c.userId);
     const enough = hasLedger(getUser(c.userId)) && pts.available >= c.cost;
     return `
-      <div class="cheque-card ${winter ? 'cheque-winter' : ''} relative overflow-hidden rounded-2xl p-4 text-white shadow-soft">
-        ${winter ? '<span class="absolute inset-0 winter-flakes"></span><span class="winter-cap winter-cap-sm absolute inset-x-0 top-0"></span>' : '<span class="absolute inset-0 offer-pattern opacity-40"></span>'}
+      <div class="cheque-card relative overflow-hidden rounded-2xl p-4 text-white shadow-soft">
+        <span class="absolute inset-0 offer-pattern opacity-40"></span>
         <span class="cheque-notch left"></span><span class="cheque-notch right"></span>
-        <div class="relative flex items-start justify-between gap-3 ${winter ? 'pt-1.5' : ''}">
+        <div class="relative flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="text-[9px] font-extrabold tracking-[.2em] opacity-90">🎁 HEDİYE ÇEKİ${winter ? ' · ❄️ KIŞ' : ''}</p>
+            <p class="text-[9px] font-extrabold tracking-[.2em] opacity-90">🎁 HEDİYE ÇEKİ</p>
             <p class="text-3xl font-black leading-none mt-1.5 drop-shadow">${formatMoney(c.amount)}</p>
             ${c.name ? `<p class="text-[11px] font-semibold mt-1 truncate">${escapeHTML(c.name)}</p>` : ''}
           </div>
-          <p class="text-[10px] text-right opacity-90 shrink-0">${winter ? 'Kış sezonu<br/>boyunca geçerli' : `Son kullanma<br/><b>${formatDate(new Date(c.expiresMs).toISOString())}</b>`}</p>
+          <p class="text-[10px] text-right opacity-90 shrink-0">Son kullanma<br/><b>${formatDate(new Date(c.expiresMs).toISOString())}</b></p>
         </div>
         <p class="relative text-[10px] opacity-90 mt-2.5 leading-snug">Kiralık ve indirimsiz bir kitabı kiralarken seç · tutar fiyattan düşülür.</p>
         ${withAction && st === 'locked' ? `
           <button type="button" data-open-cheque="${c.id}" ${enough ? '' : 'disabled'}
-            class="relative mt-3 w-full py-2 rounded-xl text-xs font-bold ${winter ? 'text-sky-900' : 'text-emerald-800'} bg-white hover:bg-white/90 shadow-soft transition disabled:opacity-60 disabled:cursor-not-allowed">
+            class="relative mt-3 w-full py-2 rounded-xl text-xs font-bold text-emerald-800 bg-white hover:bg-white/90 shadow-soft transition disabled:opacity-60 disabled:cursor-not-allowed">
             ${enough ? `⭐ ${formatPoints(c.cost)} ile çeki aç` : `⭐ ${formatPoints(c.cost)} gerekiyor · ${formatPoints(Math.max(0, round2(c.cost - pts.available)))} eksik`}
           </button>`
           : st === 'active' ? '<span class="relative inline-flex mt-3 text-[10px] font-bold bg-white/20 px-2.5 py-1 rounded-full">✓ Kullanıma hazır</span>' : ''}
@@ -376,7 +364,7 @@
             <li class="flex items-center gap-2.5 p-2 rounded-xl border border-slate-100">
               ${u ? avatarHTML(u, 'w-6 h-6 text-[10px]') : ''}
               <span class="min-w-0 flex-1">
-                <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u?.name || 'Silinmiş kullanıcı')} · ${formatMoney(c.amount)}${c.season === 'winter' ? ' ❄️' : ''}</span>
+                <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u?.name || 'Silinmiş kullanıcı')} · ${formatMoney(c.amount)}</span>
                 <span class="block text-[10px] text-slate-400">${c.cost > 0 ? `⭐ ${formatPoints(c.cost)}` : 'Ücretsiz'} · ${relativeDay(c.createdAt)}${c.name ? ` · ${escapeHTML(c.name)}` : ''}</span>
               </span>
               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${tone} shrink-0">${txt}</span>
@@ -388,7 +376,6 @@
 
   function openSendChequeModal() {
     if (!requireAdmin()) return;
-    const winter = activeSeason() === 'winter';
     const defaultEnd = localDateKey(new Date(Date.now() + CHEQUE_DAYS * DAY_MS));
     openModal(`
       ${modalHeader('Hediye Çeki Gönder 🎁', 'Seçtiğin kişilerin önüne siteyi açınca çıkar · Kiralık ve indirimsiz kitaplarda kullanılır.', 'gifts', 'bg-emerald-50 text-emerald-600')}
@@ -410,10 +397,8 @@
           ${field('Tutar (₺)', `<input name="amount" type="number" min="1" max="10000" step="0.01" required inputmode="decimal" class="${INPUT_CLS}" placeholder="Örn. 20" />`)}
           ${field('Açma bedeli (puan)', `<input name="cost" type="number" min="0" step="0.01" value="0" class="${INPUT_CLS}" />`, '0 = ücretsiz · puanlıysa kişi kendi puanıyla açar')}
         </div>
-        ${field('Çek Adı (isteğe bağlı)', `<input name="name" maxlength="60" class="${INPUT_CLS}" placeholder="${winter ? 'Örn. Yılbaşı Hediyesi 🎄' : 'Örn. Doğum Günü Hediyesi 🎂'}" />`)}
-        ${winter
-          ? '<p class="text-[11px] text-sky-700 bg-sky-50 rounded-xl px-3 py-2.5">❄️ Kış sezonu açık · bu çek <b>kış çeki</b> olur: yalnızca sezon boyunca geçerli, sezon bitince aktiflikten çıkar.</p>'
-          : field('Son Kullanma Tarihi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${defaultEnd}" class="${INPUT_CLS}" />`)}
+        ${field('Çek Adı (isteğe bağlı)', `<input name="name" maxlength="60" class="${INPUT_CLS}" placeholder="Örn. Doğum Günü Hediyesi 🎂" />`)}
+        ${field('Son Kullanma Tarihi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${defaultEnd}" class="${INPUT_CLS}" />`)}
         ${formFooter('Çeki Gönder')}
       </form>`);
   }
@@ -428,24 +413,16 @@
     if (!to.length) return toast('En az bir kişi seçin.', 'error');
     if (!(amount > 0 && amount <= 10000)) return toast('Tutar 0\'dan büyük olmalı.', 'error');
     if (!(cost >= 0)) return toast('Açma bedeli 0 ya da daha büyük olmalı.', 'error');
-    const winter = activeSeason() === 'winter';
-    let expires;
-    if (winter) {
-      // Kış çeki sezon sonunda biter (süresiz sezonda 1 yıl üst sınır; sezon kapanınca zaten aktiflikten çıkar)
-      expires = seasonEndsMs() || Date.now() + 365 * DAY_MS;
-    } else {
-      const key = String(fd.get('endDate') || '');
-      if (!isDateKey(key)) return toast('Geçerli bir son kullanma tarihi seçin.', 'error');
-      const end = dateFromKey(key);
-      end.setHours(23, 59, 59, 0);
-      if (end.getTime() <= Date.now()) return toast('Son kullanma tarihi geçmiş olamaz.', 'error');
-      expires = end.getTime();
-    }
+    const key = String(fd.get('endDate') || '');
+    if (!isDateKey(key)) return toast('Geçerli bir son kullanma tarihi seçin.', 'error');
+    const end = dateFromKey(key);
+    end.setHours(23, 59, 59, 0);
+    if (end.getTime() <= Date.now()) return toast('Son kullanma tarihi geçmiş olamaz.', 'error');
     const now = isoAt(Date.now());
     const batch = db.batch();
     to.forEach((userId) => batch.set(col('giftCheques').doc(), {
-      userId, amount, cost, name, season: winter ? 'winter' : null,
-      createdAt: now, createdBy: state.currentUserId, expiresAt: Timestamp.fromMillis(expires),
+      userId, amount, cost, name,
+      createdAt: now, createdBy: state.currentUserId, expiresAt: Timestamp.fromDate(end),
       openedAt: cost > 0 ? null : now, seenAt: null, usedAt: null, rentalId: null
     }));
     closeModal();
@@ -642,9 +619,8 @@
     else d.setHours(23, 59, 59, 999);
     return d;
   };
-  /* Sezon paketi (season: 'winter'): tarihi yok, Kış Fırsatları açık olduğu sürece geçerli · Özel Teklifler'de görünmez */
-  const isSeasonOffer = (o) => !!o?.season;
-  const isOfferActive = (o, now = new Date()) => (isSeasonOffer(o) ? o.season === 'winter' && winterOn() : offerEnd(o) > now);
+  /* season damgalı teklif kaldırılan Kış Fırsatları'nın tarihsiz paketidir: süresi dolmuş sayılır (Admin açınca silinir) */
+  const isOfferActive = (o, now = new Date()) => !o.season && offerEnd(o) > now;
   const offerBooks = (o) => o.items.map((it) => getBook(it.bookId)).filter(Boolean);
   const offerNormalTotal = (o) => sum(offerBooks(o), (b) => b.price);
   /* Paket indirimi Admin'in girdiği yüzdedir (rate) · fiyat kitapların güncel fiyatından hesaplanır
@@ -660,8 +636,7 @@
     const before = offers.length;
     for (let i = offers.length - 1; i >= 0; i--) {
       const o = offers[i];
-      // Sezon paketleri süreyle bitmez (sezon kapatılırken setSeason siler; Kış Fırsatları vitrini kapalıyken yalnızca gizlenir)
-      if (isSeasonOffer(o) || isOfferActive(o, now)) continue;
+      if (isOfferActive(o, now)) continue;
       offers.splice(i, 1);
       if (isAdmin() && !state.purgePending.has(o.id)) {
         state.purgePending.add(o.id);
@@ -735,7 +710,7 @@
 
   function offerRentCheck(o, user) {
     if (!canRent(user)) return { ok: false, reason: 'Gözlemci rolündeki kullanıcılar kiralama yapamaz.' };
-    if (!isOfferActive(o)) return { ok: false, reason: isSeasonOffer(o) ? 'Kış Fırsatları şu an kapalı.' : 'Bu teklifin süresi doldu.' };
+    if (!isOfferActive(o)) return { ok: false, reason: 'Bu teklifin süresi doldu.' };
     const bs = offerBooks(o);
     if (!bs.length || bs.length < o.items.length) return { ok: false, reason: 'Paketteki kitaplardan biri artık kitaplıkta yok.' };
     const notRentable = bs.find((b) => !isRentableStatus(b) || !hasPrice(b));
@@ -755,7 +730,7 @@
     const now = new Date();
     purgeExpiredOffers(now);
     const u = currentUser();
-    const list = offers.filter((o) => !isSeasonOffer(o)).sort((a, b) => offerEnd(a) - offerEnd(b));
+    const list = [...offers].sort((a, b) => offerEnd(a) - offerEnd(b));
 
     const notice = `
       <div class="flex items-start gap-2.5 bg-white/70 border border-brand-100 rounded-2xl px-4 py-3 mb-5 text-xs text-slate-500">
@@ -831,7 +806,6 @@
     if (purgeExpiredOffers(now)) renderCurrentPage();
     const o = getOffer(offerId);
     if (!o) return toast('Bu teklifin süresi doldu ve silindi.', 'info');
-    if (o.season === 'winter') return openWinterPackDetail(o);
     const u = currentUser();
     const sc = offerScheme(offerRate(o));
     const check = offerRentCheck(o, u);
@@ -885,9 +859,7 @@
         </div>
 
         <div class="flex flex-wrap gap-1.5">
-          ${isSeasonOffer(o)
-            ? `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-sky-50 text-sky-600">❄️ Kış boyunca geçerli</span>${winterMult() > 1 ? `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">⭐ ${winterMult()}x puan</span>` : ''}`
-            : `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-brand-50 text-brand-600">Son: ${formatDate(offerEnd(o).toISOString(), true)}</span>`}
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-brand-50 text-brand-600">Son: ${formatDate(offerEnd(o).toISOString(), true)}</span>
           <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-600">${offerPurchaseCount(o)} kez kiralandı</span>
           <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-500">Tek kiralamada ${offerCountLabel(o)}</span>
         </div>
@@ -913,107 +885,6 @@
           </div>
         </div>
       </div>`, 'lg');
-  }
-
-  /* Kış paketi YENİ mi: paketteki kitapların hepsi Kış sezonunda kitaplığa girdiyse */
-  const isWinterNewPack = (o) => o?.season === 'winter' && o.items.length > 0
-    && offerBooks(o).length === o.items.length && offerBooks(o).every(isWinterNewBook);
-
-  /* Kış paketi detayı: gece mavisi karlı sahne, buz kristali indirim rozeti, kar yağışı */
-  function openWinterPackDetail(o) {
-    const now = new Date();
-    const u = currentUser();
-    const check = offerRentCheck(o, u);
-    const normal = offerNormalTotal(o);
-    const price = offerPrice(o);
-    const rate = offerRate(o);
-    const fresh = isWinterNewPack(o);
-    const mult = winterMult();
-    const bookRows = o.items.map((it) => {
-      const b = getBook(it.bookId);
-      if (!b) return '<li class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Silinmiş kitap</li>';
-      return `
-        <li>
-          <button type="button" data-open-book="${b.id}" data-back-offer="${o.id}"
-            class="w-full text-left flex items-center gap-3 p-2.5 rounded-xl border border-sky-100 bg-white hover:border-sky-300 hover:bg-sky-50/50 transition">
-            ${coverHTML(b, 'sm', it.cover)}
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-semibold text-slate-800 truncate">${escapeHTML(b.title)}${isWinterNewBook(b) ? ' <span class="crystal-chip text-[9px] font-extrabold px-1.5 py-px rounded-full align-middle">❄ YENİ</span>' : ''}</p>
-              <p class="flex items-center gap-1.5 mt-0.5">${typeChip(b.type)}<span class="text-[10px] text-slate-400">${b.rentalDays} gün</span></p>
-            </div>
-            <div class="text-right shrink-0">
-              <p class="text-[11px] text-slate-400">${formatMoney(b.price)}</p>
-              <p class="mt-0.5">${statusChipHTML(b, now.getTime())}</p>
-            </div>
-            <span class="text-slate-300">${icon('chevron', 'w-4 h-4')}</span>
-          </button>
-        </li>`;
-    }).join('');
-
-    openModal(`
-      <div class="winter-bg relative h-72 sm:h-80 overflow-hidden">
-        <div class="winter-flakes absolute inset-0 pointer-events-none"></div>
-        <div class="winter-snow absolute inset-0 pointer-events-none" aria-hidden="true">${snowflakesHTML(26)}</div>
-        <div class="winter-cap absolute inset-x-0 top-0 pointer-events-none"></div>
-        <div class="winter-drift absolute inset-x-0 bottom-0 pointer-events-none"></div>
-        <button type="button" data-modal-close aria-label="Kapat" class="absolute top-4 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
-        <div class="absolute top-5 left-4 z-10">${iceRateHTML(rate, 'lg', fresh)}</div>
-        <span class="absolute bottom-4 left-4 z-10 text-[11px] font-extrabold ${fresh ? 'crystal-chip' : 'text-sky-950 bg-white'} px-2.5 py-1 rounded-full shadow-soft">${fresh ? '✨ YENİ KIŞ PAKETİ' : '❄️ KIŞ PAKETİ'}</span>
-        <div class="absolute inset-0 flex items-center justify-center pt-6 pb-6">${showcaseHTML(o, 'lg')}</div>
-      </div>
-      <div class="p-5 sm:p-6 space-y-5 bg-gradient-to-b from-sky-50 via-white to-white">
-        <div class="flex items-start justify-between gap-4">
-          <div class="min-w-0">
-            <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug">${escapeHTML(o.title)}</h3>
-            <p class="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-line">${escapeHTML(o.description)}</p>
-          </div>
-          <div class="text-right shrink-0">
-            ${normal > price ? `<p class="text-[11px] text-slate-400 line-through">${formatMoney(normal)}</p>` : ''}
-            <p class="text-2xl font-black leading-none bg-gradient-to-br from-sky-600 to-indigo-700 bg-clip-text text-transparent">${price > 0 ? formatMoney(price) : 'BEDAVA'}</p>
-            <p class="text-[10px] font-bold text-sky-600 mt-1">${formatMoney(Math.max(0, round2(normal - price)))} kazanç</p>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-1.5">
-          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-sky-100 text-sky-700">❄️ Kış boyunca geçerli</span>
-          ${mult > 1 ? `<span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700">⭐ ${mult}x puan</span>` : ''}
-          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-indigo-50 text-indigo-600">${offerPurchaseCount(o)} kez kiralandı</span>
-          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-500">Tek kiralamada ${offerCountLabel(o)}</span>
-        </div>
-        <div>
-          <h4 class="text-xs font-bold text-slate-700 mb-2.5">❄️ Paketteki Kitaplar</h4>
-          <ul class="space-y-2">${bookRows}</ul>
-        </div>
-        <div class="space-y-3">
-          ${canRent(u) ? `
-            <div class="flex items-center justify-between rounded-xl border border-sky-100 bg-white px-3 py-2.5 text-xs">
-              <span class="flex items-center gap-2 text-slate-500">${avatarHTML(u, 'w-6 h-6 text-[10px]')} Bakiyen</span>
-              <span class="font-semibold text-slate-700">${formatMoney(u.balance)}${check.ok ? `<span class="text-slate-300 mx-1">→</span><span class="text-sky-600">${formatMoney(round2(u.balance - price))}</span>` : ''}</span>
-            </div>` : ''}
-          ${check.ok ? '' : `<p class="text-[11px] font-medium text-rose-500 bg-rose-50 rounded-xl px-3 py-2">${escapeHTML(check.reason)}</p>`}
-          <div class="grid ${isAdmin() ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'} gap-2.5">
-            ${isAdmin() ? `
-              <button type="button" data-edit-offer="${o.id}" class="${BTN_SOFT}">${icon('pencil', 'w-3.5 h-3.5')}Düzenle</button>
-              <button type="button" data-delete-offer="${o.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100">${icon('trash', 'w-3.5 h-3.5')}Sil</button>` : ''}
-            <button type="button" data-modal-close class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Kapat</button>
-            <button type="button" data-rent-offer="${o.id}" ${check.ok ? '' : 'disabled'}
-              class="inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-500 to-indigo-600 hover:shadow-soft-lg transition disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed">❄️ Paketi Kirala</button>
-          </div>
-        </div>
-      </div>`, 'lg');
-  }
-
-  /* Buz kristali indirim rozeti (kış paketleri ve kışın yeni kitapları) · fresh: YENİ kristal görünümü */
-  function iceRateHTML(rate, size = 'md', fresh = false) {
-    const box = size === 'lg' ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-[4.75rem] h-[4.75rem]';
-    const num = size === 'lg' ? 'text-[2rem] sm:text-[2.4rem]' : 'text-[1.6rem]';
-    // Altıgenin içinde yalnızca yüzde (kesilmesin) · etiket altıgenin altında ayrı şerit
-    return `
-      <div class="relative shrink-0 -rotate-[6deg] pb-2">
-        <div class="ice-burst ${fresh ? 'ice-burst-new' : ''} ${box} flex items-center justify-center">
-          <span class="${num} font-black tracking-tight leading-none ${fresh ? 'crystal-text' : 'ice-text'}">%${rate}</span>
-        </div>
-        <span class="ice-ribbon absolute left-1/2 -translate-x-1/2 bottom-0 whitespace-nowrap text-[8px] font-extrabold tracking-[0.16em] px-2 py-0.5 rounded-full">${fresh ? '✨ YENİ' : '❄ İNDİRİM'}</span>
-      </div>`;
   }
 
   /* Teklifi kirala: 1 işlemde paketteki tüm kitaplar kiralanır, bakiyeden paket fiyatı düşer */
@@ -1045,12 +916,9 @@
     });
 
     const batch = db.batch();
-    // Kış paketi: o anki puan çarpanı satın alıma yazılır (kural ayardaki çarpanla aynı olmasını ister)
-    const mult = o.season === 'winter' ? winterMult() : 1;
     batch.set(purchaseRef, {
       offerId: o.id, offerTitle: o.title, userId: u.id,
-      price: offerPrice(o), normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now),
-      ...(mult > 1 ? { pointsMult: mult } : {})
+      price: offerPrice(o), normalTotal: normal, bookIds: bs.map((b) => b.id), purchasedAt: isoAt(now)
     });
     bs.forEach((b, i) => {
       const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
@@ -1064,7 +932,7 @@
       batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     });
     // Paket indirimi puan kazandırır (normal toplam − paket fiyatı)
-    const gain = purchaseGain({ normalTotal: normal, price: offerPrice(o), pointsMult: mult });
+    const gain = purchaseGain({ normalTotal: normal, price: offerPrice(o) });
     batch.update(col('users').doc(u.id), {
       balance: round2(u.balance - offerPrice(o)), lastTx: purchaseId, lastTxType: 'package',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})

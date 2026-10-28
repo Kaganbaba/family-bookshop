@@ -60,9 +60,8 @@
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
-  const winterDeals = [];    // winterDeals/{bookId} · Kış Fırsatı (Admin seçer, sezon boyunca): { bookId, rate (1–100), createdAt, createdBy }
   /* settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları
-     'season': { active: 'winter' | null, startedAt (Timestamp), endsAt (Timestamp | null) } · 'winter': { multiplier } (Kış Fırsatları puan çarpanı) */
+     'season': { active: 'winter' | null, endsAt (Timestamp | null) } (yalnızca tema) */
   const appSettings = [];
   /* feedback/{id} · { userId, type, message, createdAt, status ('open'|'answered'), replies: [{ by, text, at }],
      adminSeen, lastReplyAt, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
@@ -70,7 +69,7 @@
   /* refunds/{rentalId} · iade talebi: { userId, rentalId, bookId, amount, reason, createdAt, status ('pending'|'approved'|'rejected'),
      decidedAt, decidedBy, adminNote, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
   const refunds = [];
-  /* giftCheques/{id} · Admin'in gönderdiği ₺ hediye çeki: { userId, amount, cost (0 = ücretsiz, >0 = puanla açılır), name, season ('winter' | null),
+  /* giftCheques/{id} · Admin'in gönderdiği ₺ hediye çeki: { userId, amount, cost (0 = ücretsiz, >0 = puanla açılır), name,
      createdAt, createdBy, expiresAt, openedAt, seenAt, usedAt, rentalId } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
   const giftCheques = [];
 
@@ -179,13 +178,11 @@
     bogo:    { label: 'Al-Öde Kuponu', hint: 'Kaç kitap alınacak (2–5)', min: 2, max: 5, step: 1 }
   };
   const COUPON_DAYS = 7; // alınan kupon 1 hafta içinde kullanılmalı
-  /* Sezonlar (Admin profil panelindeki Sezonlar butonundan seçer) · sezon açıkken arayüz temalanır ve sezonun vitrini Vitrin Ayarları'nda görünür */
+  /* Sezonlar (Admin profil panelindeki Sezonlar butonundan seçer) · sezon açıkken yalnızca arayüz temalanır */
   const SEASONS = {
-    winter: { label: 'Kış', icon: '❄️', desc: 'Kar yağışı, karlı desenler ve Kış Fırsatları vitrini' }
+    winter: { label: 'Kış', icon: '❄️', desc: 'Kar yağışı ve karlı tema' }
   };
-  const WINTER_MULT_MAX = 10; // Kış Fırsatları puan çarpanı üst sınırı
-  const WINTER_NEW_RATE = 30; // Kış sezonunda yeni kitaplar Kış Fırsatları'nda bu indirimle (sezon boyunca)
-  const CHEQUE_DAYS = 30;     // hediye çekinin varsayılan geçerliliği (kış çeki sezon sonuna kadar)
+  const CHEQUE_DAYS = 30;     // hediye çekinin varsayılan geçerliliği
   const DEFAULT_RENTAL_DAYS = 7;
 
   /* Uygulama durumu */
@@ -496,26 +493,7 @@
       </div>`;
     }
     // SINIRLI / VIP işareti yalnızca "döneme özel" türdeki kitaplarda
-    const marked = book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
-    // Kış Fırsatı'ndaki kitap (elle eklenen ya da kışın yeni gelen): Noel şapkası + kar
-    return book && winterOfferOf(book) ? winterCoverHTML(marked, size) : marked;
-  }
-
-  /* Kış Fırsatı kapağı: sol üst köşede Noel şapkası, üstte kar birikintisi */
-  const SANTA_HAT = `<svg viewBox="0 0 64 52" aria-hidden="true">
-      <path d="M8 40 C14 18 30 4 50 8 C46 14 50 22 56 30 L52 40 Z" fill="#dc2626"/>
-      <path d="M50 8 C46 14 50 22 56 30 L60 28 C54 20 52 14 50 8 Z" fill="#991b1b" opacity=".45"/>
-      <rect x="2" y="36" width="56" height="12" rx="6" fill="#fff"/>
-      <circle cx="56" cy="31" r="7" fill="#fff"/>
-    </svg>`;
-  const WINTER_HAT = { xs: 'w-5 -top-2 -left-2', sm: 'w-6 -top-2.5 -left-2.5', md: 'w-8 -top-3 -left-3', lg: 'w-12 -top-4 -left-4', fill: 'w-12 top-0 left-0' };
-  function winterCoverHTML(cover, size) {
-    return `
-      <span class="${size === 'fill' ? 'relative block w-full h-full' : 'relative inline-flex shrink-0 align-top'}" title="Kış Fırsatı">
-        ${cover}
-        <span class="winter-cover-snow pointer-events-none absolute inset-x-0 top-0 z-[1]"></span>
-        <span class="santa-hat pointer-events-none absolute z-[3] ${WINTER_HAT[size] || WINTER_HAT.md}">${SANTA_HAT}</span>
-      </span>`;
+    return book && isSpecialBook(book) ? specialCoverHTML(cover, size) : cover;
   }
 
   /* Özel kitap kapağı: altta "SINIRLI" şeridi + köşede VIP tacı (en küçük boyutta yalnızca taç) */
@@ -856,7 +834,7 @@
     const now = new Date();
     // Tarihi gelen planlı fiyat değişimleri (dakikada bir)
     if (now.getSeconds() === 0) applyDuePrices(now.getTime());
-    // Süreli sezon bittiyse her şey yeniden çizilir (Admin açıksa sezon kayıtları da temizlenir)
+    // Süreli sezon bittiyse tema kalkar (her şey yeniden çizilir)
     if (state.renderedSeason !== undefined && activeSeason() !== state.renderedSeason) return scheduleRender();
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
     if (purgeExpiredOffers(now) && state.route === 'offers' && !state.modalOpen) renderCurrentPage();

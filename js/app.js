@@ -78,14 +78,10 @@
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-open-showcase]')))    return openShowcaseModal();
       if ((m = el('[data-showcase-toggle]')))  return setShowcase(m.dataset.showcaseToggle, !showcaseOn(m.dataset.showcaseToggle));
-      if ((m = el('[data-add-winter]')))       return openWinterDealModal();
-      if ((m = el('[data-delete-winter]')))    return deleteWinterDeal(m.dataset.deleteWinter);
       if ((m = el('[data-send-cheque]')))      return openSendChequeModal();
       if ((m = el('[data-open-cheque]')))      return m.disabled ? null : openChequeWithPoints(m.dataset.openCheque);
       if ((m = el('[data-delete-cheque]')))    return deleteCheque(m.dataset.deleteCheque);
       if ((m = el('#chq-all')))                { $$('[data-chq-user]').forEach((x) => { x.checked = m.checked; }); return; }
-      if ((m = el('[data-winter-settings]')))  return openWinterSettingsModal();
-      if ((m = el('[data-add-winter-package]'))) return openOfferFormModal(null, 'winter');
       if ((m = el('[data-open-seasons]')))     return openSeasonModal();
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
@@ -139,8 +135,6 @@
         case 'resetStats':  return handleResetStats(form);
         case 'setPassword': return handleSetPassword(fd);
         case 'saveVitrine': return handleSaveVitrine(fd);
-        case 'saveWinterDeal': return handleSaveWinterDeal(fd);
-        case 'saveWinterSettings': return handleSaveWinterSettings(fd);
         case 'sendCheque':  return handleSendCheque(form);
         case 'saveSeason':  return handleSaveSeason(fd);
         case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
@@ -157,7 +151,6 @@
       if (t.id === 'of-rate') updateOfferCalc();
       if (t.id === 'cpNew' || t.id === 'cpOld') updateChangePricePreview();
       if (t.id === 'vd-rate') updateVitrinePreview();
-      if (t.id === 'wd-rate') updateWinterPreview();
       if (t.id === 'sc-value' || t.id === 'sc-free') updateShopCouponForm();
     });
     document.addEventListener('change', (e) => {
@@ -169,7 +162,6 @@
       if (t.id === 'bf-type' || t.id === 'bf-status') return updateBookFormPreview();
       if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'vd-book') updateVitrinePreview();
-      if (t.id === 'wd-book') updateWinterPreview();
       if (t.id === 'rentCoupon') updateRentCoupon();
       if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
@@ -228,7 +220,6 @@
     ['announcements', announcements],
     ['offers', offers],
     ['discounts', discounts, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
-    ['winterDeals', winterDeals, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['ratings', ratings, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['couponShop', couponShop, null, (d) => ({ id: d.id, ...d.data(), endsMs: d.data().endsAt?.toMillis?.() ?? null })],
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],

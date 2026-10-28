@@ -57,25 +57,6 @@ service cloud.firestore {
     function showcaseOn(key) {
       return !exists(path('settings', 'showcase')) || get(path('settings', 'showcase')).data.get(key, true) != false;
     }
-    // Sezon · settings/season { active, startedAt, endsAt } · süreli sezon endsAt gelince kapalı sayılır
-    function seasonOn(s) {
-      return exists(path('settings', 'season')) && seasonDocOn(get(path('settings', 'season')).data, s);
-    }
-    function seasonDocOn(d, s) { return d.get('active', null) == s && (d.get('endsAt', null) == null || request.time < d.endsAt); }
-    // Kış Fırsatları yalnızca Kış sezonunda ve vitrini açıkken geçerli
-    function winterOn() { return seasonOn('winter') && showcaseOn('winter'); }
-    // Kışın yeni kitabı: sezon başladıktan sonra eklendi ya da yeni kitap indirimi hâlâ sürüyor (istemci: isWinterNewBook)
-    function winterNewBook(b) {
-      let season = get(path('settings', 'season')).data;
-      return (season.get('startedAt', null) != null && isoToTs(b.addedAt) >= season.startedAt)
-        || (b.get('newDiscountUntil', null) != null && isoToTs(b.newDiscountUntil) > request.time);
-    }
-    // Kış Fırsatları puan çarpanı · settings/winter.multiplier (yoksa 1)
-    function winterMult() {
-      return exists(path('settings', 'winter')) ? get(path('settings', 'winter')).data.get('multiplier', 1) : 1;
-    }
-    // Kayıttaki puan çarpanı (yoksa 1)
-    function multOf(x) { return x.get('pointsMult', 1); }
     // Kuruş yuvarlaması toleranslı eşitlik (yüzdeyle hesaplanan fiyatlar)
     function nearC(a, b) { return math.abs(a - b) < 0.006; }
 
@@ -142,22 +123,21 @@ service cloud.firestore {
           && near(after.balance, before.balance - a.paidTotal)
           && earnedOk(before, after, 0);
       }
-      // Tekli kiralama: yeni kiralama kaydının fiyatı kadar düşer · indirim (günün / yeni kitap / özel fırsat / kış) puan kazandırır
-      // (kış fırsatında kazanç × pointsMult · çarpanın doğruluğunu kiralama kuralı denetler)
+      // Tekli kiralama: yeni kiralama kaydının fiyatı kadar düşer · indirim (günün / yeni kitap / özel fırsat) puan kazandırır
       function paidRental(tx, before, after) {
         let r = getAfter(path('rentals', tx)).data;
         return !exists(path('rentals', tx))
           && r.userId == uid() && r.purchaseId == null
           && near(after.balance, before.balance - r.price)
-          && earnedOk(before, after, r.discountSource in ['deal', 'new', 'custom', 'winter', 'winterNew'] ? (r.listPrice - r.price) * multOf(r) : 0);
+          && earnedOk(before, after, r.discountSource in ['deal', 'new', 'custom'] ? r.listPrice - r.price : 0);
       }
-      // Paket kiralama: yeni satın alım kaydının fiyatı kadar düşer · normal toplam − paket fiyatı puan kazandırır (kış paketinde × pointsMult)
+      // Paket kiralama: yeni satın alım kaydının fiyatı kadar düşer · normal toplam − paket fiyatı puan kazandırır
       function paidPackage(tx, before, after) {
         let p = getAfter(path('offerPurchases', tx)).data;
         return !exists(path('offerPurchases', tx))
           && p.userId == uid()
           && near(after.balance, before.balance - p.price)
-          && earnedOk(before, after, p.normalTotal > p.price ? (p.normalTotal - p.price) * multOf(p) : 0);
+          && earnedOk(before, after, p.normalTotal > p.price ? p.normalTotal - p.price : 0);
       }
       // Kupon alımı: harcanan puan kuponun bedeli kadar artar ve kazanılanı aşamaz
       function isCouponBuy() {
@@ -257,28 +237,19 @@ service cloud.firestore {
           // aynı batch'te kitap bu kiralamayla kilitlenmiş olmalı (kitap boştaydı)
           && getAfter(bookPath).data.lockRental == rentalId
           && getAfter(bookPath).data.lockBy == uid()
-          // puan çarpanı yalnızca Kış Fırsatı kiralamasında ve ayardaki değerle aynı olabilir
-          && multOf(r) == (r.discountSource in ['winter', 'winterNew'] ? winterMult() : 1)
+          // puan çarpanı alanı yazılamaz (eski Kış Fırsatı kayıtlarında kalmıştır)
+          && !('pointsMult' in r)
           && (singleRental(r) || packageRental(r) || couponRental(r));
       }
-      // Tekli: ödeme kullanıcı belgesinde; indirim standart (en fazla %50), özel fırsat, kış fırsatı,
-      // kışın yeni kitabı (%30) ya da hediye çeki
+      // Tekli: ödeme kullanıcı belgesinde; indirim standart (en fazla %50), özel fırsat ya da hediye çeki
       function singleRental(r) {
         return r.purchaseId == null && r.offerId == null
           && r.discount is int && r.discount >= 0
           && (standardDiscount(r) || (r.discountSource == 'custom' && vitrineDiscount(r))
-            || (r.discountSource == 'winter' && winterDiscount(r))
-            || (r.discountSource == 'winterNew' && winterNewDiscount(r))
             || (r.discountSource == 'cheque' && chequeRental(r)))
           && getAfter(path('users', uid())).data.lastTx == rentalId;
       }
-      // Kışın yeni kitabı: sabit %30 (istemci: WINTER_NEW_RATE)
-      function winterNewDiscount(r) {
-        return winterOn() && r.discount == 30
-          && r.price >= r.listPrice * 0.7 - 0.01
-          && winterNewBook(get(path('books', string(r.bookId))).data);
-      }
-      // Hediye çeki: kendi, açılmış, kullanılmamış, süresi dolmamış (kış çeki: sezon açık) çek; aynı batch'te bu kiralamayla kullanılır ·
+      // Hediye çeki: kendi, açılmış, kullanılmamış, süresi dolmamış çek; aynı batch'te bu kiralamayla kullanılır ·
       // fiyat en fazla çek tutarı kadar düşer
       function chequeRental(r) {
         return r.get('chequeId', null) is string
@@ -286,15 +257,8 @@ service cloud.firestore {
       }
       function chequeRentalOk(r, c, a) {
         return c.userId == uid() && c.usedAt == null && c.openedAt != null && request.time < c.expiresAt
-          && (c.get('season', null) == null || seasonOn('winter'))
           && a.usedAt != null && a.rentalId == rentalId
           && r.price >= r.listPrice - c.amount - 0.01;
-      }
-      // Kış Fırsatı: Adminin winterDeals/{kitap} belgesindeki yüzdenin aynısı (Kış sezonu ve vitrini açık)
-      function winterDiscount(r) {
-        let d = get(path('winterDeals', string(r.bookId))).data;
-        return winterOn() && d.rate is int && r.discount == d.rate
-          && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
       }
       // Kuponlu: kendi, kullanılmamış, süresi dolmamış kupon; kupon aynı batch'te bu kiralamayı listeler,
       // ödeme kullanıcı belgesinde kupon üzerinden (lastTx = kupon)
@@ -307,7 +271,6 @@ service cloud.firestore {
         let t = couponType(c);
         let v = couponValue(c);
         return c.userId == uid() && c.usedAt == null && request.time < c.expiresAt
-          && (c.get('season', null) == null || seasonOn('winter'))
           && a.rentalIds is list && rentalId in a.rentalIds
           && r.bookId in a.bookIds
           && getAfter(path('users', uid())).data.lastTx == r.couponId
@@ -320,18 +283,15 @@ service cloud.firestore {
       // Günün İndirimi / Yeni Kitap: en fazla %50 · Vitrin Ayarları'nda kapalı vitrinin indirimi kullanılamaz
       function standardDiscount(r) {
         return r.discountSource in [null, 'deal', 'new']
-          // kış sezonunda Günün İndirimi yoktur
-          && (r.discountSource != 'deal' || (showcaseOn('deals') && !seasonOn('winter')))
-          // kış sezonunda normal yeni kitap indirimi yoktur (yeni kitaplar Kış Fırsatları'nda %30)
-          && (r.discountSource != 'new' || (showcaseOn('newBooks') && !seasonOn('winter')))
+          && (r.discountSource != 'deal' || showcaseOn('deals'))
+          && (r.discountSource != 'new' || showcaseOn('newBooks'))
           && r.discount <= 50
           && r.price >= r.listPrice * 0.5 - 0.01;
       }
       // Özel Fırsat (eski adı Vitrin İndirimi): Adminin discounts/{kitap} belgesindeki yüzdenin aynısı (süresi dolmamış, vitrin açık)
       function vitrineDiscount(r) {
         let d = get(path('discounts', string(r.bookId))).data;
-        // kış sezonunda Özel Fırsatlar yoktur
-        return showcaseOn('vitrine') && !seasonOn('winter') && d.rate is int && r.discount == d.rate
+        return showcaseOn('vitrine') && d.rate is int && r.discount == d.rate
           && (!('endsAt' in d) || request.time < d.endsAt)
           && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
       }
@@ -359,10 +319,9 @@ service cloud.firestore {
             ? nearC(p.price, packagePriceSum(p.bookIds) * (100 - offer.rate) / 100)
             : p.price == offer.price)
           && p.bookIds == offer.bookIds
-          // kış paketi tarihsizdir: Kış Fırsatları açıkken geçerli · diğer teklifler bitiş anına kadar
-          && (offer.get('season', null) == 'winter' ? winterOn() : request.time <= offer.endsAt)
-          // puan çarpanı yalnızca kış paketinde ve ayardaki değerle aynı olabilir
-          && multOf(p) == (offer.get('season', null) == 'winter' ? winterMult() : 1)
+          && request.time <= offer.endsAt
+          // puan çarpanı alanı yazılamaz (eski kış paketi kayıtlarında kalmıştır)
+          && !('pointsMult' in p)
           // normal toplam = paketteki kitapların güncel fiyatları toplamı (puan kazancı buna göre)
           && p.normalTotal is number && near(p.normalTotal, packagePriceSum(p.bookIds))
           && getAfter(path('users', uid())).data.lastTx == purchaseId;
@@ -408,16 +367,6 @@ service cloud.firestore {
         && string(request.resource.data.bookId) == bookId
         // yalnızca Kiralık durumdaki kitap (durumu olmayan eski kayıt = Kiralık)
         && get(path('books', bookId)).data.get('status', 'kiralik') == 'kiralik';
-    }
-
-    // Kış Fırsatı · belge adı = kitap numarası · { bookId, rate (1–100, 100 = bedava), createdAt, createdBy } · sezon boyunca, bitiş yok
-    match /winterDeals/{bookId} {
-      allow read: if signedIn();
-      allow delete: if isAdmin();
-      allow create, update: if isAdmin()
-        && request.resource.data.rate is int
-        && request.resource.data.rate >= 1 && request.resource.data.rate <= 100
-        && string(request.resource.data.bookId) == bookId;
     }
 
     // Reyting · belge adı = "{kitap}_{kullanıcı}" (kitap başına tek oy) · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
@@ -512,11 +461,11 @@ service cloud.firestore {
           && s.cost is number && s.cost > 0
           && s.name is string && s.name.size() <= 60
           && (s.endsAt == null || s.endsAt is timestamp)
-          && (s.get('season', null) == null || s.season == 'winter');
+          && !('season' in s);
       }
     }
 
-    // Hediye çeki · Admin gönderir/siler · { userId, amount (₺), cost (puan, 0 = ücretsiz), name, season, createdAt, createdBy,
+    // Hediye çeki · Admin gönderir/siler · { userId, amount (₺), cost (puan, 0 = ücretsiz), name, createdAt, createdBy,
     // expiresAt, openedAt, seenAt, usedAt, rentalId } · sahibi okur; yalnızca görüldü işareti, açma (puanlıysa puan defteriyle)
     // ve kullanma (aynı batch'teki kendi yeni kiralamasıyla) yapabilir
     match /giftCheques/{chequeId} {
@@ -544,7 +493,6 @@ service cloud.firestore {
         let a = request.resource.data;
         return changedKeys().hasOnly(['usedAt', 'rentalId'])
           && c.openedAt != null && c.usedAt == null && request.time < c.expiresAt
-          && (c.get('season', null) == null || seasonOn('winter'))
           && a.usedAt is string && a.rentalId is string
           && !exists(path('rentals', a.rentalId))
           && getAfter(path('rentals', a.rentalId)).data.chequeId == chequeId
@@ -562,7 +510,7 @@ service cloud.firestore {
 
       // Alım: mağazadaki kuponun birebir kopyası (mağaza süresi dolmamış), 7 gün geçerli, kullanılmamış
       function validCoupon(c) {
-        return c.keys().hasOnly(['userId', 'shopId', 'type', 'value', 'free', 'name', 'cost', 'season', 'boughtAt', 'expiresAt', 'usedAt', 'rentalIds', 'bookIds', 'freeBookIds', 'paidTotal'])
+        return c.keys().hasOnly(['userId', 'shopId', 'type', 'value', 'free', 'name', 'cost', 'boughtAt', 'expiresAt', 'usedAt', 'rentalIds', 'bookIds', 'freeBookIds', 'paidTotal'])
           && c.userId == uid() && c.shopId is string
           && shopMatches(c, get(path('couponShop', c.shopId)).data)
           && c.expiresAt is timestamp
@@ -576,9 +524,8 @@ service cloud.firestore {
       function shopMatches(c, s) {
         return c.type == s.type && c.value == s.value && c.cost == s.cost && c.name == s.name
           && c.get('free', null) == s.get('free', null)
-          // kış kuponu: sezon damgası kopyalanır, yalnızca Kış sezonunda alınır
-          && c.get('season', null) == s.get('season', null)
-          && (s.get('season', null) == null || seasonOn('winter'))
+          // eski kış kuponları (season damgalı) artık alınamaz
+          && !('season' in s)
           && (s.endsAt == null || request.time < s.endsAt);
       }
 
@@ -589,7 +536,6 @@ service cloud.firestore {
         let a = request.resource.data;
         let n = couponType(c) == 'bogo' ? couponValue(c) : 1;
         return c.userId == uid() && c.usedAt == null && request.time < c.expiresAt
-          && (c.get('season', null) == null || seasonOn('winter'))
           && changedKeys().hasOnly(['usedAt', 'rentalIds', 'bookIds', 'freeBookIds', 'paidTotal'])
           && a.usedAt is string
           && a.rentalIds is list && a.rentalIds.size() == n

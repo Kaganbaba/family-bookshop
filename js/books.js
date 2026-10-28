@@ -122,16 +122,12 @@
     const dealIds = getDailyDeals(nowDate).ids;
     const rows = list.map((b) => {
       const rented = isBookRented(b, now);
+      const fresh = isNewBook(b, nowDate);
       const eff = getEffectiveDiscount(b, nowDate, dealIds);
-      const pack = winterOfferOf(b)?.pack || null; // yeni kış paketindeki yeni kitap: tek başına indirimsiz, paketle indirimli
-      const winter = WINTER_SOURCES.includes(eff.source) || !!pack;
-      const fresh = !winter && isNewBook(b, nowDate); // Kış Fırsatı'ndaki yeni kitap yeni kitap indirimi almaz
       return `
         <li>
           <button type="button" data-open-book="${b.id}"
-            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${winter
-              ? 'winter-row bg-gradient-to-r from-sky-50 via-white to-white border-l-4 border-sky-400 hover:from-sky-100/80 focus:from-sky-100'
-              : fresh
+            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${fresh
               ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
               : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
             <div class="relative shrink-0">
@@ -144,11 +140,7 @@
             <div class="flex-1 sm:flex-none min-w-0 sm:max-w-[42%]">
               <p class="flex items-center gap-1.5 min-w-0">
                 <span class="text-xs sm:text-sm font-semibold text-slate-800 truncate">${escapeHTML(b.title)}</span>
-                ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
-                ${pack ? `<span class="crystal-chip shrink-0 max-w-[14rem] truncate text-[9px] font-extrabold px-1.5 py-0.5 rounded-full" title="${escapeHTML(pack.title)} kış paketi">❄ YENİ · 🎁 ${escapeHTML(pack.title)} %${offerRate(pack)}</span>`
-                  : eff.source === 'winterNew' ? `<span class="crystal-chip shrink-0 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full">❄ YENİ %${eff.rate}</span>`
-                  : winter ? `<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-sky-400 to-indigo-500 px-1.5 py-0.5 rounded-full shadow-soft">❄️ KIŞ %${eff.rate}</span>` : ''}
-              </p>
+                ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}              </p>
               <p class="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5 flex-wrap">${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : ''}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}${fresh
                 ? `<span class="hidden sm:inline text-amber-600 font-semibold">· %${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(newDiscountLeftMs(b, nowDate))}</span>` : ''}</p>
             </div>
@@ -287,7 +279,6 @@
     const now = new Date();
     const { rate, source } = getEffectiveDiscount(b, now);
     const price = hasPrice(b) ? round2(b.price * (1 - rate / 100)) : 0;
-    const winterPack = winterOfferOf(b)?.pack || null; // yeni kış paketindeki yeni kitap
     const active = activeRentalOf(b, now.getTime());
     const holder = active ? getUser(active.userId) : null;
     const check = bookRentCheck(b, u, price);
@@ -400,12 +391,6 @@
       </div>
 
       <div class="p-5 sm:p-6 pt-4 space-y-5">
-        ${winterPack ? `
-          <button type="button" data-open-offer="${winterPack.id}" class="w-full flex items-center gap-3 p-3 rounded-2xl text-left bg-gradient-to-r from-sky-50 to-cyan-50 border border-cyan-200 hover:border-cyan-400 transition">
-            <span class="text-xl leading-none">🎁</span>
-            <span class="flex-1 min-w-0 text-xs text-sky-800 leading-relaxed">✨ Bu <b>yeni kitap</b> kışta yalnızca <b>"${escapeHTML(winterPack.title)}"</b> kış paketinde indirimli · <b>%${offerRate(winterPack)}</b>. Tek başına normal fiyatından kiralanır.</span>
-            <span class="text-[11px] font-bold text-cyan-700 shrink-0">Paketi gör →</span>
-          </button>` : ''}
         ${rentBlock}
         ${isSpecialBook(b) ? `
           <div class="flex gap-3 p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-orange-50 border border-rose-100">
@@ -749,19 +734,16 @@
     const due = now + (b.rentalDays || DEFAULT_RENTAL_DAYS) * DAY_MS;
     const ref = col('rentals').doc();
     const batch = db.batch();
-    // Kış Fırsatı: o anki puan çarpanı kayda yazılır (kural ayardaki çarpanla aynı olmasını ister)
-    const mult = rate && WINTER_SOURCES.includes(source) ? winterMult() : 1;
     batch.set(ref, {
       bookId: b.id, userId: u.id,
       listPrice: b.price, price, discount: rate, discountSource: rate ? source : null,
       offerId: null, purchaseId: null, offerPrice: null, couponId: null,
-      rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null,
-      ...(mult > 1 ? { pointsMult: mult } : {})
+      rentedAt: isoAt(now), dueAt: isoAt(due), returnedAt: null
     });
     // Özel kitap: kiralandığı an "Kira dışı"; kiradayken "Kirada" görünür, süre bitince Kira dışı kalır
     batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id, ...(isSpecialBook(b) ? { status: 'kiradisi' } : {}) });
     // İndirimli kiralama puan kazandırır (defter varsa aynı batch'te; kural kazancı doğrular)
-    const gain = rentalGain({ discountSource: rate ? source : null, listPrice: b.price, price, pointsMult: mult });
+    const gain = rentalGain({ discountSource: rate ? source : null, listPrice: b.price, price });
     batch.update(col('users').doc(u.id), {
       balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})

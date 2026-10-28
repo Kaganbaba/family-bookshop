@@ -170,7 +170,7 @@
       .ultra-flash { animation: none; }
     }
 
-    /* ===== Sezon: Kış (body.season-winter) · kar yağışı, karlı kenarlar, Kış Fırsatları vitrini ===== */
+    /* ===== Sezon: Kış (body.season-winter) · kar yağışı, karlı kenarlar ===== */
     /* Zemin: buz mavisi geçiş + çok soluk kar taneli desen (iki farklı boyutta) */
     body.season-winter {
       background-image:
@@ -193,10 +193,9 @@
     .season-winter > header::after { bottom: -8px; }
     .season-winter > footer::before { top: -1px; filter: drop-shadow(0 1px 1px rgba(255, 255, 255, .3)); }
 
-    /* Düşen kar taneleri · ekran katmanı (modalların altında) ve vitrin içi */
+    /* Düşen kar taneleri · ekran katmanı (modalların altında) */
     .snow-layer { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
-    .winter-snow { overflow: hidden; }
-    .snow-layer i, .winter-snow i {
+    .snow-layer i {
       position: absolute; top: -3%; border-radius: 9999px;
       animation-name: snowFall, snowSway;
       animation-timing-function: linear, ease-in-out;
@@ -204,106 +203,11 @@
       animation-direction: normal, alternate;
     }
     .snow-layer i { background: #dbeafe; box-shadow: 0 0 2px #fff, 0 0 5px rgba(59, 130, 246, .45); }
-    .winter-snow i { background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, .85); }
     @keyframes snowFall { from { top: -3%; } to { top: 103%; } }
     @keyframes snowSway { from { translate: -14px 0; } to { translate: 14px 0; } }
+    @media (prefers-reduced-motion: reduce) { .snow-layer { display: none; } }
 
-    /* Kış Fırsatları vitrini: buz mavisi çerçeve, gece mavisi zemin, kar taneli desen, üstte kar */
-    .winter-rim { background: linear-gradient(135deg, #e0f2fe, #93c5fd, #f8fafc, #7dd3fc, #e0f2fe); background-size: 300% 300%; animation: goldFlow 9s ease infinite; }
-    .winter-bg { background: radial-gradient(ellipse at top, rgba(59, 130, 246, .45), transparent 60%), linear-gradient(160deg, #0c4a6e 0%, #1e3a8a 55%, #0f172a 100%); }
-    .winter-flakes {
-      opacity: .14;
-      background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E"),
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E");
-      background-size: 34px 34px, 20px 20px;
-      background-position: 0 0, 60px 70px;
-      background-repeat: space;
-    }
-    .winter-cap {
-      height: 18px;
-      background: radial-gradient(circle at 11px 4px, #fff 11px, transparent 11.5px) repeat-x, linear-gradient(#fff, #fff) no-repeat;
-      background-size: 22px 16px, 100% 5px;
-      filter: drop-shadow(0 3px 2px rgba(2, 6, 23, .35));
-    }
-    .winter-card {
-      background: linear-gradient(160deg, rgba(255, 255, 255, .17), rgba(255, 255, 255, .05));
-      border: 1px solid rgba(255, 255, 255, .22);
-      backdrop-filter: blur(6px);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 12px 28px -14px rgba(2, 6, 23, .7);
-    }
-    .winter-card:hover { border-color: rgba(255, 255, 255, .5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 22px rgba(186, 230, 253, .35), 0 14px 30px -14px rgba(2, 6, 23, .7); }
-
-    /* Kış Fırsatı kapağı: Noel şapkası + üstte kar · Kitaplar satırında büyük kar tanesi */
-    .santa-hat { transform: rotate(-24deg); }
-    .santa-hat svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .3)); }
-    .winter-cover-snow {
-      height: 6px; border-radius: inherit;
-      background: radial-gradient(circle at 4px 0, #fff 4px, transparent 4.5px) repeat-x;
-      background-size: 8px 6px;
-      filter: drop-shadow(0 1px 1px rgba(15, 23, 42, .25));
-    }
-    .winter-row::after {
-      content: ''; position: absolute; top: 50%; right: 18%; width: 54px; height: 54px; transform: translateY(-50%) rotate(15deg);
-      pointer-events: none; opacity: .14;
-      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E") center/contain no-repeat;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .snow-layer, .winter-snow { display: none; }
-      .winter-rim { animation: none; }
-    }
-
-    /* ===== Kış: kristal / buz yazıları, paket kar birikintisi, kış kuponu, hediye çeki ===== */
-    /* Kış indirimi yazısı: buz beyazı → mavi geçiş */
-    .ice-text { background: linear-gradient(180deg, #ffffff 10%, #bae6fd 60%, #7dd3fc); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 2px 6px rgba(14, 165, 233, .45)); }
-    /* Yeni kitap (kış) yazısı: parıldayan kristal · akan ışık */
-    .crystal-text {
-      background: linear-gradient(110deg, #e0f2fe 0%, #ffffff 22%, #67e8f9 40%, #ffffff 52%, #a5b4fc 70%, #f0f9ff 100%);
-      background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-      filter: drop-shadow(0 0 8px rgba(103, 232, 249, .7)); animation: crystalShine 3.2s linear infinite;
-    }
-    @keyframes crystalShine { from { background-position: 100% 0; } to { background-position: -120% 0; } }
-    .crystal-chip {
-      color: #083344; background: linear-gradient(110deg, #ecfeff, #ffffff 40%, #a5f3fc 60%, #ffffff);
-      background-size: 200% 100%; animation: crystalShine 4s linear infinite;
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, .9), 0 0 12px rgba(103, 232, 249, .65);
-    }
-    /* Kışın yeni kitabı / yeni paketi: kristal çerçeve ve parıltı */
-    .winter-new-card { border-color: rgba(165, 243, 252, .7) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 1px rgba(103, 232, 249, .35), 0 0 26px rgba(103, 232, 249, .35), 0 12px 28px -14px rgba(2, 6, 23, .7); }
-    .winter-new-card::before {
-      content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: .22;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40' fill='none' stroke='%23a5f3fc' stroke-width='1'%3E%3Cpath d='M20 2l5 9-5 9-5-9zM20 20l5 9-5 9-5-9zM2 20l9-5 9 5-9 5zM20 20l9-5 9 5-9 5z'/%3E%3C/svg%3E");
-      background-size: 38px 38px;
-    }
-    /* Buz kristali indirim rozeti (altıgen, buzlu) */
-    .ice-burst {
-      clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
-      background: linear-gradient(160deg, #ffffff, #e0f2fe 45%, #bae6fd);
-      filter: drop-shadow(0 6px 14px rgba(2, 6, 23, .45));
-    }
-    .ice-burst .ice-text { background: linear-gradient(180deg, #0369a1, #1e3a8a); -webkit-background-clip: text; background-clip: text; filter: none; }
-    .ice-burst-new { background: linear-gradient(160deg, #ecfeff, #ffffff 35%, #a5f3fc 65%, #c7d2fe); }
-    .ice-burst-new .crystal-text { background: linear-gradient(110deg, #0e7490, #1e40af 45%, #0891b2 60%, #4338ca); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; filter: none; }
-    /* Paketin altında ve üstünde kar birikintisi */
-    .winter-cap-sm { height: 12px; background-size: 16px 11px, 100% 4px; }
-    .winter-drift {
-      height: 16px;
-      background: radial-gradient(ellipse at 14px 16px, #fff 13px, transparent 13.5px) repeat-x, linear-gradient(#fff, #fff) bottom/100% 6px no-repeat;
-      background-size: 28px 16px, 100% 6px;
-      filter: drop-shadow(0 -2px 2px rgba(2, 6, 23, .25));
-    }
-    /* Kış kuponu zemini */
-    .winter-coupon-bg { background: radial-gradient(ellipse at top, rgba(125, 211, 252, .5), transparent 60%), linear-gradient(150deg, #0369a1, #1e3a8a 60%, #312e81); }
-    /* Hediye çeki: yeşil zemin, iki yanda delikli bilet çentiği · kış çeki buz mavisi */
+    /* Hediye çeki: yeşil zemin, iki yanda delikli bilet çentiği */
     .cheque-card { background: linear-gradient(140deg, #10b981, #0d9488 55%, #0e7490); }
-    .cheque-winter { background: radial-gradient(ellipse at top, rgba(186, 230, 253, .45), transparent 60%), linear-gradient(140deg, #0284c7, #1e40af 60%, #312e81); }
     .cheque-notch { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border-radius: 9999px; background: #f8fafc; }
     .cheque-notch.left { left: -9px; } .cheque-notch.right { right: -9px; }
-    @media (prefers-reduced-motion: reduce) {
-      .crystal-text, .crystal-chip { animation: none; }
-    }
-    /* Buz rozetinin altındaki şerit (yazı altıgenin dışında, kesilmez) */
-    .ice-ribbon { color: #fff; background: linear-gradient(90deg, #0284c7, #4f46e5); box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .9), 0 4px 10px -2px rgba(2, 6, 23, .45); }
-    /* Kış vitrininde bölümler: Kışın Yenileri (kristal) · Kış İndirimleri */
-    .winter-zone { background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12); }
-    .winter-zone-new { background: linear-gradient(160deg, rgba(103, 232, 249, .12), rgba(165, 180, 252, .06)); border-color: rgba(165, 243, 252, .35); box-shadow: inset 0 0 30px rgba(103, 232, 249, .08); }

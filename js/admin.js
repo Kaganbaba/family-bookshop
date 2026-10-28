@@ -639,14 +639,12 @@
     });
   }
 
-  /* --- Özel teklif ekle / düzenle / sil (1–3 kitap + isteğe bağlı kapaklar) ---
-     season: 'winter' → Kış Fırsatları paketi (tarihsiz, sezon boyunca · Özel Teklifler'de görünmez) */
-  function openOfferFormModal(editId, season = null) {
+  /* --- Özel teklif ekle / düzenle / sil (1–3 kitap + isteğe bağlı kapaklar) --- */
+  function openOfferFormModal(editId) {
     if (!requireAdmin()) return;
     if (editId && purgeExpiredOffers()) renderCurrentPage();
     const o = editId ? getOffer(editId) : null;
     if (editId && !o) return toast('Bu teklifin süresi doldu ve silindi.', 'info');
-    const seasonKey = o ? o.season || null : season;
     state.offerDraftCovers = o ? [0, 1, 2].map((i) => o.items[i]?.cover || '') : ['', '', ''];
     const defaultEnd = localDateKey(new Date(Date.now() + 14 * DAY_MS));
     // Planlanıyor / Yakında (fiyatı olmayabilir) kitaplar pakete eklenemez
@@ -672,26 +670,21 @@
     };
 
     openModal(`
-      ${seasonKey
-        ? modalHeader(o ? 'Kış Paketini Düzenle ❄️' : 'Yeni Kış Paketi ❄️', 'Kış Fırsatları vitrininde görünür · kış boyunca geçerli, puan çarpanı uygulanır.', 'offers', 'bg-sky-50 text-sky-600')
-        : modalHeader(o ? 'Teklifi Düzenle' : 'Yeni Özel Teklif', '1–3 kitap seç, kapakları dosyadan yükle, paket fiyatını belirle.', 'offers')}
+      ${modalHeader(o ? 'Teklifi Düzenle' : 'Yeni Özel Teklif', '1–3 kitap seç, kapakları dosyadan yükle, paket indirimini belirle.', 'offers')}
       <form data-form="saveOffer" data-edit-id="${o ? o.id : ''}" class="p-5 space-y-3.5" autocomplete="off">
-        <input type="hidden" name="season" value="${seasonKey || ''}" />
         <div class="grid grid-cols-3 gap-2">${slot(0)}${slot(1)}${slot(2)}</div>
         <p class="text-[10px] text-slate-400 -mt-1">Kapak seçilmezse kitabın kendi kapağı (veya degrade kutusu) vitrinde gösterilir.</p>
         ${field('Teklif Başlığı', `<input name="title" required maxlength="80" value="${o ? escapeHTML(o.title) : ''}" class="${INPUT_CLS}" placeholder="Örn. 3 Seri Kitap Alana Albüm Hediye" />`)}
         ${field('Açıklama', `<textarea name="description" rows="3" required maxlength="400" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Teklifin detayları">${o ? escapeHTML(o.description) : ''}</textarea>`)}
-        <div class="grid ${seasonKey ? 'grid-cols-1' : 'grid-cols-2'} gap-3">
+        <div class="grid grid-cols-2 gap-3">
           ${field('Paket İndirimi (%)', `<input name="rate" id="of-rate" type="number" min="0" max="100" step="1" required inputmode="numeric" value="${o ? offerRate(o) : ''}" class="${INPUT_CLS}" placeholder="Örn. 30" />`, 'Paket fiyatı kitapların güncel fiyat toplamından hesaplanır · %100 = bedava')}
-          ${seasonKey ? '' : `<div class="grid grid-cols-[1fr_auto] gap-2">
+          <div class="grid grid-cols-[1fr_auto] gap-2">
             ${field('Son Geçerlilik', `<input name="validUntil" type="date" required min="${localDateKey(new Date())}" value="${o ? o.validUntil : defaultEnd}" class="${INPUT_CLS} min-w-0" />`)}
             ${field('Saat', `<input name="validTime" type="time" required value="${o && isTimeKey(o.validTime) ? o.validTime : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
-          </div>`}
+          </div>
         </div>
         <div id="offerCalc" class="text-[11px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2"></div>
-        ${seasonKey
-          ? `<p class="text-[10px] text-slate-400 leading-relaxed">❄️ Kış paketinin bitiş tarihi yok: Kış sezonu ve Kış Fırsatları vitrini açık olduğu sürece kiralanabilir. Kış sezonu kapatılınca silinir.</p>`
-          : `<p class="text-[10px] text-slate-400 leading-relaxed">🎨 Vitrin rengi indirim yüzdesine göre otomatik: %1–19 mavi · %20–34 mor · %35–49 turuncu (Süper Fırsat) · %50–69 hareketli renkler + konfeti (Mega Fırsat) · %70+ fırtına zemini + çakan şimşekler (⚡ Şimşek Fırsat).</p>`}
+        <p class="text-[10px] text-slate-400 leading-relaxed">🎨 Vitrin rengi indirim yüzdesine göre otomatik: %1–19 mavi · %20–34 mor · %35–49 turuncu (Süper Fırsat) · %50–69 hareketli renkler + konfeti (Mega Fırsat) · %70+ fırtına zemini + çakan şimşekler (⚡ Şimşek Fırsat).</p>
         ${o ? '' : announceCheckHTML('of-announce', 'İndirim')}
         ${formFooter(o ? 'Değişiklikleri Kaydet' : 'Teklifi Yayınla')}
       </form>`);
@@ -722,18 +715,6 @@
     const rate = parseInt($('#of-rate')?.value, 10);
     if (!ids.length) { box.textContent = 'Kitapları seçince normal toplam ve paket fiyatı burada görünecek.'; return; }
     const valid = rate >= 0 && rate <= 100;
-    // Kış paketi: hepsi yeni → YENİ paket · karışık → kaydedilemez
-    if (document.querySelector('[data-form="saveOffer"] [name="season"]')?.value === 'winter') {
-      const fresh = ids.filter((id) => isWinterNewBook(getBook(id))).length;
-      if (fresh && fresh !== ids.length) {
-        box.innerHTML = '<span class="text-rose-500 font-semibold">⚠️ Yeni ve eski kitap aynı kış paketine eklenemez · ya hepsi yeni ya hepsi eski olmalı.</span>';
-        return;
-      }
-      if (fresh) {
-        box.innerHTML = `✨ <b class="text-cyan-700">Yeni kış paketi</b> · bu ${ids.length} yeni kitap vitrinde yalnızca paket olarak görünür · Normal toplam <b class="text-slate-700">${formatMoney(normal)}</b>${valid ? ` → <b class="text-emerald-600">${rate === 100 ? 'BEDAVA' : formatMoney(round2(normal * (100 - rate) / 100))}</b> <span class="text-rose-500 font-bold">(%${rate})</span>` : ''}`;
-        return;
-      }
-    }
     const tier = valid ? dealTier(rate) : '';
     box.innerHTML = `${ids.length} kitap · Normal toplam: <b class="text-slate-700">${formatMoney(normal)}</b>${valid
       ? ` · Paket fiyatı: <b class="text-emerald-600">${rate === 100 ? 'BEDAVA' : formatMoney(round2(normal * (100 - rate) / 100))}</b> <span class="text-rose-500 font-bold">(%${rate})</span>` : ''}${tier
@@ -757,28 +738,17 @@
     if (!(rate >= 0 && rate <= 100)) return toast('Paket indirimi 0–100 arası tam sayı olmalı (%100 = bedava).', 'error');
     // Kayıtlı fiyat yalnızca bilgi içindir; geçerli fiyat her an güncel kitap fiyatlarından hesaplanır
     const price = round2(sum(ids.map(getBook).filter(Boolean), (b) => b.price) * (100 - rate) / 100);
-    const season = SEASONS[fd.season] ? fd.season : null;
-    // Kış paketi: ya hepsi kışın yeni kitabı ya hepsi eski (yeni paket, içindeki kitapları vitrinde tek başına göstermez)
-    if (season === 'winter') {
-      const fresh = ids.filter((id) => isWinterNewBook(getBook(id))).length;
-      if (fresh && fresh !== ids.length) return toast('Kış paketinde ya hepsi yeni ya hepsi eski kitap olmalı (yeni ve eski karıştırılamaz).', 'error');
-    }
-    if (!season) {
-      if (!isDateKey(fd.validUntil)) return toast('Geçerli bir tarih seçin.', 'error');
-      if (!isTimeKey(fd.validTime)) return toast('Geçerli bir saat seçin.', 'error');
-      if (!isOfferActive({ validUntil: fd.validUntil, validTime: fd.validTime })) return toast('Son geçerlilik anı geçmiş olamaz.', 'error');
-    }
+    if (!isDateKey(fd.validUntil)) return toast('Geçerli bir tarih seçin.', 'error');
+    if (!isTimeKey(fd.validTime)) return toast('Geçerli bir saat seçin.', 'error');
+    if (!isOfferActive({ validUntil: fd.validUntil, validTime: fd.validTime })) return toast('Son geçerlilik anı geçmiş olamaz.', 'error');
     if (editId && !getOffer(editId)) { closeModal(); renderCurrentPage(); return toast('Bu teklifin süresi doldu ve silindi.', 'error'); }
 
-    // Sezon paketi tarihsizdir (kural sezonun açık olmasını denetler)
-    const data = season
-      ? { title, description, price, rate, season, validUntil: null, validTime: null, endsAt: null, items: slots, bookIds: ids }
-      : {
-        title, description, price, rate, validUntil: fd.validUntil, validTime: fd.validTime,
-        endsAt: offerEndsAt(fd.validUntil, fd.validTime),
-        items: slots,
-        bookIds: ids
-      };
+    const data = {
+      title, description, price, rate, validUntil: fd.validUntil, validTime: fd.validTime,
+      endsAt: offerEndsAt(fd.validUntil, fd.validTime),
+      items: slots,
+      bookIds: ids
+    };
     let done;
     const announce = !editId && fd.announce === 'on';
     if (editId) {
@@ -791,23 +761,19 @@
         const normal = sum(ids.map(getBook).filter(Boolean), (b) => b.price);
         batch.set(col('announcements').doc(), {
           type: 'news', category: 'İndirim',
-          title: `${season ? 'Yeni kış paketi' : 'Yeni özel teklif'}: ${title}${rate ? ` · %${rate}` : ''} ${season ? '❄️' : '🎁'}`,
+          title: `Yeni özel teklif: ${title}${rate ? ` · %${rate}` : ''} 🎁`,
           body: `${description}\n📚 ${ids.map((id) => getBook(id)?.title).filter(Boolean).join(', ')}`
             + `\n💰 ${normal > price ? `${formatMoney(normal)} yerine ` : ''}${price > 0 ? formatMoney(price) : 'BEDAVA'}`
-            + (season ? `\n❄️ Kış boyunca Kış Fırsatları'nda${winterMult() > 1 ? ` · ⭐ ${winterMult()}x puan` : ''}`
-              : `\n⏳ Son: ${formatDate(offerEnd({ validUntil: fd.validUntil, validTime: fd.validTime }).toISOString(), true)}`),
+            + `\n⏳ Son: ${formatDate(offerEnd({ validUntil: fd.validUntil, validTime: fd.validTime }).toISOString(), true)}`,
           bookId: null, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
         });
       }
       done = batch.commit();
     }
     closeModal();
-    // Kış paketi ana sayfadaki Kış Fırsatları'nda, özel teklif kendi sayfasında görünür
-    const page = season ? 'dashboard' : 'offers';
-    if (state.route !== page) location.hash = `#${page}`;
+    if (state.route !== 'offers') location.hash = '#offers';
     else renderCurrentPage();
-    run(done, editId ? (season ? 'Kış paketi güncellendi.' : 'Teklif güncellendi.')
-      : `${season ? 'Kış paketi eklendi ❄️' : 'Teklif yayınlandı 🎉'}${announce ? ' · Duyurular\'a haber düştü 📣' : ''}`);
+    run(done, editId ? 'Teklif güncellendi.' : `Teklif yayınlandı 🎉${announce ? ' · Duyurular\'a haber düştü 📣' : ''}`);
   }
 
   function deleteOffer(id) {
@@ -849,12 +815,9 @@
     updateOfferSlotPreview(i);
   }
 
-  /* --- Sezonlar (profil paneli → Sezonlar) · settings/season: { active, startedAt, endsAt } ---
-     Sezon açıkken arayüz temalanır (kar yağışı vb.) ve sezonun vitrini Vitrin Ayarları'nda görünür.
-     Süreli açılabilir: endsAt gelince sezon kendiliğinden kapanır (Admin istemcisi kayıtları temizler).
-     Kış kapanınca silinir: Kış Fırsatları indirimleri, kış paketleri, kış kuponları (mağaza) ve
-     kullanılmamış kış hediye çekleri (puanla açılıp kullanılmamış olanlar yalnızca aktiflikten çıkar, puan geri dönmez).
-     Puan çarpanı ayarı, önceki kiralamalar ve kazanılan puanlar korunur. */
+  /* --- Sezonlar (profil paneli → Sezonlar) · settings/season: { active, endsAt } ---
+     Sezon yalnızca temadır (kar yağışı, karlı desenler); indirimlere ve vitrinlere dokunmaz.
+     Süreli açılabilir: endsAt gelince sezon kendiliğinden kapanır. */
   function openSeasonModal() {
     if (!requireAdmin()) return;
     const cur = activeSeason();
@@ -877,7 +840,7 @@
       ${modalHeader('Sezonlar 🗓️', 'Seçtiğin sezon herkeste anında açılır · istersen süreli aç, süre bitince kendiliğinden kapanır.', 'calendar', 'bg-sky-50 text-sky-600')}
       <form data-form="saveSeason" class="p-5 space-y-2.5" autocomplete="off">
         ${cur ? `<p class="text-[11px] text-sky-700 bg-sky-50 rounded-xl px-3 py-2">${SEASONS[cur].icon} ${SEASONS[cur].label} sezonu açık · ${end ? `<b>${formatDate(new Date(end).toISOString(), true)}</b>'da kapanacak (${formatRemaining(end - Date.now())})` : 'süresiz'}</p>` : ''}
-        ${opt(null, '🌤️', 'Sezon yok', 'Normal görünüm · sezon vitrini kapalı')}
+        ${opt(null, '🌤️', 'Sezon yok', 'Normal görünüm')}
         ${Object.entries(SEASONS).map(([k, s]) => opt(k, s.icon, `${s.label} Sezonu`, s.desc)).join('')}
         <label class="flex items-center gap-2 text-[11px] text-slate-600 pt-1">
           <input type="checkbox" name="timed" ${end ? 'checked' : ''} class="rounded border-slate-300 text-sky-600" /> ⏳ Süreli (bu tarihte kendiliğinden kapansın)
@@ -886,21 +849,9 @@
           ${field('Bitiş Tarihi', `<input name="endDate" type="date" min="${localDateKey()}" value="${localDateKey(endDate)}" class="${INPUT_CLS} min-w-0" />`)}
           ${field('Saat', `<input name="endTime" type="time" value="${end ? `${pad(endDate.getHours())}:${pad(endDate.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
         </div>
-        <p class="text-[10px] text-slate-400 leading-relaxed">Kış kapanınca (elle ya da süre bitince) Kış Fırsatları indirimleri, kış paketleri, kış kuponları ve kullanılmamış kış hediye çekleri silinir. Önceki kiralamalar ve puanlar korunur.</p>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Sezon yalnızca görünümü değiştirir · indirimler, vitrinler ve kuponlar aynen sürer.</p>
         ${formFooter('Kaydet')}
       </form>`);
-  }
-
-  /* Sezon kapanırken silinecekler (yalnızca Kış'a özel kayıtlar) */
-  function seasonCloseOps(prev) {
-    if (prev !== 'winter') return [];
-    const unusedCheque = (c) => c.season === 'winter' && !c.usedAt && (!c.openedAt || !(c.cost > 0));
-    return [
-      ...winterDeals.map((d) => (bt) => bt.delete(col('winterDeals').doc(d.id))),
-      ...offers.filter((o) => o.season === 'winter').map((o) => (bt) => bt.delete(col('offers').doc(o.id))),
-      ...couponShop.filter((s) => s.season === 'winter').map((s) => (bt) => bt.delete(col('couponShop').doc(s.id))),
-      ...giftCheques.filter(unusedCheque).map((c) => (bt) => bt.delete(col('giftCheques').doc(c.id)))
-    ];
   }
 
   function handleSaveSeason(fd) {
@@ -915,47 +866,25 @@
       if (end.getTime() <= Date.now()) return toast('Bitiş anı geçmiş olamaz.', 'error');
       endsAt = Timestamp.fromDate(end);
     }
-    // Aynı sezon: yalnızca bitiş değişir (başlangıç ve kışın yeni kitapları korunur)
+    // Aynı sezon: yalnızca bitiş değişir
     const data = season === prev
-      ? { endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId, ...(season && !seasonDoc().startedAt ? { startedAt: Timestamp.now() } : {}) }
-      : { active: season, startedAt: season ? Timestamp.now() : null, endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId };
+      ? { endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId }
+      : { active: season, endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId };
     const msg = season === prev
       ? (season ? `${SEASONS[season].icon} Sezon süresi güncellendi${endsAt ? ` · ${formatDate(endsAt.toDate().toISOString(), true)}'da kapanacak` : ' · süresiz'}.` : 'Sezon zaten kapalı.')
       : season ? `${SEASONS[season].icon} ${SEASONS[season].label} sezonu açıldı!${endsAt ? ` · ${formatDate(endsAt.toDate().toISOString(), true)}'da kapanacak` : ''}` : '🌤️ Sezon kapatıldı.';
-    // Kışta Günün İndirimi yoktur: kış açılırken döngü duraklar, kış kapanınca kaldığı gruptan sürer (vitrin anahtarı açıksa)
-    const dealsOn = showcaseDoc().deals !== false;
-    const dealOps = [];
-    if (season === 'winter' && prev !== 'winter' && dealsOn) dealOps.push(dealsPauseOp());
-    if (prev === 'winter' && season !== 'winter' && dealsOn) { const op = dealsResumeOp(); if (op) dealOps.push(op); }
-    const write = (ops = []) => {
-      closeModal();
-      return run(commitOps([...ops, ...dealOps, (bt) => bt.set(col('settings').doc('season'), data, { merge: true })]), msg, season ? 'success' : 'info');
-    };
-    const ops = season !== prev ? seasonCloseOps(prev) : [];
-    if (!ops.length) return write();
-    // Kış kapanıyor: neyin silineceği söylenip onay istenir
-    const n = (arr) => arr.length;
-    const deals = n(winterDeals), packs = n(offers.filter((o) => o.season === 'winter'));
-    const shop = n(couponShop.filter((s) => s.season === 'winter'));
-    const chq = n(giftCheques.filter((c) => c.season === 'winter' && !c.usedAt && (!c.openedAt || !(c.cost > 0))));
-    openConfirm({
-      title: 'Kış sezonu kapatılsın mı?',
-      message: `Kalıcı olarak silinecek: ${[deals && `<b>${deals} kış indirimi</b>`, packs && `<b>${packs} kış paketi</b>`, shop && `<b>${shop} kış kuponu</b>`, chq && `<b>${chq} kullanılmamış kış çeki</b>`].filter(Boolean).join(', ')}.<br/>Sezon yeniden açılınca vitrin boş başlar. Önceki kiralamalar, puanlar ve puan çarpanı korunur.`,
-      confirmLabel: 'Kapat ve Sil',
-      onConfirm: () => write(ops)
-    });
+    closeModal();
+    run(col('settings').doc('season').set(data, { merge: true }), msg, season ? 'success' : 'info');
   }
 
-  /* Süreli sezon bittiyse (Admin istemcisi) kayıtları temizler ve sezonu kapatır · bir kez */
+  /* Süreli sezon bittiyse (Admin istemcisi) sezonu kapatır · bir kez */
   function expireSeason() {
     if (!isRealAdmin()) return;
     const d = seasonDoc();
     const end = seasonEndsMs();
     if (!SEASONS[d.active] || end == null || end > Date.now() || state.purgePending.has(`seasonexp:${end}`)) return;
     state.purgePending.add(`seasonexp:${end}`);
-    const resume = d.active === 'winter' && showcaseDoc().deals !== false ? dealsResumeOp() : null;
-    commitOps([...seasonCloseOps(d.active), ...(resume ? [resume] : []),
-      (bt) => bt.set(col('settings').doc('season'), { active: null, startedAt: null, endsAt: null, changedAt: isoAt(Date.now()), changedBy: 'auto' }, { merge: true })])
+    col('settings').doc('season').set({ active: null, endsAt: null, changedAt: isoAt(Date.now()), changedBy: 'auto' }, { merge: true })
       .then(() => toast(`${SEASONS[d.active].icon} ${SEASONS[d.active].label} sezonunun süresi doldu · sezon kapatıldı.`, 'info'))
       .catch((e) => { console.error(e); state.purgePending.delete(`seasonexp:${end}`); });
   }
