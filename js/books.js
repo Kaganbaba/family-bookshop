@@ -335,12 +335,17 @@
           return `
             <li class="flex items-center gap-2.5 p-2 rounded-xl ${live ? 'bg-amber-50 border border-amber-100' : 'bg-stone-50'}">
               <span class="min-w-0 flex-1">
-                <span class="block text-[11px] font-semibold text-slate-700">${formatDate(e.startAt, true)} → ${end ? formatDate(end.toISOString(), true) : '—'}</span>
+                <span class="block text-[11px] font-semibold text-slate-700">${formatDateTimeYear(e.startAt)} → ${end ? formatDateTimeYear(end) : '—'}</span>
                 <span class="block text-[10px] text-slate-400">${formatMoney(e.price)} · ${e.rentalDays || DEFAULT_RENTAL_DAYS} gün · ${n ? `${n} kez kiralandı` : 'kiralanmadı'}</span>
               </span>
-              ${live ? '<span class="text-[9px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full shrink-0">SERGİDE</span>' : ''}
+              ${live ? '<span class="text-[9px] font-extrabold text-amber-800 bg-amber-200 px-2 py-0.5 rounded-full shrink-0">SERGİDE</span>'
+                : `<button type="button" data-delete-exhibit="${e.id}" data-book="${b.id}" title="Bu sergi kaydını sil" aria-label="Bu sergi kaydını sil"
+                    class="w-7 h-7 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 flex items-center justify-center shrink-0 transition">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>`}
             </li>`;
         }).join('')}</ul>
+        ${list.filter((e) => !(b.exhibitId === e.id && isOnExhibit(b, now))).length > 1
+          ? `<button type="button" data-clear-exhibits="${b.id}" class="${BTN_SOFT} w-full !py-2 mt-2.5 !text-rose-500 !border-rose-100">${icon('trash', 'w-3.5 h-3.5')}Tüm Sergi Geçmişini Sil</button>`
+          : ''}
       </details>`;
   }
 
@@ -377,6 +382,9 @@
               ${museumChip(b)}
               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-800 text-amber-100">🏛️ Müze</span>
               ${exhibitStateChip(b)}
+              ${isExhibitable(b, now) && exhibitUntilMs(b) != null
+                ? `<span class="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title="Bu andan sonra sergilenemez">⏳ Son sergilenebilme: ${formatDateTimeYear(exhibitUntilMs(b))}</span>`
+                : ''}
             </div>
             <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
             <p class="text-[11px] text-stone-500 mt-1">${onExhibit

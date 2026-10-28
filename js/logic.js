@@ -715,10 +715,18 @@
 
   /* --- Müze Vitrini: Müze'deki kitap sergi süresince (bitiş anına kadar) Admin'in belirlediği fiyatla kiralanabilir ---
      Kitaba exhibitId / exhibitPrice / exhibitEndsAt yazılır (kural kiralamayı ve puanı bunlarla denetler) ·
-     her sergi museumExhibits'te kalır (sergi geçmişi) · Sergilenemez (exhibitable: false) kitap vitrine konamaz */
-  const isExhibitable = (b) => !!b?.museum && b.exhibitable !== false;
-  const exhibitEndMs = (b) => b?.exhibitEndsAt?.toMillis?.() ?? null;
-  const isOnExhibit = (b, now = Date.now()) => isExhibitable(b) && showcaseOn('museum') && !!b.exhibitId && exhibitEndMs(b) > now;
+     her sergi museumExhibits'te kalır (sergi geçmişi) · Sergilenemez (exhibitable: false) kitap vitrine konamaz ·
+     son sergilenebilme (exhibitUntil, o gün saat 10:00) gelince kitap Sergilenemez olur, süren sergi de o anda biter */
+  const EXHIBIT_UNTIL_HOUR = 10;
+  const exhibitUntilMs = (b) => b?.exhibitUntil?.toMillis?.() ?? null;
+  const exhibitUntilPassed = (b, now = Date.now()) => exhibitUntilMs(b) != null && exhibitUntilMs(b) <= now;
+  const isExhibitable = (b, now = Date.now()) => !!b?.museum && b.exhibitable !== false && !exhibitUntilPassed(b, now);
+  const exhibitEndMs = (b) => {
+    const end = b?.exhibitEndsAt?.toMillis?.() ?? null;
+    const until = exhibitUntilMs(b);
+    return end != null && until != null ? Math.min(end, until) : end;
+  };
+  const isOnExhibit = (b, now = Date.now()) => isExhibitable(b, now) && showcaseOn('museum') && !!b.exhibitId && exhibitEndMs(b) > now;
   const exhibitBooks = (now = Date.now()) => museumBooks.filter((b) => isOnExhibit(b, now)).sort((a, b) => exhibitEndMs(a) - exhibitEndMs(b));
   const exhibitKey = (now = Date.now()) => exhibitBooks(now).map((b) => b.id).join(',');
   const exhibitsOf = (bookId) => museumExhibits.filter((e) => e.bookId === Number(bookId))
@@ -728,21 +736,55 @@
   /* Sergiyi bitir: kitaptaki sergi alanları silinir, sergi kaydına bitiş anı yazılır (geçmişte kalır) */
   function endExhibitOps(b, endedAt = isoAt(Date.now())) {
     const ops = [(bt) => bt.update(bookRef(b.id), { exhibitId: FieldValue.delete(), exhibitPrice: FieldValue.delete(), exhibitEndsAt: FieldValue.delete() })];
-    if (b.exhibitId && museumExhibits.some((e) => e.id === b.exhibitId)) {
+    if (b.exhibitId && museumExhibits.some((e) => e.id === b.exhibitId && !e.endedAt)) {
       ops.push((bt) => bt.update(col('museumExhibits').doc(b.exhibitId), { endedAt }));
     }
     return ops;
   }
 
-  /* Süresi dolan sergiler: gerçek Admin açınca kitaptan kalkar, sergi kaydına bitiş anı yazılır (bir kez) */
+  /* Süresi dolan sergiler: siteyi açan herkes kitaptan kaldırır, sergi kaydına bitiş anı yazar (kural süre dolmuş mu denetler)
+     · kitap başına tek batch · reddedilirse bu oturumda yeniden denenmez */
   function expireExhibits() {
-    if (!isRealAdmin()) return;
+    if (!currentUser()) return;
     const now = Date.now();
     const due = museumBooks.filter((b) => b.exhibitId && (exhibitEndMs(b) ?? 0) <= now && !state.purgePending.has(`exhibit:${b.exhibitId}`));
-    if (!due.length) return;
-    due.forEach((b) => state.purgePending.add(`exhibit:${b.exhibitId}`));
-    commitOps(due.flatMap((b) => endExhibitOps(b, isoAt(exhibitEndMs(b) ?? now))))
-      .catch((e) => { console.error(e); due.forEach((b) => state.purgePending.delete(`exhibit:${b.exhibitId}`)); });
+    due.forEach((b) => {
+      state.purgePending.add(`exhibit:${b.exhibitId}`);
+      const ops = endExhibitOps(b, isoAt(exhibitEndMs(b) ?? now));
+      const batch = db.batch();
+      ops.forEach((op) => op(batch));
+      batch.commit().catch((e) => console.error(e));
+    });
+  }
+
+  /* Son sergilenebilme anı gelen kitaplar: siteyi açan ilk kişi (Admin olması gerekmez) kitabı Sergilenemez yapar,
+     süren sergisini bitirir ve Duyurular'a Bilgilendirme atar (yazar: tarihi ayarlayan Admin) · kitap başına tek batch,
+     kural bu üçünün birlikte ve yalnızca bir kez yazılmasına izin verir · expireExhibits'ten önce çalışır */
+  function expireExhibitUntil() {
+    if (!currentUser()) return;
+    const now = Date.now();
+    const due = museumBooks.filter((b) => b.exhibitable !== false && exhibitUntilPassed(b, now) && !state.purgePending.has(`until:${b.id}`));
+    due.forEach((b) => {
+      // başka bir kullanıcı aynı anda yazdıysa kural reddeder; bu oturumda yeniden denenmez
+      state.purgePending.add(`until:${b.id}`);
+      if (b.exhibitId) state.purgePending.add(`exhibit:${b.exhibitId}`);
+      const batch = db.batch();
+      batch.update(bookRef(b.id), {
+        exhibitable: false, exhibitUntil: FieldValue.delete(), exhibitUntilBy: FieldValue.delete(),
+        ...(b.exhibitId ? { exhibitId: FieldValue.delete(), exhibitPrice: FieldValue.delete(), exhibitEndsAt: FieldValue.delete() } : {})
+      });
+      if (b.exhibitId && museumExhibits.some((e) => e.id === b.exhibitId && !e.endedAt)) {
+        batch.update(col('museumExhibits').doc(b.exhibitId), { endedAt: isoAt(Math.min(exhibitEndMs(b) ?? now, exhibitUntilMs(b))) });
+      }
+      batch.set(col('announcements').doc(), {
+        type: 'news', category: 'Bilgilendirme',
+        title: `"${b.title}" artık sergilenemez 🏛️`,
+        body: `🏛️ Müzemizdeki "${b.title}" kitabının son sergilenebilme tarihi ${formatDateTimeYear(isoAt(exhibitUntilMs(b)))} itibarıyla doldu.\nKitap Müze'de kalmaya devam eder ama artık Müze Vitrini'nde sergilenmez.${b.exhibitId ? '\nSüren sergisi de sona erdi.' : ''}`,
+        bookId: null, museumBookId: b.id, authorId: b.exhibitUntilBy || state.currentUserId,
+        createdAt: isoAt(now), pinned: false, readBy: []
+      });
+      batch.commit().catch((e) => console.error(e));
+    });
   }
 
   /* Eski "Özel" (döneme özel) türü kaldırıldı: o türdeki kitaplar Müze'ye (Özel) taşınır, tür silinir · gerçek Admin açınca bir kez */

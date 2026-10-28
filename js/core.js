@@ -52,6 +52,8 @@
   const bookTypes = [];      // bookTypes/{id}  · order alanına göre sıralı
   const books = [];          // books/{id}      · id sayısal, belge adı String(id) · Müze'dekiler hariç
   /* books/{id} içinde museum: true olanlar · kitaplıkta kiralanamaz (museumType, museumAt) · exhibitable: false → asla sergilenemez
+     · exhibitUntil (Timestamp, seçilen gün 10:00) + exhibitUntilBy (ayarlayan Admin): son sergilenebilme anı ·
+       gelince siteyi açan ilk kişi (herkes) kitabı Sergilenemez yapar ve Bilgilendirme duyurusunu atar (kural denetler)
      Müze Vitrini'ndeyken (sergide) kitapta: exhibitId, exhibitPrice, exhibitEndsAt (Timestamp) · bu süre boyunca kiralanabilir ve puanlanabilir */
   const museumBooks = [];
   /* museumExhibits/{id} · sergi geçmişi: { bookId, price, rentalDays, startAt (ISO), endsAt (Timestamp), endedAt (ISO | null), createdBy } */
@@ -412,6 +414,10 @@
     new Date(iso).toLocaleDateString('tr-TR', withTime
       ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
       : { day: 'numeric', month: 'short', year: 'numeric' });
+
+  /* Yıl + saat (ör. "12 Kas 2029 10:00") · yıllar sonrasına uzanabilen tarihler için */
+  const formatDateTimeYear = (iso) =>
+    new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   const formatLongDate = (iso) =>
     new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });

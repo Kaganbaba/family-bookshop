@@ -212,14 +212,15 @@
   }
 
   /* --- 8.1.7 Özel Fırsatlar (eski adı Vitrin İndirimleri · gece mavisi + altın) · Admin ekler/siler --- */
-  /* Süresi biten özel fırsatlar: herkes için gizlenir, Admin açıksa Firestore'dan da silinir */
+  /* Süresi biten özel fırsatlar: herkes için gizlenir, siteyi açan herkes Firestore'dan da siler
+     (kural süre dolmuş mu denetler · reddedilirse bu oturumda yeniden denenmez) */
   function purgeExpiredVitrine(now = new Date()) {
-    if (!isAdmin()) return;
+    if (!currentUser()) return;
     discounts.filter((d) => d.endsMs != null && d.endsMs <= now.getTime()).forEach((d) => {
       const key = `vitrine:${d.id}`;
       if (state.purgePending.has(key)) return;
       state.purgePending.add(key);
-      col('discounts').doc(d.id).delete().catch((e) => { console.error(e); state.purgePending.delete(key); });
+      col('discounts').doc(d.id).delete().catch((e) => console.error(e));
     });
   }
   const vitrineEndText = (d, now = new Date()) => (d.endsMs == null ? 'Kaldırılana kadar geçerli'

@@ -9,15 +9,15 @@
   /* season damgalı mağaza kuponu kaldırılan Kış Fırsatları'ndan kalmıştır: geçersiz sayılır (kural da alımı reddeder) */
   const isShopActive = (s, now = Date.now()) => (s.endsMs == null || s.endsMs > now) && !s.season;
 
-  /* Süresi biten mağaza kuponları: herkes için gizlenir, Admin açıksa Firestore'dan da silinir
-     (önceden alınmış kuponlar etkilenmez) */
+  /* Süresi biten mağaza kuponları: herkes için gizlenir, siteyi açan herkes Firestore'dan da siler
+     (kural süre dolmuş mu denetler · önceden alınmış kuponlar etkilenmez · reddedilirse bu oturumda yeniden denenmez) */
   function purgeExpiredShop(now = Date.now()) {
-    if (!isAdmin()) return;
+    if (!currentUser()) return;
     couponShop.filter((s) => !isShopActive(s, now)).forEach((s) => {
       const key = `shop:${s.id}`;
       if (state.purgePending.has(key)) return;
       state.purgePending.add(key);
-      col('couponShop').doc(s.id).delete().catch((e) => { console.error(e); state.purgePending.delete(key); });
+      col('couponShop').doc(s.id).delete().catch((e) => console.error(e));
     });
   }
 
@@ -635,16 +635,17 @@
   const offerPurchaseCount = (o) => offerPurchases.filter((p) => p.offerId === o.id).length;
 
   /* Süresi biten teklifler vitrinden direkt silinir (kiralamalar ve istatistikler korunur).
-     Herkes için yerel listeden çıkarılır; Admin açıksa Firestore'dan da silinir. */
+     Herkes için yerel listeden çıkarılır; siteyi açan herkes Firestore'dan da siler (kural süre dolmuş mu denetler ·
+     reddedilirse bu oturumda yeniden denenmez). */
   function purgeExpiredOffers(now = new Date()) {
     const before = offers.length;
     for (let i = offers.length - 1; i >= 0; i--) {
       const o = offers[i];
       if (isOfferActive(o, now)) continue;
       offers.splice(i, 1);
-      if (isAdmin() && !state.purgePending.has(o.id)) {
+      if (currentUser() && !state.purgePending.has(o.id)) {
         state.purgePending.add(o.id);
-        col('offers').doc(o.id).delete().catch((e) => { console.error(e); state.purgePending.delete(o.id); });
+        col('offers').doc(o.id).delete().catch((e) => console.error(e));
       }
     }
     return offers.length !== before;

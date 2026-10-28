@@ -57,13 +57,29 @@ service cloud.firestore {
     function showcaseOn(key) {
       return !exists(path('settings', 'showcase')) || get(path('settings', 'showcase')).data.get(key, true) != false;
     }
-    // Müze Vitrini: Müze'deki kitap sergide mi (sergilenebilir, bitiş anı gelmemiş, vitrin açık)
-    // · sergi süresince kiralanabilir ve puanlanabilir (kitapta exhibitId / exhibitPrice / exhibitEndsAt)
+    // Müze Vitrini: Müze'deki kitap sergide mi (sergilenebilir, son sergilenebilme anı ve bitiş anı gelmemiş, vitrin açık)
+    // · sergi süresince kiralanabilir ve puanlanabilir (kitapta exhibitId / exhibitPrice / exhibitEndsAt · exhibitUntil)
     function onExhibit(b) {
       return b.get('museum', false) == true && b.get('exhibitable', true) != false
+        && (b.get('exhibitUntil', null) == null || request.time < b.exhibitUntil)
         && b.get('exhibitId', null) is string
         && b.get('exhibitEndsAt', null) is timestamp && request.time < b.exhibitEndsAt
         && showcaseOn('museum');
+    }
+    // Son sergilenebilme anı geçmiş Müze kitabı (exhibitUntil · bu batch'te kapanır: Sergilenemez, sergi alanları silinir)
+    function untilDue(b) {
+      return b.get('museum', false) == true && b.get('exhibitUntil', null) is timestamp && b.exhibitUntil <= request.time;
+    }
+    function untilClosed(a) {
+      return a.get('exhibitable', true) == false && !('exhibitUntil' in a) && !('exhibitUntilBy' in a)
+        && exhibitCleared(a);
+    }
+    // Sergi bitiş anı (exhibitEndsAt) geçmiş Müze kitabı · kapanınca sergi alanları silinir
+    function exhibitDue(b) {
+      return b.get('museum', false) == true && b.get('exhibitEndsAt', null) is timestamp && b.exhibitEndsAt <= request.time;
+    }
+    function exhibitCleared(a) {
+      return !('exhibitId' in a) && !('exhibitPrice' in a) && !('exhibitEndsAt' in a);
     }
     // Kuruş yuvarlaması toleranslı eşitlik (yüzdeyle hesaplanan fiyatlar)
     function nearC(a, b) { return math.abs(a - b) < 0.006; }
@@ -74,7 +90,10 @@ service cloud.firestore {
 
       // İlk girişte kendi profilini oluşturur: bakiye 0, rol 'member' (ana Kontrolcü 'admin')
       allow create: if signedIn() && userId == uid()
-        && request.resource.data.keys().hasOnly(['name', 'email', 'photoURL', 'role', 'balance', 'color', 'joinedAt', 'lastTx', 'lastTxType'])
+        && request.resource.data.keys().hasOnly(['name', 'email', 'photoURL', 'role', 'balance', 'color', 'joinedAt', 'lastTx', 'lastTxType', 'pointsEarned', 'pointsSpent'])
+        // puan defteri boş başlar (alan yoksa Admin kurar)
+        && request.resource.data.get('pointsEarned', 0) == 0
+        && request.resource.data.get('pointsSpent', 0) == 0
         && request.resource.data.name is string && request.resource.data.name.size() <= 60
         && request.resource.data.email == request.auth.token.email.lower()
         && request.resource.data.balance == 0
@@ -188,7 +207,20 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       // Kontrolcü her şeyi; kullanıcı yalnızca boştaki kitabı kendi yeni kiralamasıyla kilitler
       // ya da tarihi gelmiş planlı fiyat değişimini (Fiyat Logu) uygular
-      allow update: if isAdmin() || isLock() || isScheduledPrice();
+      allow update: if isAdmin() || isLock() || isScheduledPrice() || isUntilExpire() || isExhibitExpire();
+
+      // Sergi bitiş anı geldi: siteyi açan herkes sergi alanlarını kitaptan kaldırır (yalnızca bunlar değişir)
+      function isExhibitExpire() {
+        return signedIn() && exhibitDue(resource.data) && exhibitCleared(request.resource.data)
+          && changedKeys().hasOnly(['exhibitId', 'exhibitPrice', 'exhibitEndsAt']);
+      }
+
+      // Son sergilenebilme anı geldi: siteyi açan herkes kitabı Sergilenemez yapar (yalnızca sergi alanları değişir)
+      // · duyuru (untilNotice) ve sergi bitişi (untilEnded) aynı batch'te bu kapanışa bağlanır
+      function isUntilExpire() {
+        return signedIn() && untilDue(resource.data) && untilClosed(request.resource.data)
+          && changedKeys().hasOnly(['exhibitable', 'exhibitUntil', 'exhibitUntilBy', 'exhibitId', 'exhibitPrice', 'exhibitEndsAt']);
+      }
 
       // Planlı fiyat: logdaki yeni fiyat, logun geçerlilik anı geldiyse ve kitabın son
       // geçerli fiyat anından daha yeniyse uygulanır (eski log yeni fiyatı ezemez)
@@ -349,7 +381,24 @@ service cloud.firestore {
     // ---------- Duyurular ----------
     match /announcements/{annId} {
       allow read: if signedIn();
-      allow create, delete: if isAdmin();
+      allow create: if isAdmin() || untilNotice(request.resource.data);
+      allow delete: if isAdmin();
+
+      // Son sergilenebilme duyurusu (Bilgilendirme): kitap bu batch'te Sergilenemez yapılırken bir kez atılır ·
+      // yazar = tarihi ayarlayan Admin (eski kayıtlarda atan kişi)
+      function untilNotice(a) {
+        let bookPath = path('books', string(a.museumBookId));
+        let b = get(bookPath).data;
+        return signedIn()
+          && a.keys().hasOnly(['type', 'category', 'title', 'body', 'bookId', 'museumBookId', 'authorId', 'createdAt', 'pinned', 'readBy'])
+          && a.museumBookId is int
+          && a.type == 'news' && a.category == 'Bilgilendirme' && a.bookId == null
+          && a.pinned == false && a.readBy == [] && a.createdAt is string
+          && a.title == '"' + b.title + '" artık sergilenemez 🏛️'
+          && a.body is string && a.body.size() <= 600
+          && a.authorId == b.get('exhibitUntilBy', uid())
+          && untilDue(b) && untilClosed(getAfter(bookPath).data);
+      }
       // Kontrolcü düzenler; herkes yalnızca kendi uid'ini "okundu" listesine ekleyebilir
       allow update: if isAdmin() || (signedIn()
         && changedKeys().hasOnly(['readBy'])
@@ -368,17 +417,36 @@ service cloud.firestore {
     }
     match /offers/{offerId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin();
+      // süresi biten (ya da eski kış paketi) teklifi siteyi açan herkes siler
+      allow delete: if isAdmin() || (signedIn() && ('season' in resource.data
+        || (resource.data.get('endsAt', null) is timestamp && request.time >= resource.data.endsAt)));
     }
-    // Müze Vitrini sergi geçmişi · { bookId, price, rentalDays, startAt, endsAt, endedAt, createdBy } · yalnızca Admin yazar
+    // Müze Vitrini sergi geçmişi · { bookId, price, rentalDays, startAt, endsAt, endedAt, createdBy } · Admin yazar ve siler
+    // (tek tek ya da tümü) · sergi bitiş anı ya da son sergilenebilme anı gelince siteyi açan herkes,
+    // kitap aynı batch'te kapanırken süren sergiye yalnızca bitiş anı yazabilir
     match /museumExhibits/{exhibitId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || autoEnded();
+
+      function autoEnded() {
+        let bookPath = path('books', string(resource.data.bookId));
+        let b = get(bookPath).data;
+        let a = getAfter(bookPath).data;
+        return signedIn()
+          && changedKeys().hasOnly(['endedAt']) && resource.data.endedAt == null
+          && request.resource.data.endedAt is string
+          && b.get('exhibitId', null) == exhibitId
+          && ((untilDue(b) && untilClosed(a)) || (exhibitDue(b) && exhibitCleared(a)));
+      }
     }
     // Vitrin İndirimi · belge adı = kitap numarası · { bookId, name, rate (1–100, 100 = bedava), endsAt, createdAt, createdBy }
     match /discounts/{bookId} {
       allow read: if signedIn();
-      allow delete: if isAdmin();
+      // süresi biten özel fırsatı siteyi açan herkes siler
+      allow delete: if isAdmin() || (signedIn()
+        && resource.data.get('endsAt', null) is timestamp && request.time >= resource.data.endsAt);
       allow create, update: if isAdmin()
         && request.resource.data.rate is int
         && request.resource.data.rate >= 1 && request.resource.data.rate <= 100
@@ -446,8 +514,19 @@ service cloud.firestore {
         && get(path('books', string(request.resource.data.bookId))).data.get('museum', false) != true;
       allow update: if isAdmin()
         || (signedIn() && resource.data.userId == uid() && resource.data.status != 'pending'
-          && changedKeys().hasOnly(['userSeenAt']) && request.resource.data.userSeenAt is string);
+          && changedKeys().hasOnly(['userSeenAt']) && request.resource.data.userSeenAt is string)
+        || (signedIn() && resource.data.userId == uid() && refundAutoReject());
       allow delete: if isAdmin();
+
+      // Gün içinde onaylanmayan kendi talebi: Türkiye saatiyle gece 00:00 geçince sahibi "otomatik reddedildi" yazar
+      function refundAutoReject() {
+        let a = request.resource.data;
+        return resource.data.status == 'pending'
+          && request.time >= trDayEnd(isoToTs(resource.data.createdAt))
+          && changedKeys().hasOnly(['status', 'decidedAt', 'decidedBy', 'adminNote'])
+          && a.status == 'rejected' && a.decidedBy == 'auto' && a.decidedAt is string
+          && a.adminNote == 'Talep gün içinde onaylanmadığı için otomatik reddedildi.';
+      }
 
       function validRefund(f, r) {
         return f.keys().hasOnly(['userId', 'rentalId', 'bookId', 'amount', 'reason', 'createdAt', 'status', 'decidedAt', 'decidedBy', 'adminNote', 'userSeenAt'])
@@ -470,7 +549,9 @@ service cloud.firestore {
     // percent: %1–100 · amount: ₺ (0–10000] · bogo: value kitap (2–5), free tanesi bedava (1 … value-1, en ucuzlar)
     match /couponShop/{shopId} {
       allow read: if signedIn();
-      allow delete: if isAdmin();
+      // süresi biten (ya da eski kış) mağaza kuponunu siteyi açan herkes siler · alınmış kuponlar etkilenmez
+      allow delete: if isAdmin() || (signedIn() && ('season' in resource.data
+        || (resource.data.get('endsAt', null) is timestamp && request.time >= resource.data.endsAt)));
       allow create, update: if isAdmin() && validShop(request.resource.data);
 
       function validShop(s) {
@@ -602,6 +683,12 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if signedIn();
       allow write: if isAdmin();
+      // Süreli sezon bitti: siteyi açan herkes sezonu kapatır (yalnızca kapatma, başka ayar değişmez)
+      allow update: if signedIn() && settingId == 'season'
+        && resource.data.get('endsAt', null) is timestamp && resource.data.endsAt <= request.time
+        && changedKeys().hasOnly(['active', 'endsAt', 'changedAt', 'changedBy'])
+        && request.resource.data.active == null && request.resource.data.endsAt == null
+        && request.resource.data.changedBy == 'auto' && request.resource.data.changedAt is string;
     }
 
     // Diğer her şey kapalı

@@ -70,6 +70,8 @@
       if ((m = el('[data-add-exhibit]')))      return m.disabled ? null : openExhibitModal();
       if ((m = el('[data-edit-exhibit]')))     return openExhibitModal(m.dataset.editExhibit);
       if ((m = el('[data-end-exhibit]')))      return endExhibit(m.dataset.endExhibit);
+      if ((m = el('[data-clear-exhibits]')))   return clearExhibitHistory(m.dataset.clearExhibits);
+      if ((m = el('[data-delete-exhibit]')))   return deleteExhibitRecord(m.dataset.deleteExhibit, m.dataset.book);
       if ((m = el('[data-rent-museum]')))      return m.disabled ? null : rentMuseumBook(m.dataset.rentMuseum);
       if ((m = el('[data-remove-deal]')))      return removeFromDeals(m.dataset.removeDeal);
       if ((m = el('[data-add-vitrine]')))      return openVitrineModal();
@@ -258,6 +260,7 @@
       expireStaleRefunds();
       expireSeason();
       migrateSpecialToMuseum();
+      expireExhibitUntil();
       expireExhibits();
       renderProfile();
       renderCurrentPage();
@@ -358,7 +361,10 @@
       color: colorFor(user.uid),
       joinedAt: localDateKey(),
       lastTx: null,
-      lastTxType: null
+      lastTxType: null,
+      // yeni hesabın puan defteri boş başlar (Admin'in kurmasını beklemeden kupon alabilsin)
+      pointsEarned: 0,
+      pointsSpent: 0
     });
   }
 

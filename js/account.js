@@ -396,16 +396,18 @@
   const refundExpired = (f, now = new Date()) => f?.status === 'pending' && !sameLocalDay(f.createdAt, now);
   const refundStatus = (f) => (refundExpired(f) ? 'rejected' : f?.status);
   const REFUND_EXPIRED_NOTE = 'Talep gün içinde onaylanmadığı için otomatik reddedildi.';
-  /* Admin istemcisi: süresi geçen bekleyen talepleri kalıcı olarak reddeder */
+  /* Süresi geçen bekleyen talepleri kalıcı olarak reddeder · Admin hepsini, üye kendi talebini (kural gün bitişini denetler)
+     · reddedilirse bu oturumda yeniden denenmez */
   function expireStaleRefunds() {
-    if (!isRealAdmin()) return;
-    const stale = refunds.filter((f) => refundExpired(f) && !state.purgePending.has(`rfexp:${f.id}`));
+    if (!currentUser()) return;
+    const admin = isRealAdmin();
+    const stale = refunds.filter((f) => refundExpired(f) && (admin || f.userId === state.currentUserId) && !state.purgePending.has(`rfexp:${f.id}`));
     if (!stale.length) return;
     stale.forEach((f) => state.purgePending.add(`rfexp:${f.id}`));
     const now = isoAt(Date.now());
     commitOps(stale.map((f) => (bt) => bt.update(col('refunds').doc(f.id), {
-      status: 'rejected', decidedAt: now, decidedBy: state.currentUserId, adminNote: REFUND_EXPIRED_NOTE
-    }))).catch((e) => { console.error(e); stale.forEach((f) => state.purgePending.delete(`rfexp:${f.id}`)); });
+      status: 'rejected', decidedAt: now, decidedBy: admin ? state.currentUserId : 'auto', adminNote: REFUND_EXPIRED_NOTE
+    }))).catch((e) => console.error(e));
   }
   /* Neden iade edilemez? (boş = edilebilir) */
   function refundBlockReason(r, now = new Date()) {

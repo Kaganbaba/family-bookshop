@@ -851,16 +851,16 @@
     run(col('settings').doc('season').set(data, { merge: true }), msg, season ? 'success' : 'info');
   }
 
-  /* Süreli sezon bittiyse (Admin istemcisi) sezonu kapatır · bir kez */
+  /* Süreli sezon bittiyse siteyi açan herkes sezonu kapatır (kural süre dolmuş mu denetler) · bir kez */
   function expireSeason() {
-    if (!isRealAdmin()) return;
+    if (!currentUser()) return;
     const d = seasonDoc();
     const end = seasonEndsMs();
     if (!SEASONS[d.active] || end == null || end > Date.now() || state.purgePending.has(`seasonexp:${end}`)) return;
     state.purgePending.add(`seasonexp:${end}`);
-    col('settings').doc('season').set({ active: null, endsAt: null, changedAt: isoAt(Date.now()), changedBy: 'auto' }, { merge: true })
-      .then(() => toast(`${SEASONS[d.active].icon} ${SEASONS[d.active].label} sezonunun süresi doldu · sezon kapatıldı.`, 'info'))
-      .catch((e) => { console.error(e); state.purgePending.delete(`seasonexp:${end}`); });
+    col('settings').doc('season').update({ active: null, endsAt: null, changedAt: isoAt(Date.now()), changedBy: 'auto' })
+      .then(() => isRealAdmin() && toast(`${SEASONS[d.active].icon} ${SEASONS[d.active].label} sezonunun süresi doldu · sezon kapatıldı.`, 'info'))
+      .catch((e) => console.error(e));
   }
 
   /* --- Müze (kitap detayı → 🏛️) · kitap kitaplıktan kalkar, Müze'de bilgileriyle sergilenir, kiralanamaz --- */
@@ -928,7 +928,10 @@
     if (!fixed && !pickable.length) return toast('Sergilenebilir ve sergide olmayan Müze kitabı yok.', 'info');
     const b = fixed || pickable[0];
     const editing = !!fixed && isOnExhibit(fixed);
-    const end = editing ? new Date(exhibitEndMs(fixed)) : new Date(Date.now() + 7 * DAY_MS);
+    // Son sergilenebilme anı varsa sergi en geç o ana kadar sürer (varsayılan bitiş de oraya çekilir)
+    const untilMs = exhibitUntilMs(b);
+    const capped = !editing && untilMs != null && untilMs < Date.now() + 7 * DAY_MS;
+    const end = editing ? new Date(exhibitEndMs(fixed)) : new Date(capped ? untilMs : Date.now() + 7 * DAY_MS);
     const pad = (n) => String(n).padStart(2, '0');
     openModal(`
       ${modalHeader(editing ? 'Sergiyi Düzenle 🏛️' : 'Müze Vitrini\'nde Sergile 🏛️', 'Sergi süresince bu fiyatla kiralanabilir · bitince kitap Müze\'de kalır.', 'books', 'bg-amber-50 text-amber-700')}
@@ -949,9 +952,10 @@
           ${field('Kira Süresi (gün)', `<input name="rentalDays" type="number" min="1" max="90" step="1" required value="${b.rentalDays || DEFAULT_RENTAL_DAYS}" class="${INPUT_CLS}" />`)}
         </div>
         <div class="grid grid-cols-[1fr_auto] gap-3">
-          ${field('Sergi Bitişi', `<input name="endDate" type="date" required min="${localDateKey()}" value="${localDateKey(end)}" class="${INPUT_CLS} min-w-0" />`)}
-          ${field('Saat', `<input name="endTime" type="time" required value="${editing ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
+          ${field('Sergi Bitişi', `<input name="endDate" type="date" required min="${localDateKey()}" ${fixed && untilMs != null ? `max="${localDateKey(new Date(untilMs))}"` : ''} value="${localDateKey(end)}" class="${INPUT_CLS} min-w-0" />`)}
+          ${field('Saat', `<input name="endTime" type="time" required value="${editing || capped ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
         </div>
+        ${fixed && untilMs != null ? `<p class="text-[11px] text-amber-700 bg-amber-50 rounded-xl px-3 py-2">⏳ Son sergilenebilme: <b>${formatDateTimeYear(untilMs)}</b> · sergi bu anı geçemez.</p>` : ''}
         ${editing ? '' : announceCheckHTML('ex-announce', 'Duyuru')}
         ${formFooter(editing ? 'Değişiklikleri Kaydet' : 'Sergiye Koy')}
       </form>`);
@@ -971,6 +975,8 @@
     const end = dateFromKey(fd.endDate);
     end.setHours(...fd.endTime.split(':').map(Number), 0, 0);
     if (end.getTime() <= Date.now()) return toast('Sergi bitişi geçmiş olamaz.', 'error');
+    const untilMs = exhibitUntilMs(b);
+    if (untilMs != null && end.getTime() > untilMs) return toast(`Sergi bitişi son sergilenebilme anını (${formatDateTimeYear(untilMs)}) geçemez.`, 'error');
     const endsAt = Timestamp.fromDate(end);
     const editing = isOnExhibit(b);
     const batch = db.batch();
@@ -1011,6 +1017,45 @@
       onConfirm: () => {
         closeModal();
         run(commitOps(endExhibitOps(b)), `🏛️ "${b.title}" sergiden kaldırıldı.`, 'info');
+      }
+    });
+  }
+
+  /* Tek sergi kaydını sil (şu an süren sergi silinemez) · kiralamalar korunur */
+  function deleteExhibitRecord(exhibitId, bookId) {
+    if (!requireAdmin()) return;
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    const e = museumExhibits.find((x) => x.id === exhibitId);
+    if (!b || !e) return;
+    if (b.exhibitId === e.id && isOnExhibit(b)) return toast('Süren serginin kaydı silinemez · önce sergiden kaldır.', 'error');
+    const end = e.endedAt ? new Date(e.endedAt) : e.endsAt?.toDate?.() || null;
+    openConfirm({
+      title: 'Sergi kaydı silinsin mi?',
+      message: `"${escapeHTML(b.title)}" · <b>${formatDateTimeYear(e.startAt)} → ${end ? formatDateTimeYear(end) : '—'}</b> sergisi geçmişten silinir; geri alınamaz. Kiralama kayıtları ve puanlar etkilenmez.`,
+      confirmLabel: 'Kaydı Sil',
+      onConfirm: () => {
+        closeModal();
+        run(col('museumExhibits').doc(e.id).delete(), '🗑️ Sergi kaydı silindi.', 'info').then((ok) => ok && openMuseumModal(b.id));
+      }
+    });
+  }
+
+  /* Sergi geçmişini sil: kitabın tüm sergi kayıtları silinir (şu an süren serginin kaydı kalır) · kiralamalar korunur */
+  function clearExhibitHistory(bookId) {
+    if (!requireAdmin()) return;
+    const b = museumBooks.find((x) => x.id === Number(bookId));
+    if (!b) return;
+    const live = isOnExhibit(b) ? b.exhibitId : null;
+    const list = exhibitsOf(b.id).filter((e) => e.id !== live);
+    if (!list.length) return toast('Silinecek sergi kaydı yok.', 'info');
+    openConfirm({
+      title: 'Sergi geçmişi silinsin mi?',
+      message: `"${escapeHTML(b.title)}" kitabının <b>${list.length} sergi kaydı</b> tamamen silinir; geri alınamaz.${live ? ' Şu an süren sergi kaydı kalır.' : ''} Kiralama kayıtları ve puanlar etkilenmez.`,
+      confirmLabel: 'Geçmişi Sil',
+      onConfirm: () => {
+        closeModal();
+        run(commitOps(list.map((e) => (bt) => bt.delete(col('museumExhibits').doc(e.id)))), `🗑️ "${b.title}" sergi geçmişi silindi.`, 'info')
+          .then((ok) => ok && openMuseumModal(b.id));
       }
     });
   }
@@ -1061,6 +1106,8 @@
           <span class="text-xs text-slate-600 leading-relaxed"><b class="text-slate-700">🏛️ Sergilenebilir</b><br>
             <span class="text-[11px] text-slate-400">Kapalıysa kitap Müze'de kalır ama Müze Vitrini'ne asla konamaz${isOnExhibit(b) ? ' · şu anki sergisi de hemen biter' : ''}.</span></span>
         </label>
+        ${field('Son Sergilenebilme Tarihi', `<input name="exhibitUntil" type="date" min="${localDateKey()}" value="${isExhibitable(b) && exhibitUntilMs(b) != null ? localDateKey(new Date(exhibitUntilMs(b))) : ''}" class="${INPUT_CLS}" />`,
+          `Boşsa süresiz · o gün saat ${String(EXHIBIT_UNTIL_HOUR).padStart(2, '0')}:00'da kitap Sergilenemez olur, süren sergisi biter ve Duyurular'a Bilgilendirme düşer`)}
         ${formFooter('Değişiklikleri Kaydet')}
       </form>`);
   }
@@ -1079,6 +1126,10 @@
     const museumAt = !enteredKey ? FieldValue.delete()
       : b.museumAt && localDateKey(new Date(b.museumAt)) === enteredKey ? b.museumAt
         : isoAt(dateFromKey(enteredKey).setHours(12, 0, 0, 0));
+    // Son sergilenebilme: seçilen gün saat 10:00 · geçmiş olamaz · Sergilenemez ya da boşsa kayıttan silinir
+    const exhibitable = fd.exhibitable === 'on';
+    const untilMs = exhibitable && isDateKey(fd.exhibitUntil) ? dateFromKey(fd.exhibitUntil).setHours(EXHIBIT_UNTIL_HOUR, 0, 0, 0) : null;
+    if (untilMs != null && untilMs <= Date.now()) return toast(`Son sergilenebilme anı (saat ${String(EXHIBIT_UNTIL_HOUR).padStart(2, '0')}:00) geçmiş olamaz.`, 'error');
     const data = {
       title,
       museumAt,
@@ -1093,7 +1144,11 @@
       period: (fd.period || '').trim() || FieldValue.delete(),
       description: (fd.description || '').trim(),
       cover: state.bookDraftCover || '',
-      exhibitable: fd.exhibitable === 'on'
+      exhibitable,
+      exhibitUntil: untilMs != null ? Timestamp.fromMillis(untilMs) : FieldValue.delete(),
+      // otomatik duyuru bu Admin adına atılır · tarih değişmediyse önceki ayarlayan korunur
+      exhibitUntilBy: untilMs == null ? FieldValue.delete()
+        : untilMs === exhibitUntilMs(b) && b.exhibitUntilBy ? b.exhibitUntilBy : state.currentUserId
     };
     // Sergilenemez yapılırsa süren sergi hemen biter
     const ops = [(bt) => bt.update(bookRef(b.id), data), ...(!data.exhibitable && b.exhibitId ? endExhibitOps(b) : [])];
