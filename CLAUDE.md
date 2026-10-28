@@ -11,6 +11,12 @@
 - `js/` dosyalarındaki veritabanı sorgularının (okuma, yazma, batch işlemleri, alan adları) `firestore.rules` güvenlik kurallarıyla her zaman birbiriyle tam uyumlu olduğunu kontrol et. Yazmaların çoğu `js/logic.js` (bölüm 5) içinde, canlı okumalar (`SYNC`) `js/app.js` içinde.
 - Siteye girebilen e-posta listesi iki yerde sabit yazılı ve birebir aynı olmalı: `js/core.js` → `ALLOWED_EMAILS`, `firestore.rules` → `allowedEmails()`. Birini değiştirirken diğerini de değiştir ve kural deploy'unu hatırlat.
 
+## Admin de kullanıcıdır
+
+- Admin aynı zamanda normal bir kullanıcıdır: üyelerin yapabildiği her şeyi Admin de yapabilir. Üye Görünümü (`state.memberView`) açıkken site tam olarak bir üyede göründüğü gibi görünmelidir.
+- Yalnızca **yönetim işleri** (ekleme, düzenleme, silme, ayarlar) Admin'e özeldir. Bunun dışındaki normal durumlar Admin ve kullanıcılar için eşittir.
+- Zamana bağlı otomatik işler (bir şeyin bitmesi, süresinin dolması, temizlenmesi, otomatik duyuru) **siteyi açan her kullanıcıyla** çalışmalıdır, yalnızca Admin açınca değil. Bunları `isRealAdmin()`/`isAdmin()` ile değil `currentUser()` ile koşula bağla. `firestore.rules`'a da yalnızca süre dolduktan sonra (sunucu saatiyle) ve yalnızca kapanış alanları değişiyorsa izin veren dar bir kural ekle.
+
 ## Dosya haritası
 
 Derleme adımı yok. Tüm JS dosyaları **normal (modül olmayan) `<script defer>`** dosyalarıdır, `import`/`export` kullanılmaz. En üst seviyedeki `const`/`let`/`function` tanımları global olduğu için dosyalar birbirinin değişken ve fonksiyonlarını doğrudan kullanır. Bölüm numaraları (0–21) kod içindeki `/* ===== N) BAŞLIK ===== */` başlıklarıdır.
