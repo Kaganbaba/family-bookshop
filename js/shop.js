@@ -176,6 +176,7 @@
             <p class="text-xs font-semibold text-white/85">Harcanabilir puanın ⭐</p>
             <p class="text-4xl sm:text-5xl font-black leading-none mt-1.5 tabular-nums">${formatPoints(pts.available)}</p>
             <p class="text-[11px] text-white/85 mt-2">Kazanılan ${formatPoints(pts.earned)} · Kupona harcanan ${formatPoints(pts.spent)}</p>
+            ${pts.available < 0 ? `<p class="text-[11px] font-semibold mt-1.5 bg-white/20 rounded-lg px-2 py-1 inline-block">Puanın eksiye düştü · kazandığın puanlar önce bu açığı kapatır</p>` : ''}
           </div>
           <div class="text-[11px] leading-relaxed bg-white/15 backdrop-blur rounded-2xl px-3.5 py-2.5 sm:max-w-xs">
             İndirimli her kiralamada kazandığın her <b>1 ₺ = 1 puan</b>. Puanlarınla kupon al, ${COUPON_DAYS} gün içinde
@@ -771,8 +772,10 @@
     if (!bs.length || bs.length < o.items.length) return { ok: false, reason: 'Paketteki kitaplardan biri artık kitaplıkta yok.' };
     const notRentable = bs.find((b) => !isRentableStatus(b) || !hasPrice(b));
     if (notRentable) return { ok: false, reason: `"${notRentable.title}" şu an kiralanamaz (${statusView(notRentable).label}).` };
-    const rented = bs.find((b) => isBookRented(b) || isBookLocked(b));
-    if (rented) return { ok: false, reason: `"${rented.title}" şu an kirada.` };
+    const rented = bs.filter((b) => isBookRented(b) || isBookLocked(b));
+    if (rented.length) return { ok: false, reason: rented.length === bs.length && bs.length > 1
+      ? `Paketteki ${bs.length} kitabın hepsi şu an kirada.`
+      : `${rented.map((b) => `"${b.title}"`).join(', ')} şu an kirada.` };
     if (user.balance < offerPrice(o)) return { ok: false, reason: `Yetersiz bakiye. ${formatMoney(offerPrice(o) - user.balance)} eksik.` };
     return { ok: true };
   }

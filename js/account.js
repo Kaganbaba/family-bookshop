@@ -673,7 +673,7 @@
             { label: 'Bakiye', value: formatMoney(u.balance), tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
             { label: 'Aktif Kiralık', value: `${activeCount} kitap`, tone: 'text-brand-700', bg: 'bg-brand-50/70' },
             { label: 'Toplam Harcama', value: formatMoney(s.spent), tone: 'text-slate-800', bg: 'bg-slate-50' },
-            { label: 'Puan ⭐', value: formatPoints(s.points.available), tone: 'text-amber-600', bg: 'bg-amber-50/70' }
+            { label: 'Puan ⭐', value: formatPoints(s.points.available), tone: s.points.available < 0 ? 'text-rose-500' : 'text-amber-600', bg: 'bg-amber-50/70' }
           ].map((t) => `
             <div class="rounded-2xl ${t.bg} px-3 py-3">
               <p class="text-[10px] text-slate-400 font-medium">${t.label}</p>

@@ -894,6 +894,7 @@
 
   /* Puan = indirimlerden kazanılan TL (1 ₺ = 1 puan). Kuponla yapılan indirim puan kazandırmaz.
      Harcanabilir puan = kazanılan − alınan kuponların bedeli (süresi dolan kuponun bedeli geri dönmez).
+     Eksiye düşebilir: Admin puan kazandıran kaydı silip harcanan kupon kalırsa; yeni kazanç önce açığı kapatır.
      Puan defteri: users/{id}.pointsEarned + pointsSpent · kural kupon alımında yeterliliği bununla denetler.
      • Kazanma: indirimli kiralama / paket ödemesiyle aynı batch'te artar (kural kazancı doğrular).
      • Harcama: kupon alımıyla aynı batch'te artar (kural: harcanan ≤ kazanılan).
@@ -917,7 +918,7 @@
   function userPoints(userId) {
     const u = getUser(userId);
     const p = hasLedger(u) ? { earned: u.pointsEarned, spent: u.pointsSpent } : computePoints(userId);
-    return { earned: round2(p.earned), spent: round2(p.spent), available: Math.max(0, round2(p.earned - p.spent)) };
+    return { earned: round2(p.earned), spent: round2(p.spent), available: round2(p.earned - p.spent) };
   }
   /* Admin: defteri kayıtlarla eşitleyen yazmalar (yalnızca farklı olanlar) */
   function pointsSyncOps(userIds, ex = {}) {

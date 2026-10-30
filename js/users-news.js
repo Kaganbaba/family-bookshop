@@ -407,7 +407,7 @@
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="text-[11px] font-semibold text-amber-700">${self ? 'Puanın' : 'Puanı'} ⭐</p>
-              <p class="text-2xl font-black text-amber-600 mt-0.5">${formatPoints(s.points.available)}</p>
+              <p class="text-2xl font-black ${s.points.available < 0 ? 'text-rose-500' : 'text-amber-600'} mt-0.5">${formatPoints(s.points.available)}</p>
             </div>
             ${self ? `<a href="#gifts" class="${BTN_SOFT} !py-1.5 shrink-0">🎟️ Hediyelerim</a>` : ''}
           </div>
@@ -415,7 +415,7 @@
             <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-emerald-600">Kazanılan: ${formatPoints(s.points.earned)}</span>
             <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Kupona harcanan: ${formatPoints(s.points.spent)}</span>
           </div>
-          <p class="text-[10px] text-amber-700/70 mt-2">İndirimlerden kazanılan her 1 ₺ = 1 puan · kuponlu kiralamalar puan kazandırmaz</p>
+          <p class="text-[10px] text-amber-700/70 mt-2">İndirimlerden kazanılan her 1 ₺ = 1 puan · kuponlu kiralamalar puan kazandırmaz${s.points.available < 0 ? ' · puan eksiye düştü: yeni kazanç önce açığı kapatır' : ''}</p>
         </div>
 
         <div>

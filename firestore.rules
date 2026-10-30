@@ -113,7 +113,8 @@ service cloud.firestore {
 
       // Admin her şeyi; kullanıcı yalnızca kiralama ödemesi (bakiye düşüşü + lastTx [+ kazanılan puan]),
       // kupon alımı (harcanan puan) veya Profilim'den kendi adını değiştirme
-      allow update: if isAdmin() || (userId == uid() && (isPayment() || isCouponBuy() || isChequeOpen() || isRename() || isLogin() || isGiftBalance()));
+      // (önce kullanıcı yolu: batch'teki belge okuma sınırı (20) için Admin'de de gereksiz me() okuması yapılmaz)
+      allow update: if (userId == uid() && (isPayment() || isCouponBuy() || isChequeOpen() || isRename() || isLogin() || isGiftBalance())) || isAdmin();
 
       // Hediye Kutusu bakiye ödülü: bakiye, aynı batch'te oluşturulan kendi alım kaydındaki tutar kadar artar
       function isGiftBalance() {
@@ -232,7 +233,8 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       // Kontrolcü her şeyi; kullanıcı yalnızca boştaki kitabı kendi yeni kiralamasıyla kilitler
       // ya da tarihi gelmiş planlı fiyat değişimini (Fiyat Logu) uygular
-      allow update: if isAdmin() || isLock() || isScheduledPrice() || isUntilExpire() || isExhibitExpire();
+      // (önce kilit: paket kiralamasında batch'teki belge okuma sınırı (20) için me() okuması yapılmaz)
+      allow update: if isLock() || isAdmin() || isScheduledPrice() || isUntilExpire() || isExhibitExpire();
 
       // Sergi bitiş anı geldi: siteyi açan herkes sergi alanlarını kitaptan kaldırır (yalnızca bunlar değişir)
       function isExhibitExpire() {
@@ -263,10 +265,10 @@ service cloud.firestore {
           && (resource.data.get('priceEffectiveAt', null) == null || log.effectiveAt > resource.data.priceEffectiveAt);
       }
 
+      // Kiralama yetkisini (canRent) kilidin bağlandığı yeni kiralamanın / paket satın alımının kuralı denetler
       function isLock() {
         let after = request.resource.data;
-        return canRent()
-          && changedKeys().hasOnly(['lockUntil', 'lockBy', 'lockRental'])
+        return changedKeys().hasOnly(['lockUntil', 'lockBy', 'lockRental'])
           // yalnızca "Kiralık" (durumu olmayan eski kayıtlar = Kiralık) kitap kiralanabilir ·
           // Müze'deki kitap yalnızca Müze Vitrini'nde sergideyken
           && ((resource.data.get('status', 'kiralik') == 'kiralik' && resource.data.get('museum', false) != true)
@@ -285,7 +287,7 @@ service cloud.firestore {
     // ---------- Kiralamalar ----------
     match /rentals/{rentalId} {
       allow read: if signedIn();
-      allow create: if canRent() && validRental();
+      allow create: if packageRental(request.resource.data) || (canRent() && validRental());
       allow update, delete: if isAdmin();
 
       function validRental() {
@@ -304,7 +306,7 @@ service cloud.firestore {
           && getAfter(bookPath).data.lockBy == uid()
           // puan çarpanı alanı yazılamaz (eski Kış Fırsatı kayıtlarında kalmıştır)
           && !('pointsMult' in r)
-          && (singleRental(r) || packageRental(r) || couponRental(r));
+          && (singleRental(r) || couponRental(r));
       }
       // Tekli: ödeme kullanıcı belgesinde; indirim standart (en fazla %50), özel fırsat, hediye çeki ya da Müze Vitrini
       function singleRental(r) {
@@ -347,7 +349,7 @@ service cloud.firestore {
           && a.rentalIds is list && rentalId in a.rentalIds
           && r.bookId in a.bookIds
           && getAfter(path('users', uid())).data.lastTx == r.couponId
-          && ((t == 'percent' && a.rentalIds.size() == 1 && r.price >= r.listPrice * (100 - v) / 100 - 0.01)
+          && ((t == 'percent' && a.rentalIds.size() == 1 && r.price >= r.listPrice * (100 - v) / 100.0 - 0.01)
             || (t == 'amount' && a.rentalIds.size() == 1 && r.price >= r.listPrice - v - 0.01)
             // Al-Öde: bedava seçilenler (en ucuzlar) 0, diğerleri tam fiyat
             || (t == 'bogo' && a.rentalIds.size() == v
@@ -364,7 +366,7 @@ service cloud.firestore {
       function winterDealOk(r, d, b, s) {
         return winterTheme(b) && d.rate is int && d.rate > 0 && r.discount == d.rate
           && (!(b.get('addedAt', null) is string) || isoToTs(b.addedAt) < isoToTs(s.get('startedAt', s.get('changedAt', '1970-01-01T00:00:00.000Z'))))
-          && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
+          && r.price >= r.listPrice * (100 - d.rate) / 100.0 - 0.01;
       }
       // Günün İndirimi / Yeni Kitap: en fazla %50 · Vitrin Ayarları'nda kapalı vitrinin indirimi kullanılamaz ·
       // kış sezonunda Günün İndirimi yok, Kış Sezonu temalı kitaba Yeni Kitap indirimi yok
@@ -382,14 +384,21 @@ service cloud.firestore {
         let d = get(path('discounts', string(r.bookId))).data;
         return showcaseOn('vitrine') && !winterOn() && d.rate is int && r.discount == d.rate
           && (!('endsAt' in d) || request.time < d.endsAt)
-          && r.price >= r.listPrice * (100 - d.rate) / 100 - 0.01;
+          && r.price >= r.listPrice * (100 - d.rate) / 100.0 - 0.01;
       }
-      // Paket: aynı batch'teki satın alıma ait olmalı
+      // Paket: aynı batch'te oluşturulan (son 10 dk) kendi satın alımına ait olmalı · tek belge okuması:
+      // kiralama yetkisini, kitap fiyatlarını ve kitapların bu kullanıcıya kilitlendiğini satın alım kuralı denetler
+      // (3 kitaplık paket batch'i Firestore'un 20 belge okuması sınırını aşmasın)
       function packageRental(r) {
-        let p = getAfter(path('offerPurchases', r.purchaseId)).data;
-        return r.purchaseId is string && r.discountSource == 'offer'
-          && p.userId == uid() && p.offerId == r.offerId
-          && r.bookId in p.bookIds;
+        return r.get('purchaseId', null) is string && r.get('discountSource', null) == 'offer'
+          && r.userId == uid() && r.bookId is int
+          && r.listPrice is number && r.price is number && r.price >= 0 && r.price <= r.listPrice + 0.001
+          && r.returnedAt == null && !('pointsMult' in r)
+          && packageOf(r, getAfter(path('offerPurchases', r.purchaseId)).data);
+      }
+      function packageOf(r, p) {
+        return p.userId == uid() && p.offerId == r.offerId && r.bookId in p.bookIds
+          && isoToTs(p.purchasedAt) > request.time - duration.value(10, 'm');
       }
     }
 
@@ -402,22 +411,37 @@ service cloud.firestore {
       function validPurchase() {
         let p = request.resource.data;
         let offer = get(path('offers', p.offerId)).data;
+        // En fazla 3 kitap (özel teklif üst sınırı) · her kitap bir kez okunur (batch'teki belge okuma sınırı)
+        let b0 = packageBook(p.bookIds, 0);
+        let b1 = packageBook(p.bookIds, 1);
+        let b2 = packageBook(p.bookIds, 2);
+        let total = bookPrice(b0) + bookPrice(b1) + bookPrice(b2);
         return p.userId == uid()
           // yüzdeli paket: fiyat = güncel kitap fiyatları toplamı × (100 − yüzde) / 100 · eski paket: kayıtlı fiyat
           && (offer.get('rate', null) is int
-            ? nearC(p.price, packagePriceSum(p.bookIds) * (100 - offer.rate) / 100)
+            ? nearC(p.price, total * (100 - offer.rate) / 100.0)
             : p.price == offer.price)
           && p.bookIds == offer.bookIds
           && request.time <= offer.endsAt
           // puan çarpanı alanı yazılamaz (eski kış paketi kayıtlarında kalmıştır)
           && !('pointsMult' in p)
           // normal toplam = paketteki kitapların güncel fiyatları toplamı (puan kazancı buna göre)
-          && p.normalTotal is number && near(p.normalTotal, packagePriceSum(p.bookIds))
+          && p.normalTotal is number && near(p.normalTotal, total)
+          // şimdi oluşturuluyor (paket kiralamaları buna 10 dk içinde bağlanabilir)
+          && p.purchasedAt is string && p.purchasedAt.size() == 24
+          && isoToTs(p.purchasedAt) > request.time - duration.value(10, 'm')
+          && isoToTs(p.purchasedAt) < request.time + duration.value(10, 'm')
+          // paketteki her kitap bu batch'te bu kullanıcıya kilitlenir (books → isLock kitabın boşta olduğunu denetler)
+          && lockedByMe(b0) && lockedByMe(b1) && lockedByMe(b2)
           && getAfter(path('users', uid())).data.lastTx == purchaseId;
       }
-      // En fazla 3 kitap (özel teklif üst sınırı)
-      function packageBookPrice(ids, i) { return ids.size() > i ? get(path('books', string(ids[i]))).data.price : 0; }
-      function packagePriceSum(ids) { return packageBookPrice(ids, 0) + packageBookPrice(ids, 1) + packageBookPrice(ids, 2); }
+      function packageBook(ids, i) { return ids.size() > i ? getAfter(path('books', string(ids[i]))).data : null; }
+      function bookPrice(b) { return b == null ? 0 : b.price; }
+      function lockedByMe(b) {
+        return b == null || (b.get('museum', false) != true
+          && b.get('lockBy', null) == uid() && b.get('lockRental', null) is string
+          && b.get('lockUntil', null) is timestamp && b.lockUntil > request.time);
+      }
     }
 
     // ---------- Duyurular ----------
