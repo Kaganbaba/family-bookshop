@@ -121,6 +121,12 @@
       return;
     }
 
+    // Vitrin görünümü (Liste / Vitrin geçişi)
+    if (state.bookView === 'slider') {
+      $('#booksContent').innerHTML = tabBar + filterBar + bookSliderHTML(list, rentableCount, now);
+      return layoutBookStage();
+    }
+
     const nowDate = new Date(now);
     const dealIds = getDailyDeals(nowDate).ids;
     const rows = list.map((b) => {
@@ -178,10 +184,191 @@
       <div class="bg-white rounded-2xl shadow-soft overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-400">
           <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${rentableCount} kiralık</span></span>
-          <span class="hidden sm:inline">Sıralama: Planlanıyor · Yakında · Çıkış tarihi (yeni → eski)</span>
+          ${bookViewToggleHTML()}
         </div>
         <ul class="divide-y divide-slate-100">${rows}</ul>
       </div>`;
+  }
+
+  /* --- 9.0.1 Liste / Vitrin geçişi (seçim bu tarayıcıda hatırlanır) --- */
+  function bookViewToggleHTML() {
+    const btn = (view, label) => {
+      const active = (state.bookView === 'slider') === (view === 'slider');
+      return `<button type="button" data-book-view="${view}" aria-pressed="${active}"
+        class="px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${active ? 'bg-gradient-to-r from-brand-500 to-brand-700 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600'}">${label}</button>`;
+    };
+    return `<span class="inline-flex gap-0.5 p-0.5 rounded-xl bg-slate-100">${btn('list', '☰ Liste')}${btn('slider', '🖼️ Vitrin')}</span>`;
+  }
+  function setBookView(view) {
+    state.bookView = view === 'slider' ? 'slider' : 'list';
+    try { localStorage.setItem('fb.bookView', state.bookView); } catch { /* gizli sekme: yalnızca bu oturum */ }
+    renderCurrentPage();
+  }
+
+  /* --- 9.0.2 Kaydırmalı kitap vitrini: ortada tek kitap, yanlarda komşular ---
+     Sekme / filtre değişse ya da sayfa canlı güncellense de ortadaki kitap korunur */
+  function bookSliderHTML(list, rentableCount, now) {
+    state.bookSlideIds = list.map((b) => b.id);
+    const cur = Math.max(0, state.bookSlideIds.indexOf(state.bookSlideId));
+    state.bookSlideId = list[cur].id;
+
+    const nowDate = new Date(now);
+    const dealIds = getDailyDeals(nowDate).ids;
+    const slides = list.map((b, i) => {
+      const fresh = isNewBook(b, nowDate);
+      const eff = getEffectiveDiscount(b, nowDate, dealIds);
+      // Kış sezonunda kış temalı kitap: karlı, buz mavisi desenli kart
+      const snowy = winterOn() && hasWinterTheme(b);
+      const series = Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : '';
+      return `
+        <div data-slide="${i}" data-ghost="${snowy ? 'is-winter' : fresh ? 'is-new' : ''}" role="group" aria-roledescription="kitap" aria-label="${i + 1} / ${list.length}: ${escapeHTML(b.title)}"
+          class="book-slide absolute left-1/2 top-0 w-[248px] sm:w-[290px]" style="${bookSlideStyle(i - cur)}">
+          <div class="relative overflow-hidden rounded-3xl shadow-soft-lg px-5 pt-6 pb-5 flex flex-col items-center text-center ${snowy
+            ? 'winter-row ring-2 ring-sky-300'
+            : fresh ? 'bg-gradient-to-b from-amber-50 via-yellow-50/70 to-white ring-2 ring-amber-300' : 'bg-white ring-1 ring-slate-100'}">
+            ${snowy ? '<span class="winter-drift absolute right-4 top-2 text-sky-300/80 text-base pointer-events-none select-none" aria-hidden="true">❄</span>' : ''}
+            <div class="relative w-36 h-52 sm:w-44 sm:h-64 shrink-0">
+              ${coverHTML(b, 'fill')}
+              ${snowy ? '<span class="absolute -top-2 -left-2 text-base leading-none drop-shadow-sm" aria-hidden="true">❄️</span>' : ''}
+              ${ratingBadgeHTML(b.id, 'absolute -bottom-2 -right-2 text-[11px]')}
+              ${fresh ? `
+                <span class="twinkle absolute -top-2 -left-2 text-amber-400 text-base">✦</span>
+                <span class="twinkle twinkle-d1 absolute -bottom-1.5 -left-2 text-yellow-400 text-xs">✦</span>` : ''}
+              ${eff?.rate ? `<span class="absolute -top-2 -right-2 text-[11px] font-extrabold text-white bg-gradient-to-r ${eff.source === 'new' ? 'from-amber-400 to-yellow-500' : 'from-rose-500 to-orange-400'} px-2 py-1 rounded-xl shadow-soft">%${eff.rate}</span>` : ''}
+            </div>
+            <p class="mt-4 flex items-center justify-center gap-1.5 max-w-full">
+              <span class="text-sm sm:text-base font-bold text-slate-800 line-clamp-2 leading-snug">${escapeHTML(b.title)}</span>
+              ${fresh ? '<span class="shrink-0 text-[9px] font-extrabold text-white bg-gradient-to-r from-amber-400 to-yellow-500 px-1.5 py-0.5 rounded-full shadow-soft">★ YENİ</span>' : ''}
+            </p>
+            ${themeChipsHTML(b, 'justify-center mt-1.5')}
+            <p class="flex items-center justify-center gap-1 text-[11px] text-slate-400 mt-1.5 flex-wrap">${series}${icon('calendar', 'w-3 h-3')}${releasedAgo(b.releaseDate)}</p>
+            ${fresh ? `<p class="text-[10px] text-amber-600 font-semibold mt-1">%${NEW_BOOK_DISCOUNT.rate} yeni kitap indirimi · ${formatRemaining(newDiscountLeftMs(b, nowDate))}</p>` : ''}
+            <div class="mt-3 flex items-center justify-center gap-3 flex-wrap">
+              ${priceTagHTML(b, eff)}
+              ${statusChipHTML(b, now)}
+            </div>
+            <span class="book-slide-cta mt-4 w-full py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-brand-500 to-brand-700 text-white shadow-soft">Kitabı İncele</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    const navBtn = (dir) => `
+      <button type="button" data-book-nav="${dir}" aria-label="${dir < 0 ? 'Önceki kitap' : 'Sonraki kitap'}"
+        class="absolute top-1/2 -translate-y-1/2 ${dir < 0 ? 'left-1 sm:left-4' : 'right-1 sm:right-4'} z-[200] w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/90 backdrop-blur text-brand-600 shadow-soft-lg flex items-center justify-center hover:bg-white hover:scale-105 transition disabled:opacity-30 disabled:pointer-events-none">
+        ${icon('chevron', `w-5 h-5 ${dir < 0 ? 'rotate-180' : ''}`)}
+      </button>`;
+    // Az kitapta noktalar, çokta ilerleme çubuğu
+    const dots = list.length <= 15
+      ? `<div class="flex items-center justify-center gap-1.5">${list.map((b, i) => `<button type="button" data-book-goto="${i}" aria-label="${i + 1}. kitap" class="book-dot h-1.5 rounded-full transition-all"></button>`).join('')}</div>`
+      : '<div class="w-40 h-1.5 rounded-full bg-slate-200 overflow-hidden mx-auto"><span id="bookSlideBar" class="block h-full rounded-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all"></span></div>';
+
+    return `
+      <div class="relative bg-white rounded-2xl shadow-soft px-4 sm:px-5 py-3 mb-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+        <span><b class="text-slate-700">${list.length}</b> kitap · <span class="text-emerald-600 font-semibold">${rentableCount} kiralık</span></span>
+        <!-- Ortada: ortadaki kitabın şeffaf, eğik, parıldayan adı (listedeki gibi · tablet/masaüstü) -->
+        <span class="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 max-w-[44%] pointer-events-none" aria-hidden="true">
+          <span id="bookGhostTitle" class="ghost-title block truncate text-center text-xl lg:text-2xl px-3 select-none"></span>
+        </span>
+        ${bookViewToggleHTML()}
+      </div>
+      <div id="bookStage" class="book-stage relative overflow-hidden select-none -mx-4 sm:mx-0 py-4" aria-roledescription="kaydırmalı vitrin" aria-label="Kitaplar">
+        <div class="book-track relative">${slides}</div>
+        ${navBtn(-1)}${navBtn(1)}
+      </div>
+      <div class="mt-3 space-y-2">
+        <p class="text-center text-xs text-slate-500"><b id="bookSlideCounter" class="text-slate-700">${cur + 1}</b> / ${list.length}
+          <span class="text-slate-300 mx-1">·</span><span class="text-slate-400">sürükle ya da oklarla geç</span></p>
+        ${dots}
+      </div>`;
+  }
+
+  /* Konum CSS değişkenleriyle: --d (ortaya uzaklık, sürüklerken kesirli) · --ad (mutlak, en fazla 3) */
+  function bookSlideStyle(d) {
+    const ad = Math.min(Math.abs(d), 3);
+    return `--d:${d};--ad:${ad};z-index:${100 - Math.round(ad * 10)};visibility:${ad > 2.6 ? 'hidden' : 'visible'}`;
+  }
+
+  /* Kartları seçili kitaba göre yerleştirir · drag: sürükleme kayması (kart adımı cinsinden, kesirli) */
+  function layoutBookStage(drag = 0) {
+    const stage = $('#bookStage');
+    if (!stage) return;
+    const cur = Math.max(0, state.bookSlideIds.indexOf(state.bookSlideId));
+    const slides = [...stage.querySelectorAll('[data-slide]')];
+    slides.forEach((s, i) => {
+      s.style.cssText = bookSlideStyle(i - cur + drag);
+      s.classList.toggle('is-center', i === cur);
+    });
+    // Sahne yüksekliği = en uzun kart (kartlar üst üste mutlak konumda)
+    stage.querySelector('.book-track').style.height = `${Math.max(...slides.map((s) => s.offsetHeight))}px`;
+    stage.querySelector('[data-book-nav="-1"]').disabled = cur === 0;
+    stage.querySelector('[data-book-nav="1"]').disabled = cur === slides.length - 1;
+    const counter = $('#bookSlideCounter');
+    if (counter) counter.textContent = cur + 1;
+    // Üst satırdaki parıldayan ad ortadaki kitabı izler (yeni kitapta altın, kış kitabında buz rengi)
+    const ghost = $('#bookGhostTitle');
+    if (ghost) {
+      ghost.textContent = getBook(state.bookSlideId)?.title || '';
+      ghost.className = `ghost-title ${slides[cur]?.dataset.ghost || ''} block truncate text-center text-xl lg:text-2xl px-3 select-none`;
+    }
+    $$('[data-book-goto]').forEach((dot, i) => dot.classList.toggle('is-active', i === cur));
+    const bar = $('#bookSlideBar');
+    if (bar) bar.style.width = `${((cur + 1) / slides.length) * 100}%`;
+  }
+
+  function goToBookSlide(i) {
+    const ids = state.bookSlideIds;
+    if (!ids.length) return;
+    state.bookSlideId = ids[Math.max(0, Math.min(ids.length - 1, i))];
+    layoutBookStage();
+  }
+  const slideBooks = (dir) => goToBookSlide(state.bookSlideIds.indexOf(state.bookSlideId) + dir);
+
+  /* Kart tıklaması: ortadaki kitabın penceresini açar, yandaki kartı ortaya getirir (sürükleme sonrası tıklama yok sayılır) */
+  function bookSlideClick(el) {
+    if (Date.now() - state.bookDragEndAt < 250) return;
+    const i = Number(el.dataset.slide);
+    if (i === state.bookSlideIds.indexOf(state.bookSlideId)) return openBookModal(state.bookSlideId);
+    goToBookSlide(i);
+  }
+
+  /* Sürükleyerek geçiş (fare / dokunma) · uçlarda yaylanır · kısa ama hızlı savuruş da bir kitap geçirir */
+  function startBookDrag(e) {
+    const stage = $('#bookStage');
+    const ids = state.bookSlideIds;
+    if (!stage || ids.length < 2) return;
+    const step = parseFloat(getComputedStyle(stage).getPropertyValue('--step')) || 200;
+    const cur = ids.indexOf(state.bookSlideId);
+    const x0 = e.clientX, y0 = e.clientY, t0 = Date.now();
+    let dx = 0, dragging = false;
+    const move = (ev) => {
+      dx = ev.clientX - x0;
+      if (!dragging) {
+        if (Math.abs(dx) < 6) return;
+        // Dikey kaydırma (sayfayı aşağı inmek) sürükleme sayılmaz
+        if (Math.abs(ev.clientY - y0) > Math.abs(dx)) return end();
+        dragging = true;
+        stage.classList.add('is-dragging');
+      }
+      let shift = dx / step;
+      // Uçlarda yaylanma
+      if ((cur === 0 && shift > 0) || (cur === ids.length - 1 && shift < 0)) shift *= 0.3;
+      layoutBookStage(shift);
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (!dragging) return;
+      stage.classList.remove('is-dragging');
+      state.bookDragEndAt = Date.now();
+      const fast = Math.abs(dx) / Math.max(1, Date.now() - t0) > 0.5;
+      let by = -Math.round(dx / step);
+      if (!by && (fast || Math.abs(dx) > step * 0.25)) by = dx < 0 ? 1 : -1;
+      goToBookSlide(cur + by);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
 
   /* --- 9.0.5 Müze: kitaplıktan kaldırılan, artık kiralanmayan kitaplar · yalnızca sergilenir ---

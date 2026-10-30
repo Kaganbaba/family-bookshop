@@ -257,6 +257,10 @@
     refundFilter: 'pending', // Admin: 'pending' | 'approved' | 'rejected'
     memberView: (() => { try { return localStorage.getItem('fb.memberView') === '1'; } catch { return false; } })(), // Admin: Üye Görünümü
     bookTab: 'all',
+    bookView: (() => { try { return localStorage.getItem('fb.bookView') === 'slider' ? 'slider' : 'list'; } catch { return 'list'; } })(), // Kitaplar: 'list' | 'slider' (Vitrin)
+    bookSlideId: null,      // Vitrin: ortadaki kitap · bookSlideIds: vitrindeki sıra · bookDragEndAt: son sürükleme bitişi
+    bookSlideIds: [],
+    bookDragEndAt: 0,
     bookFilterKind: 'none', // Kitaplar: filtre türü (place | year | status | rating)
     bookFilterValue: 'all', // Kitaplar: seçili türün değeri
     logFilterKind: 'none',  // Fiyat Logu: filtre türü (change | year | book)

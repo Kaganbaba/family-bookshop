@@ -104,6 +104,28 @@
     }
     @keyframes ghostShine { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
     @media (prefers-reduced-motion: reduce) { .ghost-title { animation: none; background-position: 50% 0; } }
+    /* Kitaplar vitrini (Vitrin görünümü): ortada tek kitap, yanlarda küçülen, dönen, soluklaşan komşular
+       (--d: ortaya uzaklık · --ad: mutlak değeri · --step: kartlar arası mesafe, sürükleme hesabı bunu okur) */
+    .book-stage { --step: 132px; touch-action: pan-y; }
+    @media (min-width: 640px) { .book-stage { --step: 230px; } }
+    @media (min-width: 1024px) { .book-stage { --step: 290px; } }
+    .book-track { perspective: 1400px; }
+    .book-slide {
+      transform: translateX(calc(-50% + var(--d) * var(--step))) rotateY(calc(var(--d) * -16deg)) scale(calc(1 - var(--ad) * .15));
+      opacity: calc(1 - var(--ad) * .38);
+      filter: saturate(calc(1 - var(--ad) * .25));
+      transition: transform .55s cubic-bezier(.22, .8, .26, 1), opacity .55s, filter .55s;
+      cursor: pointer;
+    }
+    .book-slide.is-center { cursor: grab; }
+    .book-stage.is-dragging .book-slide { transition: none; cursor: grabbing; }
+    .book-slide img { -webkit-user-drag: none; pointer-events: none; }
+    .book-slide-cta { opacity: 0; transition: opacity .3s; }
+    .book-slide.is-center .book-slide-cta { opacity: 1; }
+    .book-slide.is-center:hover > div { box-shadow: 0 18px 44px -12px rgba(37, 99, 235, .35); }
+    .book-dot { width: .375rem; background: #cbd5e1; }
+    .book-dot.is-active { width: 1.25rem; background: #3b82f6; }
+    @media (prefers-reduced-motion: reduce) { .book-slide { transition: none; } }
     /* Özel teklif vitrini · arka plan indirim yüzdesine göre, yıldız rozet, nokta deseni */
     .offer-pattern { background-image: radial-gradient(rgba(255, 255, 255, .2) 1.2px, transparent 1.4px); background-size: 14px 14px; }
     .offer-mega-bg {

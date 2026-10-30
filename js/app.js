@@ -108,6 +108,10 @@
       if ((m = el('[data-delete-news]')))      return deleteNews(m.dataset.deleteNews);
       if ((m = el('[data-edit-news]')))        return openNewsModal(m.dataset.editNews);
       if ((m = el('[data-book-tab]')))         { state.bookTab = m.dataset.bookTab; return renderCurrentPage(); }
+      if ((m = el('[data-book-view]')))        return setBookView(m.dataset.bookView);
+      if ((m = el('[data-book-nav]')))         return slideBooks(Number(m.dataset.bookNav));
+      if ((m = el('[data-book-goto]')))        return goToBookSlide(Number(m.dataset.bookGoto));
+      if ((m = el('[data-slide]')))            return bookSlideClick(m);
       if ((m = el('[data-filter-clear]')))     { const p = m.dataset.filterClear; state[`${p}Kind`] = 'none'; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if ((m = el('[data-all-logs]')))         return openBookPriceLogsModal(m.dataset.allLogs, m.dataset.backOffer || '');
       if ((m = el('[data-stats-all-rentals]'))) return openStatsRentalsModal(m.dataset.statsAllRentals);
@@ -216,10 +220,24 @@
         e.preventDefault();
         openBookModal(bookCard.dataset.openBook);
       }
+      // Kitaplar vitrini: ← → ile geçiş (pencere açıkken ya da bir alana yazarken değil)
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && state.route === 'books' && $('#bookStage') && !state.modalOpen
+        && !e.target.closest?.('input, select, textarea')) {
+        e.preventDefault();
+        slideBooks(e.key === 'ArrowLeft' ? -1 : 1);
+      }
     });
 
-    // Ekran büyüdüğünde mobil menüyü kapat
-    window.addEventListener('resize', () => { if (window.innerWidth >= 1024) toggleMobileMenu(false); });
+    // Kitaplar vitrini: fare / dokunmayla sürükleyerek geçiş
+    document.addEventListener('pointerdown', (e) => {
+      if (e.button === 0 && e.target.closest?.('#bookStage') && !e.target.closest('[data-book-nav]')) startBookDrag(e);
+    });
+
+    // Ekran büyüdüğünde mobil menüyü kapat · kitaplar vitrininde kart boyu değişebilir → sahne yüksekliği yeniden hesaplanır
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 1024) toggleMobileMenu(false);
+      if (state.route === 'books') layoutBookStage();
+    });
 
     window.addEventListener('hashchange', router);
   }
