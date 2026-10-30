@@ -538,8 +538,26 @@
       col('discounts').doc(d.id).delete().catch((e) => console.error(e));
     });
   }
-  const vitrineEndText = (d, now = new Date()) => (d.endsMs == null ? 'Kaldırılana kadar geçerli'
-    : `⏳ ${formatRemaining(d.endsMs - now.getTime())} · ${formatDate(new Date(d.endsMs).toISOString(), true)}`);
+
+  /* Fırsat kartı geri sayımı (oyun mağazası gibi: 2g 04:13:22) · cihaz saatiyle, veri harcamaz */
+  function gsTimerText(ms) {
+    if (ms <= 0) return '⏳ Süre doldu';
+    const pad = (n) => String(n).padStart(2, '0');
+    const d = Math.floor(ms / DAY_MS);
+    const clock = `${pad(Math.floor((ms % DAY_MS) / HOUR_MS))}:${pad(Math.floor((ms % HOUR_MS) / 6e4))}:${pad(Math.floor((ms % 6e4) / 1e3))}`;
+    return `⏳ ${d ? `${d}g ` : ''}${clock}`;
+  }
+  /* tick() her saniye çağırır · süresi biten fırsat vitrinden düşsün diye vitrin yeniden çizilir */
+  function updateVitrineTimers(now) {
+    let expired = false;
+    $$('#vitrineSection [data-gs-ends]').forEach((el) => {
+      const left = Number(el.dataset.gsEnds) - now.getTime();
+      el.textContent = gsTimerText(left);
+      el.classList.toggle('is-urgent', left < DAY_MS);
+      if (left <= 0) expired = true;
+    });
+    if (expired) renderVitrine(now);
+  }
 
   function renderVitrine(now) {
     const admin = isAdmin();
@@ -551,60 +569,81 @@
     const box = $('#vitrineSection');
     if (!showcaseLive('vitrine') || (!list.length && !admin)) { box.innerHTML = ''; return; }
 
+    /* Oyun mağazası teklif kartı · kademe indirime göre: %50+ efsane (altın-turuncu), %30+ süper (mor), altı fırsat (mavi) */
+    const tierOf = (rate) => (rate >= 100 ? { cls: 'gs-tier-ultra', label: '✦ ULTRA EFSANE · BEDAVA' }
+      : rate >= 50 ? { cls: 'gs-tier-legend', label: '★ EFSANE FIRSAT' }
+      : rate >= 30 ? { cls: 'gs-tier-epic', label: '◆ SÜPER FIRSAT' } : { cls: 'gs-tier-rare', label: '● FIRSAT' });
+    // Tek fırsat: geniş "öne çıkan teklif" (kapak solda, bilgiler sağda) · 2 fırsat: ortalı iki sütun
+    const wide = list.length === 1;
     const cards = list.map(({ d, b }) => {
       const eff = getEffectiveDiscount(b, now);
       const newPrice = round2(b.price * (1 - eff.rate / 100));
       const free = newPrice <= 0;
+      const tier = tierOf(eff.rate);
+      // Kiradaki kitap: "tükendi" gibi soluk kart, KİRADA damgası, gri düğme
+      const rented = isBookRented(b, now.getTime()) || isBookLocked(b, now.getTime());
       return `
         <div data-open-book="${b.id}" role="button" tabindex="0"
-          class="vitrine-card vitrine-sheen group relative cursor-pointer rounded-2xl p-4 pt-5 text-left transition duration-300 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-amber-300/60">
-          <div class="vitrine-tag absolute -top-px right-4 w-[4.25rem] pt-2 pb-4 bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 text-center shadow-lg z-[2]">
-            <p class="text-[8px] font-extrabold tracking-[.2em] text-amber-900/80">${free ? 'BEDAVA' : 'İNDİRİM'}</p>
-            <p class="text-xl font-black text-amber-950 leading-none mt-0.5">%${eff.rate}</p>
-          </div>
-          <p class="relative z-[1] vitrine-gold text-base font-extrabold italic leading-tight truncate pr-20 ${admin ? 'pl-7' : ''} mb-3" style="font-family:'Playfair Display',Georgia,serif">${escapeHTML(d.name || 'Fırsat')}</p>
+          class="gs-card ${tier.cls} ${rented ? 'is-soldout' : ''} gs-shine group cursor-pointer text-left focus:outline-none focus:ring-4 focus:ring-amber-300/70">
           ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Fırsatı kaldır" aria-label="Fırsatı kaldır"
-            class="absolute top-2 left-2 z-[3] w-7 h-7 rounded-full bg-white/20 text-white hover:bg-rose-500 hover:text-white flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
-          <div class="relative z-[1] flex gap-3">
-            <div class="shrink-0 self-start rounded-xl ring-1 ring-amber-300/40 shadow-[0_10px_25px_-10px_rgba(251,191,36,.5)]">${coverHTML(b, 'md')}</div>
-            <div class="flex-1 min-w-0">
-              <p class="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-200 truncate">${escapeHTML(typeLabel(b.type))}</p>
-              <p class="text-sm font-semibold text-white mt-0.5 line-clamp-2 leading-snug">${escapeHTML(b.title)}</p>
-              ${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<p class="text-[11px] font-bold text-amber-200 mt-0.5">#${b.seriesNo}</p>` : ''}
-              ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
-            </div>
+            class="absolute top-2 left-2 z-[5] w-7 h-7 rounded-full bg-black/40 text-white hover:bg-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
+          <!-- Üst şerit: fırsat adı + canlı geri sayım (son 24 saatte kırmızı) -->
+          <div class="gs-ribbon relative z-[3] flex items-center justify-between gap-2 px-3 py-2 ${admin ? 'pl-11' : ''}">
+            <p class="gs-font gs-outline text-lg leading-none truncate">${escapeHTML(d.name || 'Fırsat')}</p>
+            ${d.endsMs == null ? '<span class="gs-timer shrink-0">∞ Süresiz</span>'
+              : `<span class="gs-timer shrink-0 tabular-nums ${d.endsMs - now.getTime() < DAY_MS ? 'is-urgent' : ''}" data-gs-ends="${d.endsMs}">${gsTimerText(d.endsMs - now.getTime())}</span>`}
           </div>
-          <div class="relative z-[1] flex items-end justify-between mt-4 pt-3 border-t border-white/25">
-            <p class="text-[10px] text-indigo-50/90 leading-snug min-w-0">${vitrineEndText(d, now)}</p>
-            <div class="text-right shrink-0">
-              <p class="text-[11px] text-indigo-100/75 line-through">${formatMoney(b.price)}</p>
-              <p class="vitrine-gold text-2xl font-black leading-none tracking-tight">${free ? 'BEDAVA' : formatMoney(newPrice)}</p>
+          <div class="${wide ? 'sm:flex sm:items-stretch' : ''}">
+            <!-- Sahne: dönen ışık hüzmeleri, süzülen kapak, yıldız patlaması rozeti -->
+            <div class="gs-scene relative z-[2] h-48 ${wide ? 'sm:h-auto sm:min-h-[17rem] sm:w-1/2' : ''} flex items-center justify-center overflow-hidden">
+              <span class="gs-card-rays" aria-hidden="true"></span>
+              <div class="gs-float relative">${coverHTML(b, 'lg')}</div>
+              <div class="gs-burst-wrap absolute top-2 right-2">
+                <div class="gs-burst flex flex-col items-center justify-center text-center">
+                  ${free ? '<span class="gs-font gs-outline text-lg leading-none">BEDAVA</span>' : `
+                  <span class="gs-font text-[10px] leading-none text-white/90">İNDİRİM</span>
+                  <span class="gs-font gs-outline text-2xl leading-none">-%${eff.rate}</span>`}
+                </div>
+              </div>
+              ${rented ? '<span class="gs-stamp gs-font">KİRADA</span>' : ''}
+            </div>
+            <!-- Alt (genişte sağ): kademe · ad · 3B fiyat düğmesi -->
+            <div class="relative z-[2] px-3 pb-3.5 text-center ${wide ? 'sm:w-1/2 sm:flex sm:flex-col sm:justify-center sm:px-6 sm:py-6' : ''}">
+              <p class="gs-font text-[11px] ${wide ? 'sm:text-sm' : ''} tracking-wider text-white/85">${tier.label}</p>
+              <p class="gs-font gs-outline text-lg ${wide ? 'sm:text-3xl' : ''} leading-tight truncate mt-0.5">${escapeHTML(b.title)}</p>
+              <p class="mt-1 flex items-center justify-center gap-2 min-w-0">
+                <span class="text-[11px] font-bold text-white/80 truncate">${escapeHTML(typeLabel(b.type))}${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? ` · #${b.seriesNo}` : ''}</span>
+                ${statusChipHTML(b, now.getTime(), 'shrink-0 ring-2 ring-[#160d3b]')}
+              </p>
+              <div class="gs-buy ${rented ? 'is-off' : ''} mt-3 ${wide ? 'sm:mt-5 sm:py-3' : ''} flex items-center justify-center gap-2.5 py-2">
+                ${rented ? '<span class="gs-font gs-outline text-xl leading-none">🔒 KİRADA</span>' : `
+                <span class="gs-font text-sm text-emerald-950/60 line-through decoration-2">${formatMoney(b.price)}</span>
+                <span class="gs-font gs-outline text-2xl ${wide ? 'sm:text-3xl' : ''} leading-none">${free ? 'BEDAVA' : formatMoney(newPrice)}</span>`}
+              </div>
             </div>
           </div>
         </div>`;
     }).join('');
+    const gridCls = wide ? 'grid-cols-1 max-w-2xl mx-auto'
+      : list.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
 
     box.innerHTML = `
-      <div class="vitrine-rim rounded-3xl p-[1.5px] shadow-soft-lg mb-6">
-        <div class="vitrine-bg relative rounded-[22px] overflow-hidden p-4 sm:p-5">
-          <div class="vitrine-dots absolute inset-0 pointer-events-none"></div>
-          <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-            <div class="flex items-center gap-3">
-              <span class="vitrine-rim w-10 h-10 rounded-full p-[1.5px] shadow-soft shrink-0">
-                <span class="w-full h-full rounded-full bg-indigo-600 flex items-center justify-center text-lg">🏷️</span>
-              </span>
-              <div>
-                <h2 class="vitrine-gold text-lg font-extrabold italic leading-tight" style="font-family:'Playfair Display',Georgia,serif">Fırsatlar</h2>
-                <p class="text-[11px] text-indigo-50/90">Admin'in seçtiği fırsatlar · süreleri dolunca kendiliğinden kalkar</p>
-              </div>
+      <div class="gs-panel relative overflow-hidden mb-6 p-4 sm:p-5">
+        <span class="gs-rays" aria-hidden="true"></span>
+        <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div class="flex items-center gap-3">
+            <span class="gs-icon shrink-0 w-12 h-12 flex items-center justify-center text-2xl">🏷️</span>
+            <div>
+              <h2 class="gs-font gs-title text-3xl leading-none">FIRSATLAR</h2>
+              <p class="gs-font text-xs text-violet-100/90 mt-1 tracking-wide">⚡ Sınırlı süreli kitap fırsatları · kaçırma!</p>
             </div>
-            ${admin ? `<button type="button" data-add-vitrine
-              class="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-bold text-amber-950 bg-gradient-to-r from-amber-200 to-amber-400 hover:from-amber-100 hover:to-amber-300 shadow-soft transition">${icon('plus', 'w-3.5 h-3.5')}İndirim Ekle</button>` : ''}
           </div>
-          ${list.length
-            ? `<div class="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`
-            : `<p class="relative text-center text-xs text-indigo-50/90 py-8 border border-dashed border-amber-300/25 rounded-2xl">Henüz fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-indigo-100/75">Bu boş alanı yalnızca Adminler görür.</span></p>`}
+          ${admin ? `<button type="button" data-add-vitrine
+            class="gs-add self-start sm:self-auto flex items-center gap-1.5 px-4 py-2 gs-font text-sm">${icon('plus', 'w-4 h-4')}İndirim Ekle</button>` : ''}
         </div>
+        ${list.length
+          ? `<div class="relative grid ${gridCls} gap-5 pb-1">${cards}</div>`
+          : `<p class="relative text-center text-xs text-violet-100/90 py-8 border-2 border-dashed border-white/25 rounded-2xl">Henüz fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-violet-200/75">Bu boş alanı yalnızca Adminler görür.</span></p>`}
       </div>`;
   }
 
@@ -676,7 +715,7 @@
     const pickable = books
       .filter((b) => hasPrice(b) && isRentableStatus(b))
       .map((b) => ({ b, other: customDiscountOf(b, now) ? null : otherDiscountOf(b, now, dealIds) }))
-      .sort((x, y) => !!x.other - !!y.other || x.b.title.localeCompare(y.b.title, 'tr'));
+      .sort((x, y) => bySeriesThenTitle(x.b, y.b)); // seri sırasıyla (başka indirimdekiler yerinde, seçilemez)
     if (!pickable.some((x) => !x.other)) return toast('Fırsatlar\'a eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
     const defaultEnd = localDateKey(new Date(Date.now() + 7 * DAY_MS));
     openModal(`
@@ -686,7 +725,7 @@
         ${field('Kitap', `<select name="bookId" id="vd-book" required class="${INPUT_CLS}">
           ${pickable.map(({ b, other }) => {
             const cur = customDiscountOf(b, now);
-            return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (fırsatta %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
+            return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(seriesLabel(b))} · ${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (fırsatta %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
           }).join('')}
         </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Zaten fırsatta olan kitabı seçersen indirimi güncellenir.')}
         ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" class="${INPUT_CLS}" placeholder="Örn. 30" />`,

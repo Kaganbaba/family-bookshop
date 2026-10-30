@@ -939,6 +939,8 @@
       updateCountdown(now);
       // Hediye Kutusu: kalan süre · 10:00'da yeni gün açılınca kutu yeniden çizilir
       updateGiftBoxFab(now);
+      // Fırsatlar: kartlardaki canlı geri sayım
+      updateVitrineTimers(now);
     }
 
     const root = $(`#page-${state.route}`);

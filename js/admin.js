@@ -823,7 +823,7 @@
     state.offerDraftCovers = o ? [0, 1, 2].map((i) => o.items[i]?.cover || '') : ['', '', ''];
     const defaultEnd = localDateKey(new Date(Date.now() + 14 * DAY_MS));
     // Planlanıyor / Yakında (fiyatı olmayabilir) kitaplar pakete eklenemez
-    const sorted = books.filter((b) => !isDraftBook(b) && hasPrice(b)).sort((a, b) => a.id - b.id);
+    const sorted = books.filter((b) => !isDraftBook(b) && hasPrice(b)).sort(bySeriesThenTitle); // seri sırasıyla
 
     const slot = (i) => {
       const selId = o?.items[i]?.bookId || '';
@@ -833,7 +833,7 @@
           <div id="offerSlotPreview-${i}">${slotPreviewHTML(i, selId)}</div>
           <select name="book${i}" data-offer-slot="${i}" ${i ? '' : 'required'} class="${INPUT_CLS} !px-2 !py-1.5 !text-[11px]">
             <option value="">${i ? '— Boş —' : 'Kitap seç…'}</option>
-            ${sorted.map((b) => `<option value="${b.id}" ${String(b.id) === String(selId) ? 'selected' : ''}>${escapeHTML(b.title)}</option>`).join('')}
+            ${sorted.map((b) => `<option value="${b.id}" ${String(b.id) === String(selId) ? 'selected' : ''}>${escapeHTML(seriesLabel(b))} · ${escapeHTML(b.title)}</option>`).join('')}
           </select>
           <div class="flex items-center gap-2">
             <label class="text-[10px] font-semibold text-brand-600 hover:text-brand-700 cursor-pointer flex items-center gap-1">${icon('photo', 'w-3 h-3')}Kapak

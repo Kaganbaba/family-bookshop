@@ -152,25 +152,91 @@
     .sc-duo-1 { transform: translateX(34%) rotateY(-18deg) scale(.94); z-index: 1; }
     .showcase-host:hover .sc-duo-0 { transform: translateX(-52%) rotateY(12deg) scale(.98); }
     .showcase-host:hover .sc-duo-1 { transform: translateX(52%) rotateY(-12deg) scale(.98); }
-    /* Vitrin İndirimi (Admin'in seçtikleri) · gece mavisi zemin, altın çerçeve, asılı etiket */
-    .vitrine-bg { background: radial-gradient(120% 140% at 0% 0%, #818cf8 0%, #6366f1 38%, #4338ca 100%); }
-    .vitrine-dots { background-image: radial-gradient(rgba(255, 255, 255, .07) 1px, transparent 1.2px); background-size: 16px 16px; }
-    .vitrine-rim { background: linear-gradient(135deg, #fde68a, #b45309 30%, #fcd34d 55%, #92400e 80%, #fde68a); }
-    .vitrine-card {
-      background: linear-gradient(160deg, rgba(255, 255, 255, .2), rgba(255, 255, 255, .08));
-      border: 1px solid rgba(253, 230, 138, .45);
-    }
-    .vitrine-card:hover { border-color: rgba(251, 191, 36, .6); box-shadow: 0 18px 40px -18px rgba(251, 191, 36, .45); }
-    .vitrine-tag { clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); }
+    /* Altın yazı (Fırsat Ekle penceresindeki fiyat önizlemesi) */
     .vitrine-gold { background: linear-gradient(180deg, #fffbeb, #fde68a 55%, #fbbf24); -webkit-background-clip: text; background-clip: text; color: transparent;
       filter: drop-shadow(0 1px 1px rgba(30, 27, 75, .45)); }
-    .vitrine-sheen { position: relative; overflow: hidden; }
-    .vitrine-sheen::after {
-      content: ''; position: absolute; inset: 0; pointer-events: none;
-      background: linear-gradient(115deg, transparent 40%, rgba(253, 230, 138, .16) 50%, transparent 60%);
-      transform: translateX(-130%); animation: goldSweep 6s ease-in-out infinite;
+    /* Fırsatlar vitrini · oyun mağazası teklifleri: kalın koyu çerçeve, dönen ışık hüzmeleri, kademeli renkler,
+       yıldız patlaması rozeti, 3B fiyat düğmesi (gs = game shop) */
+    /* Baloo 2: kalın, yuvarlak oyun yazısı · Türkçe harflerin hepsi var (İ, ş, ğ…) */
+    .gs-font { font-family: 'Baloo 2', 'Inter', system-ui, sans-serif; font-weight: 800; letter-spacing: .01em; }
+    .gs-outline { color: #fff; -webkit-text-stroke: 1.5px #160d3b; paint-order: stroke fill; text-shadow: 0 2px 0 #160d3b; }
+    .gs-title { color: #ffd23f; -webkit-text-stroke: 2px #160d3b; paint-order: stroke fill; text-shadow: 0 4px 0 #160d3b, 0 0 24px rgba(255, 210, 63, .45); }
+    .gs-panel {
+      border-radius: 28px; border: 3px solid #160d3b;
+      background: radial-gradient(130% 120% at 50% 0%, #7c3aed 0%, #5b21b6 40%, #2e1065 75%, #1e1b4b 100%);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .18), 0 6px 0 #160d3b, 0 20px 40px -18px rgba(46, 16, 101, .6);
     }
-    @media (prefers-reduced-motion: reduce) { .vitrine-sheen::after { animation: none; } }
+    .gs-rays, .gs-card-rays {
+      position: absolute; left: 50%; aspect-ratio: 1; pointer-events: none;
+      background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .09) 0 9deg, transparent 9deg 18deg);
+      -webkit-mask: radial-gradient(circle, #000 15%, transparent 62%); mask: radial-gradient(circle, #000 15%, transparent 62%);
+      animation: gsSpin 60s linear infinite;
+    }
+    .gs-rays { top: -90%; width: 170%; transform: translateX(-50%); }
+    .gs-card-rays { top: 50%; width: 150%; transform: translate(-50%, -50%);
+      background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .22) 0 10deg, transparent 10deg 20deg); animation-duration: 22s; }
+    .gs-rays { animation-name: gsSpinX; }
+    @keyframes gsSpinX { to { transform: translateX(-50%) rotate(360deg); } }
+    @keyframes gsSpin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+    .gs-icon { border-radius: 16px; border: 3px solid #160d3b; background: linear-gradient(180deg, #ff6b9a, #e11d74 55%, #9d174d);
+      box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .55), 0 3px 0 #160d3b; transform: rotate(-6deg); }
+    .gs-add { color: #3b2300; border-radius: 14px; border: 3px solid #160d3b; background: linear-gradient(180deg, #ffe066, #ffb703);
+      box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .16), inset 0 2px 0 rgba(255, 255, 255, .6), 0 4px 0 #160d3b; transition: transform .12s, box-shadow .12s; }
+    .gs-add:hover { transform: translateY(-1px); }
+    .gs-add:active { transform: translateY(3px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .16), 0 1px 0 #160d3b; }
+    .gs-card {
+      position: relative; overflow: hidden; border-radius: 22px; border: 3px solid #160d3b;
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .35), 0 6px 0 #160d3b, 0 18px 30px -14px rgba(0, 0, 0, .55);
+      transition: transform .18s cubic-bezier(.3, 1.6, .5, 1), box-shadow .18s;
+    }
+    .gs-card:hover { transform: translateY(-5px) rotate(-.6deg) scale(1.015); }
+    .gs-card:active { transform: translateY(3px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .35), 0 2px 0 #160d3b; }
+    /* Bedava (%100): en üst kademe · akan gökkuşağı/hologram zemin */
+    .gs-tier-ultra {
+      background:
+        radial-gradient(90% 70% at 50% 38%, rgba(255, 255, 255, .55) 0%, transparent 60%),
+        linear-gradient(120deg, #ff3d7f, #ff9f1c, #ffe14d, #3ddc84, #22d3ee, #6366f1, #c026d3, #ff3d7f);
+      background-size: 100% 100%, 300% 300%;
+      animation: gsHolo 6s linear infinite;
+    }
+    @keyframes gsHolo { from { background-position: 0 0, 0% 50%; } to { background-position: 0 0, 300% 50%; } }
+    .gs-tier-legend { background: radial-gradient(110% 80% at 50% 35%, #fff3a3 0%, #ffc93c 25%, #ff8c1a 60%, #d9480f 100%); }
+    .gs-tier-epic { background: radial-gradient(110% 80% at 50% 35%, #f5d0fe 0%, #d946ef 28%, #9333ea 62%, #581c87 100%); }
+    .gs-tier-rare { background: radial-gradient(110% 80% at 50% 35%, #cffafe 0%, #38bdf8 28%, #2563eb 62%, #1e3a8a 100%); }
+    .gs-ribbon { background: rgba(22, 13, 59, .55); border-bottom: 3px solid #160d3b; }
+    .gs-timer { font-size: 10px; font-weight: 800; color: #fff; padding: 3px 8px; border-radius: 999px;
+      background: #160d3b; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .25); }
+    /* Son 24 saat: kırmızı, nabız gibi atan geri sayım */
+    .gs-timer.is-urgent { background: #e11d48; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .45), 0 0 12px rgba(244, 63, 94, .6); animation: gsUrgent 1s ease-in-out infinite; }
+    @keyframes gsUrgent { 50% { transform: scale(1.07); } }
+    /* Kiradaki kitap: soluk sahne, eğik KİRADA damgası, gri düğme (tıklayınca kitap penceresi yine açılır) */
+    .gs-card.is-soldout .gs-scene > :not(.gs-stamp) { filter: grayscale(.85) brightness(.75); }
+    .gs-card.is-soldout .gs-float, .gs-card.is-soldout .gs-burst-wrap, .gs-card.is-soldout .gs-card-rays { animation-play-state: paused; }
+    .gs-stamp { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-14deg);
+      padding: 2px 16px; font-size: 1.75rem; line-height: 1.2; color: #fff; letter-spacing: .08em;
+      background: #e11d48; border: 3px solid #160d3b; border-radius: 12px; box-shadow: 0 4px 0 #160d3b;
+      -webkit-text-stroke: 1.5px #160d3b; paint-order: stroke fill; }
+    .gs-buy.is-off { background: linear-gradient(180deg, #cbd5e1, #94a3b8 60%, #64748b); }
+    .gs-float { animation: gsFloat 3.2s ease-in-out infinite; filter: drop-shadow(0 10px 8px rgba(0, 0, 0, .35)); }
+    .gs-float > * { border: 3px solid #160d3b; }
+    @keyframes gsFloat { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-7px) rotate(2deg); } }
+    .gs-burst-wrap { filter: drop-shadow(0 3px 0 #160d3b) drop-shadow(0 0 1.5px #160d3b); animation: gsPulse 1.6s ease-in-out infinite; }
+    .gs-burst { width: 84px; height: 84px; transform: rotate(-12deg);
+      background: radial-gradient(circle at 40% 35%, #ff8a8a, #ff2d55 55%, #c9184a);
+      clip-path: polygon(50% 0%, 60.1% 12.3%, 75% 6.7%, 77.6% 22.4%, 93.3% 25%, 87.7% 39.9%, 100% 50%, 87.7% 60.1%, 93.3% 75%, 77.6% 77.6%, 75% 93.3%, 60.1% 87.7%, 50% 100%, 39.9% 87.7%, 25% 93.3%, 22.4% 77.6%, 6.7% 75%, 12.3% 60.1%, 0% 50%, 12.3% 39.9%, 6.7% 25%, 22.4% 22.4%, 25% 6.7%, 39.9% 12.3%); }
+    @keyframes gsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    .gs-buy { border-radius: 14px; border: 3px solid #160d3b; background: linear-gradient(180deg, #8cf06c 0%, #3ccf4e 55%, #22a83a 100%);
+      box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .55), 0 4px 0 #160d3b; transition: transform .12s, box-shadow .12s; }
+    .gs-card:hover .gs-buy { filter: brightness(1.06); }
+    .gs-card:active .gs-buy { transform: translateY(2px); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18), 0 2px 0 #160d3b; }
+    .gs-shine::after {
+      content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+      background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .38) 48%, rgba(255, 255, 255, .1) 54%, transparent 60%);
+      transform: translateX(-130%); animation: goldSweep 4.2s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .gs-rays, .gs-card-rays, .gs-float, .gs-burst-wrap, .gs-shine::after, .gs-tier-ultra, .gs-timer.is-urgent { animation: none; }
+    }
     /* Kış Fırsatları · buz mavisi zemin, kar taneleri deseni, üstü karla kaplı kartlar, süzülen kar taneleri */
     .winter-bg { background: linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 45%, #dbeafe 100%); }
     .winter-rim { background: linear-gradient(135deg, #e0f2fe, #7dd3fc 30%, #ffffff 55%, #38bdf8 80%, #e0f2fe); }
