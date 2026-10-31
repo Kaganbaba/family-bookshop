@@ -57,6 +57,7 @@
       if ((m = el('[data-delete-page-log]')))  return deletePriceLogFromPage(m.dataset.deletePageLog);
       if ((m = el('[data-delete-log]')))       return deletePriceLog(m.dataset.deleteLog, m.dataset.bookId, m.dataset.backOffer);
       if ((m = el('[data-remove-cover]')))     return removeDraftCover(m.dataset.removeCover);
+      if ((m = el('[data-remove-theme-logo]'))) return removeThemeLogo(m);
       if ((m = el('[data-rent-book]')))        return m.disabled ? null : rentBook(m.dataset.rentBook);
       if ((m = el('[data-rent-offer]')))       return m.disabled ? null : rentOffer(m.dataset.rentOffer);
       if ((m = el('[data-quick]')))            return runQuick(m.dataset.quick);
@@ -183,6 +184,7 @@
     document.addEventListener('change', (e) => {
       const t = e.target;
       if (t.matches('[data-cover-input]')) return handleCoverInput(t);
+      if (t.matches('[data-theme-logo-input]')) return handleThemeLogoInput(t);
       if (t.matches('[data-quick-status]')) return setBookStatus(t.dataset.quickStatus, t.value);
       if (t.matches('[data-deal-group]')) return setDealGroup(t.value);
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }

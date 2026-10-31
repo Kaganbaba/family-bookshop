@@ -67,7 +67,7 @@
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
-  /* bookThemes/{id} · tema (etiket): { label, emoji, color ('#rrggbb'), order } · kitapta themes: [temaId…] ·
+  /* bookThemes/{id} · tema (etiket): { label, emoji, logo (base64 PNG, isteğe bağlı · varsa emojinin yerine), color ('#rrggbb'), order } · kitapta themes: [temaId…] ·
      'kis-sezonu' sabit temadır (silinemez, Kış Fırsatları'na yalnızca bu temadaki kitaplar girer) */
   const bookThemes = [];
   /* winterDeals/{bookId} · Kış Fırsatları indirimi: { bookId, rate (0 | 15 | 25 | 50), updatedAt, updatedBy } ·
@@ -218,11 +218,16 @@
   const themeIdsOf = (b) => (Array.isArray(b?.themes) ? b.themes : []);
   const bookThemesOf = (b) => allThemes().filter((t) => themeIdsOf(b).includes(t.id));
   const hasWinterTheme = (b) => themeIdsOf(b).includes(WINTER_THEME_ID);
-  /* Tema rozeti: emoji + ad, kendi renginde yazı, açık tonlu zemin */
+  /* Tema rozeti: logo (varsa, emojinin yerine) ya da emoji + ad, kendi renginde yazı, açık tonlu zemin */
+  // Tamamı geçerli base64 olmalı (src'ye kaçışsız yazılır)
+  const isImageData = (s) => /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/.test(s || '');
+  const themeIconHTML = (t) => (isImageData(t.logo)
+    ? `<img src="${t.logo}" alt="" class="w-3.5 h-3.5 object-contain shrink-0" />`
+    : t.emoji ? `<span>${escapeHTML(t.emoji)}</span>` : '');
   const themeChipHTML = (t) => {
     const c = isHexColor(t.color) ? t.color : '#64748b';
     return `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
-      style="color:color-mix(in srgb, ${c} 80%, var(--mix-ink));background:${c}1f;box-shadow:inset 0 0 0 1px ${c}45">${t.emoji ? `<span>${escapeHTML(t.emoji)}</span>` : ''}${escapeHTML(t.label)}</span>`;
+      style="color:color-mix(in srgb, ${c} 80%, var(--mix-ink));background:${c}1f;box-shadow:inset 0 0 0 1px ${c}45">${themeIconHTML(t)}${escapeHTML(t.label)}</span>`;
   };
   const themeChipsHTML = (b, cls = '') => {
     const list = bookThemesOf(b);
@@ -278,6 +283,7 @@
     updPage: 1,             // Güncellemeler: sayfa (1 = en yeni)
     freshAnnIds: new Set(), // bu ziyarette "Yeni" olarak işaretlenecek duyurular
     bookDraftCover: '',     // kitap formundaki kapak (base64)
+    themeDraftLogo: '',     // tema formundaki logo (base64 PNG · boş = emoji kullanılır)
     offerDraftCovers: ['', '', ''],
     coverBusy: false
   };
@@ -617,9 +623,9 @@
     if (slot) slot.innerHTML = html;
   };
 
-  /* Yerel görsel dosyasını okuyup küçültür ve base64 (JPEG) döndürür.
+  /* Yerel görsel dosyasını okuyup küçültür ve base64 döndürür (varsayılan JPEG · logolar saydamlık için 'image/png').
      Küçültme, Firestore'un 1 MB belge sınırı için önemlidir. */
-  function readImageFile(file, maxW = 360, maxH = 540) {
+  function readImageFile(file, maxW = 360, maxH = 540, format = 'image/jpeg') {
     return new Promise((resolve, reject) => {
       if (!file || !/^image\//.test(file.type)) return reject(new Error('Lütfen bir görsel dosyası seçin.'));
       if (file.size > 10 * 1024 * 1024) return reject(new Error('Görsel en fazla 10 MB olabilir.'));
@@ -636,7 +642,7 @@
           const ctx = canvas.getContext('2d');
           if (!ctx) return resolve(reader.result);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
+          resolve(canvas.toDataURL(format, 0.85));
         };
         img.src = reader.result;
       };

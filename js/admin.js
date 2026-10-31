@@ -499,15 +499,55 @@
       class="${INPUT_CLS} !py-1.5 !w-14 shrink-0 text-center" />`;
   const themeBookCount = (id) => [...books, ...museumBooks].filter((b) => themeIdsOf(b).includes(id)).length;
 
-  /* Tema formundaki önizleme rozeti (ad + renk) */
+  /* Tema formundaki önizleme rozeti (ad + renk + logo) */
   function updateThemePreview(form) {
     const box = form?.querySelector('[data-theme-chip]');
     if (!box) return;
-    box.innerHTML = themeChipHTML({ label: form.elements.label.value.trim() || 'Tema', emoji: form.elements.emoji.value.trim(), color: form.elements.color.value });
+    box.innerHTML = themeChipHTML({ label: form.elements.label.value.trim() || 'Tema', emoji: form.elements.emoji.value.trim(), color: form.elements.color.value, logo: state.themeDraftLogo });
+  }
+
+  /* Tema logosu: PNG yüklenir (saydamlık korunur, 128 px'e küçültülür) · varsa rozette emojinin yerine geçer */
+  const THEME_LOGO_SIZE = 128;
+  function themeLogoField() {
+    const logo = state.themeDraftLogo;
+    return `
+      <div data-theme-logo class="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-brand-100">
+        <span class="w-10 h-10 rounded-lg bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
+          ${logo ? `<img src="${logo}" alt="Logo" class="w-8 h-8 object-contain" />` : '<span class="text-[9px] text-slate-400">Logo</span>'}
+        </span>
+        <span class="flex-1 min-w-0 text-[10px] text-slate-400 leading-snug">${logo ? 'Logo emojinin yerine görünür.' : 'İsteğe bağlı · saydam arka planlı kare PNG önerilir.'}</span>
+        <label class="${BTN_SOFT} !py-1.5 !px-2.5 cursor-pointer shrink-0">
+          ${logo ? 'Değiştir' : 'Logo Yükle'}
+          <input type="file" accept="image/png,image/webp,image/gif,image/jpeg" data-theme-logo-input class="sr-only" />
+        </label>
+        ${logo ? `<button type="button" data-remove-theme-logo class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50 shrink-0" title="Logoyu kaldır" aria-label="Logoyu kaldır">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
+      </div>`;
+  }
+  function refreshThemeLogo(form) {
+    const box = form?.querySelector('[data-theme-logo]');
+    if (box) box.outerHTML = themeLogoField();
+    updateThemePreview(form);
+  }
+  async function handleThemeLogoInput(input) {
+    const file = input.files?.[0];
+    const form = input.closest('form');
+    if (!file) return;
+    try {
+      state.themeDraftLogo = await readImageFile(file, THEME_LOGO_SIZE, THEME_LOGO_SIZE, 'image/png');
+      refreshThemeLogo(form);
+    } catch (err) {
+      toast(err.message || 'Logo yüklenemedi.', 'error');
+      input.value = '';
+    }
+  }
+  function removeThemeLogo(btn) {
+    state.themeDraftLogo = '';
+    refreshThemeLogo(btn.closest('form'));
   }
 
   function openThemeManager() {
     if (!requireAdmin()) return;
+    state.themeDraftLogo = '';
     const rows = allThemes().map((t) => `
       <li class="flex items-center gap-2.5 p-2.5 pl-3.5 rounded-xl border border-slate-100">
         <div class="flex-1 min-w-0">
@@ -532,7 +572,8 @@
             <input name="label" required maxlength="24" data-theme-preview="1" class="${INPUT_CLS} !py-1.5 flex-1 min-w-0" placeholder="Örn. Macera" />
           </div>
           ${themeColorInput('#7c3aed')}
-          <p class="text-[10px] text-slate-400 -mt-1">Emoji isteğe bağlı · Windows'ta Win + . ile emoji seçebilirsin.</p>
+          ${themeLogoField()}
+          <p class="text-[10px] text-slate-400 -mt-1">Emoji ve logo isteğe bağlı · logo varsa emojinin yerine görünür · Windows'ta Win + . ile emoji seçebilirsin.</p>
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Temayı Ekle</button>
         </form>
         <p class="text-[10px] text-slate-400 leading-relaxed">Kitaplara tema, kitabı düzenlerken eklenir. Ad ve renk için temanın yanındaki ⚙️ simgesine bas. Silinen tema kitaplardan da kalkar.</p>
@@ -544,6 +585,7 @@
     if (!requireAdmin()) return;
     const t = getTheme(id);
     if (!t) return;
+    state.themeDraftLogo = isImageData(t.logo) ? t.logo : '';
     openModal(`
       ${modalHeader(`${escapeHTML(t.label)} · Ayarlar ⚙️`, `${themeBookCount(t.id)} kitap`, 'cog')}
       <form data-form="saveTheme" data-edit-id="${t.id}" class="p-5 space-y-3.5" autocomplete="off">
@@ -556,7 +598,8 @@
           <div class="flex-1 min-w-0">${field('Tema adı', `<input name="label" required maxlength="24" value="${escapeHTML(t.label)}" data-theme-preview="1" class="${INPUT_CLS}" />`)}</div>
         </div>
         ${themeColorInput(t.color)}
-        <p class="text-[10px] text-slate-400 -mt-1.5">Emoji isteğe bağlı (boş bırakılabilir) · Windows'ta Win + . ile emoji seçebilirsin.</p>
+        ${themeLogoField()}
+        <p class="text-[10px] text-slate-400 -mt-1.5">Emoji ve logo isteğe bağlı (boş bırakılabilir) · logo varsa emojinin yerine görünür · Windows'ta Win + . ile emoji seçebilirsin.</p>
         ${t.id === WINTER_THEME_ID ? winterRatesHTML() : ''}
         <div class="grid grid-cols-2 gap-2.5 pt-2">
           <button type="button" data-quick="manageThemes" class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">← Geri</button>
@@ -602,12 +645,13 @@
       return toast(`"${label}" adında bir tema zaten var.`, 'error');
     const color = isHexColor(fd.color) ? fd.color.toLowerCase() : '#64748b';
     const emoji = (fd.emoji || '').trim().slice(0, 8);
+    const logo = isImageData(state.themeDraftLogo) ? state.themeDraftLogo : '';
     let done;
     if (editId) {
       if (!getTheme(editId)) return;
       const batch = db.batch();
       // Kış Sezonu teması henüz kaydedilmediyse ilk düzenlemede oluşturulur
-      batch.set(col('bookThemes').doc(editId), { label, emoji, color, order: getTheme(editId).order ?? 0 }, { merge: true });
+      batch.set(col('bookThemes').doc(editId), { label, emoji, logo, color, order: getTheme(editId).order ?? 0 }, { merge: true });
       // Kış Fırsatları indirimleri: yalnızca değişenler yazılır
       if (editId === WINTER_THEME_ID) {
         Object.keys(fd).filter((k) => k.startsWith('rate:')).forEach((k) => {
@@ -621,7 +665,7 @@
       done = batch.commit();
     } else {
       const order = allThemes().reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
-      done = col('bookThemes').doc(uid('th')).set({ label, emoji, color, order });
+      done = col('bookThemes').doc(uid('th')).set({ label, emoji, logo, color, order });
     }
     const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" teması eklendi.`);
     if (ok && state.modalOpen) openThemeManager();
