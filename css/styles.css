@@ -8,7 +8,7 @@
     }
     /* Kaydırma çubuğu */
     .soft-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-    .soft-scroll::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 999px; }
+    .soft-scroll::-webkit-scrollbar-thumb { background: rgb(var(--bg-brand-200)); border-radius: 999px; }
     /* Sayı inputlarındaki okları gizle */
     input[type=number]::-webkit-inner-spin-button,
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -109,9 +109,12 @@
     .book-stage { --step: 132px; touch-action: pan-y; }
     @media (min-width: 640px) { .book-stage { --step: 230px; } }
     @media (min-width: 1024px) { .book-stage { --step: 290px; } }
-    .book-track { perspective: 1400px; }
+    /* Kartlar aynı grid hücresinde üst üste: sahne yüksekliği kendiliğinden en uzun kart kadar olur
+       (JS ile ölçülünce sayfa gizliyken / yazı tipi geç yüklenince kısa kalıp alttaki yazı kartın üstüne biniyordu) */
+    .book-track { perspective: 1400px; display: grid; justify-items: center; align-items: start; }
     .book-slide {
-      transform: translateX(calc(-50% + var(--d) * var(--step))) rotateY(calc(var(--d) * -16deg)) scale(calc(1 - var(--ad) * .15));
+      grid-area: 1 / 1;
+      transform: translateX(calc(var(--d) * var(--step))) rotateY(calc(var(--d) * -16deg)) scale(calc(1 - var(--ad) * .15));
       opacity: calc(1 - var(--ad) * .38);
       filter: saturate(calc(1 - var(--ad) * .25));
       transition: transform .55s cubic-bezier(.22, .8, .26, 1), opacity .55s, filter .55s;
@@ -123,7 +126,7 @@
     .book-slide-cta { opacity: 0; transition: opacity .3s; }
     .book-slide.is-center .book-slide-cta { opacity: 1; }
     .book-slide.is-center:hover > div { box-shadow: 0 18px 44px -12px rgba(37, 99, 235, .35); }
-    .book-dot { width: .375rem; background: #cbd5e1; }
+    .book-dot { width: .375rem; background: rgb(var(--bg-slate-300)); }
     .book-dot.is-active { width: 1.25rem; background: #3b82f6; }
     @media (prefers-reduced-motion: reduce) { .book-slide { transition: none; } }
     /* Özel teklif vitrini · arka plan indirim yüzdesine göre, yıldız rozet, nokta deseni */
@@ -373,7 +376,7 @@
 
     /* Hediye çeki: yeşil zemin, iki yanda delikli bilet çentiği */
     .cheque-card { background: linear-gradient(140deg, #10b981, #0d9488 55%, #0e7490); }
-    .cheque-notch { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border-radius: 9999px; background: #f8fafc; }
+    .cheque-notch { position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border-radius: 9999px; background: rgb(var(--bg-slate-50)); }
     .cheque-notch.left { left: -9px; } .cheque-notch.right { right: -9px; }
 
     /* Müze · Dönemsel türü: mavi → mor → sarı → yeşil (kapak, rozet, başlık simgesi) */
@@ -492,3 +495,54 @@
     .mc-plaque-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(59, 42, 11, .25); font-size: 9.5px; font-weight: 700; }
     .mc-plaque-row b { font-size: 13px; font-weight: 900; }
     @media (prefers-reduced-motion: reduce) { .museum-case, .mc-specimen, .mc-shine { transition: none; } }
+
+    /* ===== Koyu mod (html.dark) =====
+       Tailwind sınıflarının renkleri js/theme.js'teki değişkenlerle kendiliğinden koyulaşır; burada yalnızca
+       bu dosyadaki elle yazılmış renkler ve sayfa zemini var. .light-scope altı açık renklerle kalır. */
+    html.dark body, html.dark #authScreen { background-image: none; background-color: #0e1626; }
+    html.dark body.season-winter {
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231e3a5f' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23172e4a' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M12 5l-2-2M12 5l2-2M12 19l-2 2M12 19l2 2'/%3E%3C/svg%3E"),
+        linear-gradient(to bottom, #0f2236, #0e1626 35%, #0e1a2c) !important;
+    }
+    html.dark .deal-mega {
+      background: linear-gradient(135deg, #182235, #2a1d2e) padding-box,
+                  linear-gradient(120deg, #f43f5e, #f59e0b, #d946ef, #3b82f6, #f43f5e) border-box !important;
+      background-size: 100% 100%, 300% 300% !important;
+    }
+    html.dark .ghost-title { background-image: linear-gradient(105deg, rgba(148, 163, 184, .18) 30%, rgba(96, 165, 250, .6) 47%, rgba(255, 255, 255, .9) 50%, rgba(96, 165, 250, .6) 53%, rgba(148, 163, 184, .18) 70%); }
+    html.dark .book-slide.is-center:hover > div { box-shadow: 0 18px 44px -12px rgba(0, 0, 0, .7); }
+    /* Kış: buz mavisi yerine gece mavisi buz, kar taneleri soluk */
+    html.dark .winter-bg { background: linear-gradient(160deg, #0f2236 0%, #10263d 45%, #142a4a 100%); }
+    html.dark .winter-rim { background: linear-gradient(135deg, #0c4a6e, #0284c7 30%, #7dd3fc 55%, #0369a1 80%, #0c4a6e); }
+    html.dark .winter-flakes {
+      background-image:
+        radial-gradient(circle, rgba(224, 242, 254, .35) 1.6px, transparent 2.1px),
+        radial-gradient(circle, rgba(56, 189, 248, .25) 1px, transparent 1.5px);
+    }
+    html.dark .winter-card {
+      background:
+        radial-gradient(circle at 100% 0, rgba(56, 189, 248, .16), transparent 45%),
+        radial-gradient(circle at 0 100%, rgba(14, 165, 233, .12), transparent 50%),
+        radial-gradient(rgba(125, 211, 252, .12) 1px, transparent 1.4px) 0 0 / 12px 12px,
+        linear-gradient(160deg, #182235 0%, #152a42 55%, #133050 100%);
+      border-color: #1e4a6e;
+      box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .06), inset 0 0 18px rgba(56, 189, 248, .08);
+    }
+    html.dark .winter-card:hover { border-color: #0369a1; box-shadow: 0 18px 40px -18px rgba(14, 165, 233, .45); }
+    html.dark .winter-card::after {
+      background:
+        linear-gradient(135deg, #1e4a6e 25%, transparent 25%) -6px 0 / 12px 12px,
+        linear-gradient(225deg, #1e4a6e 25%, transparent 25%) -6px 0 / 12px 12px;
+    }
+    html.dark .winter-card::before { background: radial-gradient(circle at 7px 7px, #dbeafe 6.5px, transparent 7px) 0 0 / 15px 13px repeat-x; }
+    html.dark .winter-row {
+      background-color: #132538;
+      background-image:
+        radial-gradient(circle, rgba(224, 242, 254, .22) 1.4px, transparent 1.9px),
+        radial-gradient(circle, rgba(56, 189, 248, .22) 1px, transparent 1.4px),
+        linear-gradient(90deg, #12304a, #132538 45%, #182235);
+    }
+    html.dark .winter-row:hover, html.dark .winter-row:focus { background-color: #163049; filter: brightness(1.08); }
+    html.dark .snow-layer i { background: #cbd5e1; box-shadow: 0 0 2px rgba(255, 255, 255, .6), 0 0 5px rgba(59, 130, 246, .35); opacity: .7; }

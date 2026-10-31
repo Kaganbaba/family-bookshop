@@ -28,14 +28,14 @@
     const active = rentals.filter((r) => isActiveRental(r, nowMs));
     const myActive = active.filter((r) => r.userId === state.currentUserId).length;
     const rentableNow = shown.filter((b) => isRentableStatus(b) && !isBookRented(b, nowMs)).length;
-    const totalBalance = sum(users, (u) => u.balance);
     const deals = getDailyDeals(now);
     const maxRate = deals.ids.length ? Math.max(...deals.ids.map(getDiscountRate)) : 0;
 
+    // href: karta basınca o sayfa açılır
     const cards = [
-      { label: 'Toplam Kitap',   value: shown.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600' },
-      { label: 'Kirada',         value: active.length,             sub: `Sende ${myActive} · ${rentableNow} kitap kiralık`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600' },
-      { label: 'Toplam Bakiye',  value: formatMoney(totalBalance), sub: `Senin: ${formatMoney(currentUser().balance)}`,                                                 icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
+      { label: 'Toplam Kitap',   value: shown.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600', href: '#books' },
+      { label: 'Kirada',         value: active.length,             sub: `Sende ${myActive} · ${rentableNow} kitap kiralık`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600', href: '#rentals' },
+      { label: 'Bakiyen',        value: formatMoney(currentUser().balance), sub: 'Kiralamalarda kullanılır',                                       icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
       // Günün İndirimi vitrini kapalıysa kart hiç gösterilmez
       showcaseLive('deals') && { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
     ].filter(Boolean);
@@ -44,17 +44,17 @@
     $('#dashStats').classList.toggle('lg:grid-cols-4', cards.length === 4);
     $('#dashStats').classList.toggle('lg:grid-cols-3', cards.length === 3);
     $('#dashStats').innerHTML = cards.map((c) => `
-      <div class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-start justify-between gap-2 sm:gap-3 hover:shadow-soft-lg transition min-w-0">
+      <${c.href ? `a href="${c.href}"` : 'div'} class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-start justify-between gap-2 sm:gap-3 hover:shadow-soft-lg transition min-w-0${c.href ? ' cursor-pointer hover:ring-1 hover:ring-brand-200' : ''}">
         <div class="min-w-0">
           <p class="text-[11px] font-medium text-slate-400">${c.label}</p>
           <p class="text-base sm:text-xl font-bold text-slate-800 mt-1 truncate">${c.value}</p>
           <p class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">${c.sub}</p>
         </div>
         <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
-      </div>`).join('');
+      </${c.href ? 'a' : 'div'}>`).join('');
   }
 
-  /* --- 8.1.3 Vitrin Ayarları (yalnızca Admin) · vitrinleri açar / kapatır ---
+  /* --- 8.1.3 Ana Sayfa Ayarları (yalnızca Admin) · vitrinleri açar / kapatır, Hediye Kutusu'na gider ---
      Kapalı vitrin hiç yokmuş gibidir (bkz. showcaseOn). Günün İndirimi kapatılırken o anki grup saklanır;
      başka bir gün açılırsa o gruptan devam eder ve yine sonraki 10:00'a kadar sürer. */
   const SHOWCASES = [
@@ -67,35 +67,43 @@
   /* Kış sezonunda: Kış Fırsatları görünür, Günün İndirimi ve Fırsatlar listede yok · normal sezonda Kış Fırsatları yok */
   const shownShowcases = () => SHOWCASES.filter((s) => (winterOn() ? !WINTER_PAUSED.includes(s.key) : s.key !== 'winter'));
 
-  /* Ana sayfada yalnızca küçük bir buton (kapalı vitrin sayısıyla) · ayarlar pencerede */
+  /* Ana Sayfa Ayarları: sayfa başlığının sağında tek buton (kapalı vitrin sayısıyla) ·
+     pencerede vitrinlerin anahtarları + Hediye Kutusu */
   function renderShowcaseSettings() {
-    const box = $('#showcaseSettings');
-    if (!isAdmin()) { box.innerHTML = ''; return; }
+    if (!isAdmin()) { setPageActions('dashboard', ''); return; }
     const off = shownShowcases().filter((s) => !showcaseOn(s.key)).length;
-    const live = giftBoxLive();
-    box.innerHTML = `
-      <div class="flex justify-end flex-wrap gap-2 mb-4">
-        <button type="button" data-open-giftbox-settings
-          class="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white shadow-soft border border-slate-100 hover:border-brand-200 hover:shadow-soft-lg text-xs font-semibold text-slate-700 transition">
-          <span class="w-6 h-6 rounded-full bg-gradient-to-br from-rose-400 to-amber-400 text-white flex items-center justify-center text-[11px]">🎁</span>
-          Hediye Kutusu
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${live ? 'text-emerald-700 bg-emerald-50' : 'text-slate-500 bg-slate-100'}">${live ? `${giftDayAt()}/${GIFT_DAYS}. gün` : 'kapalı'}</span>
-        </button>
-        <button type="button" data-open-showcase
-          class="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white shadow-soft border border-slate-100 hover:border-brand-200 hover:shadow-soft-lg text-xs font-semibold text-slate-700 transition">
-          <span class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[11px]">⚙️</span>
-          Vitrin Ayarları
-          ${off ? `<span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">${off} kapalı</span>` : ''}
-        </button>
-      </div>`;
+    setPageActions('dashboard', `
+      <button type="button" data-open-showcase
+        class="flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full bg-white shadow-soft border border-slate-100 hover:border-brand-200 hover:shadow-soft-lg text-xs font-semibold text-slate-700 transition">
+        <span class="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[11px]">⚙️</span>
+        Ana Sayfa Ayarları
+        ${off ? `<span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">${off} vitrin kapalı</span>` : ''}
+      </button>`);
   }
 
   function openShowcaseModal() {
     if (!requireAdmin()) return;
+    const live = giftBoxLive();
     openModal(`
-      ${modalHeader('Vitrin Ayarları ⚙️', 'Kapalı vitrin hiç yokmuş gibidir: kimse görmez, indirimi uygulanmaz.', 'tag', 'bg-slate-100 text-slate-700')}
+      ${modalHeader('Ana Sayfa Ayarları ⚙️', 'Kapalı vitrin hiç yokmuş gibidir: kimse görmez, indirimi uygulanmaz.', 'tag', 'bg-slate-100 text-slate-700')}
       <div class="p-5 space-y-4">
-        <div id="showcaseList" class="space-y-2"></div>
+        <div>
+          <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Vitrinler</p>
+          <div id="showcaseList" class="space-y-2"></div>
+        </div>
+        <div>
+          <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Hediye Kutusu</p>
+          <button type="button" data-open-giftbox-settings
+            class="w-full flex items-center gap-3 p-2.5 rounded-2xl border text-left transition bg-white border-brand-100 hover:border-brand-200">
+            <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-400 to-amber-400 text-white flex items-center justify-center text-base shrink-0">🎁</span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-xs font-bold text-slate-700">Hediye Kutusu</span>
+              <span class="block text-[10px] text-slate-400">${GIFT_DAYS} günlük günlük ödül · açma / kapama ve ödüller</span>
+            </span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${live ? 'text-emerald-700 bg-emerald-50' : 'text-slate-500 bg-slate-100'}">${live ? `${giftDayAt()}/${GIFT_DAYS}. gün` : 'kapalı'}</span>
+            <span class="text-slate-300 shrink-0">›</span>
+          </button>
+        </div>
         <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
       </div>`);
     renderShowcaseList();
@@ -126,7 +134,7 @@
             ${note(key, on)}
           </span>
           <span class="relative w-9 h-5 rounded-full shrink-0 transition ${on ? 'bg-emerald-500' : 'bg-slate-300'}">
-            <span class="absolute top-0.5 ${on ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+            <span class="absolute top-0.5 ${on ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-[#fff] shadow transition-all"></span>
           </span>
         </button>`;
     };
@@ -425,7 +433,7 @@
   /* Admin: Kış Fırsatı indirimini seç · bu sezon gelen kış kitabı sezon boyunca indirimsiz kalır */
   function openWinterDealModal(bookId) {
     if (!requireAdmin()) return;
-    if (!winterShowcaseOn()) return toast('Kış Fırsatları yalnızca Kış sezonunda ve Vitrin Ayarları\'nda açıkken kullanılır.', 'info');
+    if (!winterShowcaseOn()) return toast('Kış Fırsatları yalnızca Kış sezonunda ve Ana Sayfa Ayarları\'nda açıkken kullanılır.', 'info');
     const fixed = getBook(bookId);
     if (!fixed || !hasWinterTheme(fixed)) return;
     if (isWinterNewBook(fixed)) return toast('Bu kışın kitabı · sezon boyunca indirimsiz kalır.', 'info');
@@ -628,7 +636,7 @@
       : list.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
 
     box.innerHTML = `
-      <div class="gs-panel relative overflow-hidden mb-6 p-4 sm:p-5">
+      <div class="light-scope gs-panel relative overflow-hidden mb-6 p-4 sm:p-5">
         <span class="gs-rays" aria-hidden="true"></span>
         <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div class="flex items-center gap-3">
@@ -684,7 +692,7 @@
     };
 
     box.innerHTML = `
-      <div class="museum-hall relative rounded-3xl overflow-hidden shadow-soft-lg mb-6 p-4 sm:p-6">
+      <div class="light-scope museum-hall relative rounded-3xl overflow-hidden shadow-soft-lg mb-6 p-4 sm:p-6">
         <div class="museum-hall-lamps absolute inset-x-0 top-0 pointer-events-none"></div>
         <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div class="flex items-center gap-3">
@@ -778,7 +786,8 @@
       const newPrice = round2(b.price * (1 - rate / 100));
       batch.set(col('announcements').doc(), {
         type: 'news', category: 'İndirim',
-        title: `${name}: ${b.title} ${rate === 100 ? 'bedava' : `%${rate} indirimli`}`,
+        // Başlıkta yalnızca kitap + indirim (fırsat adı karışıklık yapıyordu · içerikte zaten yazıyor)
+        title: `${b.title} ${rate === 100 ? 'bedava' : `%${rate} indirimli`}`,
         body: `🏷️ ${name}\n"${b.title}" Fırsatlar'da! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
         bookId: b.id, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
       });

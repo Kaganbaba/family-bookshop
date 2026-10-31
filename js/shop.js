@@ -816,7 +816,7 @@
           const saving = Math.max(0, round2(offerNormalTotal(o) - offerPrice(o)));
           return `
             <article class="showcase-host bg-white rounded-3xl shadow-soft overflow-hidden flex flex-col transition duration-300 hover:shadow-soft-lg hover:-translate-y-1 ${sc.ultra ? 'ultra-glow' : tier ? `deal-${tier}` : ''}">
-              <div data-open-offer="${o.id}" class="offer-sheen relative h-60 sm:h-64 ${sc.bg} cursor-pointer overflow-hidden">
+              <div data-open-offer="${o.id}" class="light-scope offer-sheen relative h-60 sm:h-64 ${sc.bg} cursor-pointer overflow-hidden">
                 <span class="absolute inset-0 offer-pattern"></span>
                 ${sc.ultra ? ultraBoltsHTML() : ''}
                 <span class="absolute -right-12 -top-12 w-44 h-44 rounded-full bg-white/15"></span>
@@ -893,7 +893,7 @@
     }).join('');
 
     openModal(`
-      <div class="showcase-host offer-sheen relative h-72 sm:h-80 ${sc.bg} overflow-hidden">
+      <div class="light-scope showcase-host offer-sheen relative h-72 sm:h-80 ${sc.bg} overflow-hidden">
         <span class="absolute inset-0 offer-pattern"></span>
         ${sc.ultra ? ultraBoltsHTML() : ''}
         <span class="absolute -right-12 -top-12 w-52 h-52 rounded-full bg-white/15"></span>

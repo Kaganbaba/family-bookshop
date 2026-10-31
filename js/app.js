@@ -37,7 +37,6 @@
       if ((m = el('[data-zoom-cover]')))       return openCoverLightbox(m.querySelector('img'));
       if ((m = el('[data-exit-member-view]'))) return setMemberView(false);
       if ((m = el('[data-open-feedback]')))    return openFeedbackModal();
-      if ((m = el('[data-fb-filter]')))        { state.fbFilter = m.dataset.fbFilter; return openFeedbackModal(); }
       if ((m = el('[data-send-reply]')))       return sendFeedbackReply(m.dataset.sendReply);
       if ((m = el('[data-delete-feedback]')))  return deleteFeedback(m.dataset.deleteFeedback);
       if ((m = el('[data-refund-rental]')))    return openRefundRequest(m.dataset.refundRental);
@@ -87,6 +86,7 @@
       if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-edit-winter]')))      return openWinterDealModal(m.dataset.editWinter);
+      if ((m = el('[data-theme-toggle]')))     return toggleDarkMode();
       if ((m = el('[data-open-giftbox]')))     return openGiftBoxModal();
       if ((m = el('[data-claim-gift]')))       { m.disabled = true; return claimGiftFromModal(); }
       if ((m = el('[data-open-giftbox-settings]'))) return openGiftBoxSettings();

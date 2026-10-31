@@ -23,8 +23,9 @@ Derleme adımı yok. Tüm JS dosyaları **normal (modül olmayan) `<script defer
 
 | Dosya | İçerik |
 |---|---|
-| `index.html` | `<head>` (Firebase/Tailwind CDN, `tailwind.config`), HTML iskeleti (giriş ekranı, navbar, profil paneli, sayfa `<section>`'ları, footer, modal kökleri), script/link etiketleri |
-| `css/styles.css` | Özel CSS: animasyonlar, vitrinler, konfeti, şimşek, ghost-title |
+| `index.html` | `<head>` (Firebase/Tailwind CDN, `js/theme.js`), HTML iskeleti (giriş ekranı, navbar, profil paneli, sayfa `<section>`'ları, footer, modal kökleri), script/link etiketleri |
+| `js/theme.js` | T) `tailwind.config` + koyu mod: Tailwind paleti CSS değişkenlerine bağlı (`--bg-*`, `--tx-*`, `--bd-*`), `applyTheme`, `setThemePref`, `isDarkMode`. `<head>` içinde **defer olmadan**, Tailwind CDN'den hemen sonra yüklenir |
+| `css/styles.css` | Özel CSS: animasyonlar, vitrinler, konfeti, şimşek, ghost-title · en altta koyu mod (`html.dark`) karşılıkları |
 | `js/core.js` | 0) Firebase + `ALLOWED_EMAILS` · 1) veri önbellek dizileri · 1.1) örnek katalog (`SEED_*`) · ayarlar ve `state` · 2) sabitler ve yardımcılar (`$`, `format*`, `escapeHTML`, `isAdmin`…) · 6–7) menü, rozetler, SPA yönlendirme (`PAGE_RENDERERS`, `router`) · 14) modal altyapısı · 18–19) aç/kapa ve canlı sayaç (`tick`) |
 | `js/logic.js` | 3) kiralama + reyting yardımcıları · 4) günün indirimleri motoru, vitrin/yeni kitap indirimi hesapları · 5) Firestore yazmaları, puan/kupon hesapları, liderlik |
 | `js/home.js` | 8) Ana sayfa: istatistik kartları, yeni kitap vitrini, vitrin indirimleri, günün indirimleri, son kiralananlar |
@@ -35,7 +36,14 @@ Derleme adımı yok. Tüm JS dosyaları **normal (modül olmayan) `<script defer
 | `js/account.js` | 16–17) rol yönetimi, profil menüsü, bakiye paneli · 17.05) geri bildirim · 17.06) iade · 17.0) Profilim |
 | `js/app.js` | 20) olay dinleyicileri (`bindEvents`) · 21) kimlik doğrulama, canlı senkron (`SYNC`, `startSync`), footer, `init` + `DOMContentLoaded` |
 
-**Yükleme sırası** (index.html'de bu sırayla): `core → logic → home → books → users-news → shop → admin → account → app`.
+**Yükleme sırası** (index.html'de bu sırayla): `theme` (head, defer yok) `→ core → logic → home → books → users-news → shop → admin → account → app`.
+
+## Koyu mod
+
+Ayarlar penceresinden açılır, tercih tarayıcıda (`localStorage` → `fb.theme`) saklanır. Tailwind renk sınıfları kendiliğinden uyar; yeni kod yazarken:
+- Renkleri Tailwind sınıflarıyla ver (`bg-white`, `text-slate-800`, `bg-rose-50`…). CSS'te elle renk yazacaksan `rgb(var(--bg-slate-50))` gibi değişken kullan ya da `styles.css`'in sonundaki `html.dark` bölümüne koyu karşılığını ekle.
+- Koyu modda da hep beyaz kalması gereken şey (anahtar düğmesi vb.) → `bg-[#fff]`. Renkli zemin üstündeki yarı saydam beyaz zemin (`bg-white/20`, %50 altı) beyaz kalır; `bg-white/50` ve üstü yüzey sayılır ve koyulaşır.
+- Kendi sabit renkleriyle tasarlanmış bölüm (oyun mağazası vitrini, müze, alt bilgi) → köküne `light-scope` sınıfı: altı koyu modda da açık mod renkleriyle kalır.
 
 ## Yeni kod hangi dosyaya yazılır
 

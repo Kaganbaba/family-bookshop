@@ -222,7 +222,7 @@
       const series = Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : '';
       return `
         <div data-slide="${i}" data-ghost="${snowy ? 'is-winter' : fresh ? 'is-new' : ''}" role="group" aria-roledescription="kitap" aria-label="${i + 1} / ${list.length}: ${escapeHTML(b.title)}"
-          class="book-slide absolute left-1/2 top-0 w-[248px] sm:w-[290px]" style="${bookSlideStyle(i - cur)}">
+          class="book-slide w-[248px] sm:w-[290px]" style="${bookSlideStyle(wrapSlideD(i - cur, list.length))}">
           <div class="relative overflow-hidden rounded-3xl shadow-soft-lg px-5 pt-6 pb-5 flex flex-col items-center text-center ${snowy
             ? 'winter-row ring-2 ring-sky-300'
             : fresh ? 'bg-gradient-to-b from-amber-50 via-yellow-50/70 to-white ring-2 ring-amber-300' : 'bg-white ring-1 ring-slate-100'}">
@@ -276,16 +276,33 @@
         ${navBtn(-1)}${navBtn(1)}
       </div>
       <div class="mt-3 space-y-2">
-        <p class="text-center text-xs text-slate-500"><b id="bookSlideCounter" class="text-slate-700">${cur + 1}</b> / ${list.length}
+        <p class="text-center text-xs text-slate-500"><b id="bookSlideCounter" class="text-slate-700">${bookSlideNo(cur).no}</b> / <span id="bookSlideTotal">${bookSlideNo(cur).total}</span>
           <span class="text-slate-300 mx-1">·</span><span class="text-slate-400">sürükle ya da oklarla geç</span></p>
         ${dots}
       </div>`;
   }
 
-  /* Konum CSS değişkenleriyle: --d (ortaya uzaklık, sürüklerken kesirli) · --ad (mutlak, en fazla 3) */
-  function bookSlideStyle(d) {
+  /* Konum CSS değişkenleriyle: --d (ortaya uzaklık, sürüklerken kesirli) · --ad (mutlak, en fazla 3)
+     jump: kart döngünün öbür ucuna geçiyor · ekranın üstünden uçmasın diye animasyonsuz yerleşir */
+  function bookSlideStyle(d, jump = false) {
     const ad = Math.min(Math.abs(d), 3);
-    return `--d:${d};--ad:${ad};z-index:${100 - Math.round(ad * 10)};visibility:${ad > 2.6 ? 'hidden' : 'visible'}`;
+    return `--d:${d};--ad:${ad};z-index:${100 - Math.round(ad * 10)};visibility:${ad > 2.6 ? 'hidden' : 'visible'}${jump ? ';transition:none' : ''}`;
+  }
+
+  /* Alttaki sayaç: seri kitabında seri no / en büyük seri no · serisiz kitapta vitrindeki sıra / kitap sayısı */
+  function bookSlideNo(cur) {
+    const ids = state.bookSlideIds;
+    const seriesOf = (id) => { const b = getBook(id); return Number.isInteger(b?.seriesNo) && getType(b.type)?.inDeals ? b.seriesNo : null; };
+    const no = seriesOf(ids[cur]);
+    if (no === null) return { no: cur + 1, total: ids.length };
+    return { no, total: Math.max(...ids.map(seriesOf).filter((n) => n !== null)) };
+  }
+
+  /* Vitrin döngülü: son kitaptan sonra ilk kitap gelir · uzaklık -n/2…n/2 aralığına sarılır (solda da komşu olur) */
+  function wrapSlideD(d, n) {
+    if (n < 3) return d;
+    d = ((d % n) + n) % n;
+    return d > n / 2 ? d - n : d;
   }
 
   /* Kartları seçili kitaba göre yerleştirir · drag: sürükleme kayması (kart adımı cinsinden, kesirli) */
@@ -295,15 +312,20 @@
     const cur = Math.max(0, state.bookSlideIds.indexOf(state.bookSlideId));
     const slides = [...stage.querySelectorAll('[data-slide]')];
     slides.forEach((s, i) => {
-      s.style.cssText = bookSlideStyle(i - cur + drag);
+      const d = wrapSlideD(i - cur + drag, slides.length);
+      const prev = parseFloat(s.style.getPropertyValue('--d'));
+      s.style.cssText = bookSlideStyle(d, Math.abs(d - prev) > 2);
       s.classList.toggle('is-center', i === cur);
     });
-    // Sahne yüksekliği = en uzun kart (kartlar üst üste mutlak konumda)
-    stage.querySelector('.book-track').style.height = `${Math.max(...slides.map((s) => s.offsetHeight))}px`;
-    stage.querySelector('[data-book-nav="-1"]').disabled = cur === 0;
-    stage.querySelector('[data-book-nav="1"]').disabled = cur === slides.length - 1;
+    // 2 kitapta döngü yok: uçlarda oklar kapanır
+    const loop = slides.length >= 3;
+    stage.querySelector('[data-book-nav="-1"]').disabled = !loop && cur === 0;
+    stage.querySelector('[data-book-nav="1"]').disabled = !loop && cur === slides.length - 1;
     const counter = $('#bookSlideCounter');
-    if (counter) counter.textContent = cur + 1;
+    const slideNo = bookSlideNo(cur);
+    if (counter) counter.textContent = slideNo.no;
+    const total = $('#bookSlideTotal');
+    if (total) total.textContent = slideNo.total;
     // Üst satırdaki parıldayan ad ortadaki kitabı izler (yeni kitapta altın, kış kitabında buz rengi)
     const ghost = $('#bookGhostTitle');
     if (ghost) {
@@ -312,13 +334,14 @@
     }
     $$('[data-book-goto]').forEach((dot, i) => dot.classList.toggle('is-active', i === cur));
     const bar = $('#bookSlideBar');
-    if (bar) bar.style.width = `${((cur + 1) / slides.length) * 100}%`;
+    if (bar) bar.style.width = `${(slideNo.no / slideNo.total) * 100}%`;
   }
 
   function goToBookSlide(i) {
     const ids = state.bookSlideIds;
     if (!ids.length) return;
-    state.bookSlideId = ids[Math.max(0, Math.min(ids.length - 1, i))];
+    // Döngülü (3+ kitap): baştan geri gidince sona, sondan ileri gidince başa
+    state.bookSlideId = ids.length >= 3 ? ids[((i % ids.length) + ids.length) % ids.length] : ids[Math.max(0, Math.min(ids.length - 1, i))];
     layoutBookStage();
   }
   const slideBooks = (dir) => goToBookSlide(state.bookSlideIds.indexOf(state.bookSlideId) + dir);
@@ -350,8 +373,8 @@
         stage.classList.add('is-dragging');
       }
       let shift = dx / step;
-      // Uçlarda yaylanma
-      if ((cur === 0 && shift > 0) || (cur === ids.length - 1 && shift < 0)) shift *= 0.3;
+      // Uçlarda yaylanma (yalnızca döngü olmayan 2 kitapta)
+      if (ids.length < 3 && ((cur === 0 && shift > 0) || (cur === ids.length - 1 && shift < 0))) shift *= 0.3;
       layoutBookStage(shift);
     };
     const end = () => {
@@ -569,18 +592,21 @@
         <span class="sm:hidden absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 rounded-full bg-slate-200"></span>
         <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-white shadow-soft text-slate-400 hover:text-slate-600 flex items-center justify-center transition">${icon('close', 'w-4 h-4 pointer-events-none')}</button>
         <div class="flex gap-4 sm:gap-5">
-          ${b.cover ? `<button type="button" data-zoom-cover title="Kapağı büyüt" aria-label="Kapağı büyüt" class="relative shrink-0 self-start cursor-zoom-in rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-300 group">
-              ${museumCoverHTML(b, 'lg')}
-              <span class="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 shadow-soft text-slate-600 text-xs flex items-center justify-center group-hover:scale-110 transition">🔍</span>
-            </button>` : museumCoverHTML(b, 'lg')}
+          <!-- Kapak · altında (varsa) son sergilenebilme anı düz yazıyla -->
+          <div class="shrink-0 self-start flex flex-col items-center gap-2">
+            ${b.cover ? `<button type="button" data-zoom-cover title="Kapağı büyüt" aria-label="Kapağı büyüt" class="relative cursor-zoom-in rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-300 group">
+                ${museumCoverHTML(b, 'lg')}
+                <span class="absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full bg-white/90 shadow-soft text-slate-600 text-xs flex items-center justify-center group-hover:scale-110 transition">🔍</span>
+              </button>` : museumCoverHTML(b, 'lg')}
+            ${isExhibitable(b, now) && exhibitUntilMs(b) != null
+              ? `<p class="w-28 text-center text-[10px] leading-snug text-stone-500" title="Bu andan sonra sergilenemez">⏳ Son sergilenebilme<br><span class="font-semibold text-stone-600">${formatDateTimeYear(exhibitUntilMs(b))}</span></p>`
+              : ''}
+          </div>
           <div class="min-w-0 flex-1 pt-1 pr-8">
             <div class="flex items-center gap-1.5 flex-wrap">
               ${museumChip(b)}
               <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-stone-800 text-amber-100">🏛️ Müze</span>
               ${exhibitStateChip(b)}
-              ${isExhibitable(b, now) && exhibitUntilMs(b) != null
-                ? `<span class="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" title="Bu andan sonra sergilenemez">⏳ Son sergilenebilme: ${formatDateTimeYear(exhibitUntilMs(b))}</span>`
-                : ''}
             </div>
             <h3 class="text-base sm:text-lg font-bold text-slate-800 leading-snug mt-1.5">${escapeHTML(b.title)}</h3>
             <p class="text-[11px] text-stone-500 mt-1">${onExhibit
@@ -674,9 +700,9 @@
                 <div class="min-w-0">
                   <p class="flex items-center gap-1.5 min-w-0">
                     <span class="text-xs font-semibold ${active ? 'text-slate-800' : 'text-slate-500'} truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</span>
+                    ${b ? `<span class="shrink-0">${typeChip(b.type)}</span>` : ''}
                     ${active ? '' : `<span class="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>${endedLabel(r)}</span>`}
                   </p>
-                  <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">${b ? typeChip(b.type) : ''}</p>
                 </div>
                 <div class="text-right shrink min-w-0 max-w-[65%]">${rentalPriceHTML(r)}</div>
               </div>
@@ -913,11 +939,12 @@
             <p class="text-[10px] ${future ? 'text-violet-600 font-semibold' : 'text-slate-400'}">${future
               ? `⏳ Planlandı · ${formatLongDate(l.changedAt)} ${formatTime(l.changedAt)} · ${formatRemaining(logEffMs(l) - Date.now())}`
               : `${formatLongDate(l.changedAt)} · ${formatTime(l.changedAt)}`}</p>
-            <p class="text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
+            <!-- Tek satır: zam / indirim etiketi asla alta kaymaz (dar ekranda ₺ farkı gizlenir, yüzde kalır) -->
+            <p class="text-xs flex items-center gap-1.5 whitespace-nowrap mt-0.5">
               <span class="text-slate-400 line-through">${formatMoney(l.oldPrice)}</span>
-              <span class="text-slate-300">${icon('arrow', 'w-3 h-3')}</span>
+              <span class="text-slate-300 shrink-0">${icon('arrow', 'w-3 h-3')}</span>
               <b class="text-slate-800">${formatMoney(l.newPrice)}</b>
-              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '▲' : '▼'} ${formatMoney(Math.abs(diff))} · ${pctText(pricePct(l.oldPrice, l.newPrice))}</span>
+              <span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${up ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}">${up ? '▲' : '▼'}<span class="hidden sm:inline"> ${formatMoney(Math.abs(diff))} ·</span> ${pctText(pricePct(l.oldPrice, l.newPrice))}</span>
             </p>
           </div>
           ${admin ? `<button type="button" data-delete-log="${l.id}" data-book-id="${b.id}" data-back-offer="${backOfferId}" title="Bu kaydı sil"

@@ -1127,7 +1127,7 @@
      bookId verilmezse sergilenebilir ve sergide olmayan Müze kitapları arasından seçilir · paket olarak eklenemez */
   function openExhibitModal(bookId = null) {
     if (!requireAdmin()) return;
-    if (!showcaseOn('museum')) return toast('Müze Vitrini kapalı · önce Vitrin Ayarları\'ndan aç.', 'info');
+    if (!showcaseOn('museum')) return toast('Müze Vitrini kapalı · önce Ana Sayfa Ayarları\'ndan aç.', 'info');
     const fixed = bookId ? museumBooks.find((x) => x.id === Number(bookId)) : null;
     if (bookId && !fixed) return;
     if (fixed && !isExhibitable(fixed)) return toast('Bu kitap sergilenemez olarak ayarlı.', 'error');

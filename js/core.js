@@ -222,7 +222,7 @@
   const themeChipHTML = (t) => {
     const c = isHexColor(t.color) ? t.color : '#64748b';
     return `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
-      style="color:color-mix(in srgb, ${c} 80%, #0f172a);background:${c}1f;box-shadow:inset 0 0 0 1px ${c}45">${t.emoji ? `<span>${escapeHTML(t.emoji)}</span>` : ''}${escapeHTML(t.label)}</span>`;
+      style="color:color-mix(in srgb, ${c} 80%, var(--mix-ink));background:${c}1f;box-shadow:inset 0 0 0 1px ${c}45">${t.emoji ? `<span>${escapeHTML(t.emoji)}</span>` : ''}${escapeHTML(t.label)}</span>`;
   };
   const themeChipsHTML = (b, cls = '') => {
     const list = bookThemesOf(b);
@@ -251,7 +251,6 @@
     confirmAction: null,
     panelUser: null,       // profil panelindeki Kullanıcı Yönetimi: açık olan kullanıcı
     feedbackOpen: false,   // Geri Bildirim penceresi açık mı (canlı liste yenilemesi için)
-    fbFilter: 'open',      // Admin: 'open' | 'answered' | 'all'
     fbFresh: null,         // pencere açılırken "yeni" olan geri bildirimler
     refundsOpen: false,    // Onay Bekleyenler / İadelerim penceresi açık mı
     refundFilter: 'pending', // Admin: 'pending' | 'approved' | 'rejected'
@@ -356,8 +355,9 @@
     if (!el) { el = document.createElement('style'); el.id = 'typeColors'; document.head.appendChild(el); }
     el.textContent = list.map((t) => {
       const k = typeClassKey(t.id), c = t.color;
+      // --mix-paper / --mix-ink (js/theme.js): açık modda beyaz / lacivert, koyu modda kart yüzeyi / beyaz
       return `.tc-${k}-g{background-image:linear-gradient(to bottom right,color-mix(in srgb,${c} 60%,#fff),${c})!important}`
-        + `.tc-${k}-c{background-color:color-mix(in srgb,${c} 12%,#fff)!important;color:color-mix(in srgb,${c} 80%,#0f172a)!important}`
+        + `.tc-${k}-c{background-color:color-mix(in srgb,${c} 12%,var(--mix-paper))!important;color:color-mix(in srgb,${c} 80%,var(--mix-ink))!important}`
         + `.tc-${k}-d{background-color:${c}!important}`;
     }).join('\n');
   }
@@ -395,7 +395,7 @@
   /* Müze kapağı: görsel kırpılmadan tam görünür (beyaz zemin + ince çerçeve) · görsel yoksa degrade kapak */
   const MUSEUM_COVER = { md: 'w-20 h-28 rounded-xl', lg: 'w-28 h-40 rounded-2xl', case: 'w-[5.5rem] h-32 sm:w-24 sm:h-36 rounded-md' };
   const museumCoverHTML = (b, size = 'md') => (b.cover
-    ? `<img src="${escapeHTML(b.cover)}" alt="${escapeHTML(b.title)} kapağı" class="${MUSEUM_COVER[size]} shrink-0 object-contain bg-white border border-stone-200 shadow-soft" />`
+    ? `<img src="${escapeHTML(b.cover)}" alt="${escapeHTML(b.title)} kapağı" class="${MUSEUM_COVER[size]} shrink-0 object-contain bg-[#fff] border border-stone-200 shadow-soft" />`
     : coverHTML(b, size === 'case' ? 'lg' : size));
 
   /* Kitap durumları (Admin ayarlar; tüm türler için). "Kirada", kiralanmış kitapta kendiliğinden görünür. */
@@ -588,7 +588,7 @@
     let cover;
     if (src) {
       // kapak kırpılmadan tam görünür (oranı farklıysa kenarları beyaz kalır)
-      cover = `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="block ${COVER_SIZES[size]} object-contain shadow-soft shrink-0 bg-white" />`;
+      cover = `<img src="${escapeHTML(src)}" alt="${escapeHTML(b.title)} kapağı" class="block ${COVER_SIZES[size]} object-contain shadow-soft shrink-0 bg-[#fff]" />`;
     } else {
       const grad = b.museum ? museumStyle(b).grad : getType(b.type) ? typeStyle(b.type).grad : 'from-brand-400 to-brand-600';
       const letters = initials(String(b.title).replace(/[^\p{L}\p{N}\s]/gu, '') || b.title);
@@ -719,6 +719,8 @@
     const changed = state.route !== route;
     state.route = route;
     if (route === 'announcements') state.freshAnnIds = new Set();
+    // Kitaplar vitrini sayfaya her girişte ilk (en son çıkan) kitaptan başlar
+    if (route === 'books' && changed) state.bookSlideId = null;
 
     $$('[data-page]').forEach((section) => {
       const active = section.id === 'page-' + route;

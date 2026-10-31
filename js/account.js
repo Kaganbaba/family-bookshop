@@ -136,7 +136,7 @@
           <span class="block text-[10px] text-slate-400">${state.memberView ? 'Şu an siteyi bir üyenin gözünden görüyorsun' : 'Siteyi bir üyenin gözünden gör · Admin araçları gizlenir'}</span>
         </span>
         <span class="relative w-9 h-5 rounded-full shrink-0 transition ${state.memberView ? 'bg-emerald-500' : 'bg-slate-200'}">
-          <span class="absolute top-0.5 ${state.memberView ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-white shadow transition-all"></span>
+          <span class="absolute top-0.5 ${state.memberView ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-[#fff] shadow transition-all"></span>
         </span>
       </button>` : '';
 
@@ -263,23 +263,16 @@
   const feedbackBadgeCount = () => feedbacks.filter(fbUnseen).length;
 
   /* Pencerede yazma kutusu yok: geri bildirim yalnızca sayfanın en altındaki kutudan gönderilir.
-     Üye → gönderdikleri ve cevaplar · Admin → hepsi (filtre + cevap) */
+     Üye → gönderdikleri ve cevaplar · Admin → hepsi, en yeni üstte (filtre yok) + cevap */
   function openFeedbackModal() {
     const admin = isAdmin();
     state.feedbackOpen = true;
     // Pencere açıldığında "yeni" olanlar vurgulanır (görüldü işareti hemen yazılsa da vurgu kalır)
     state.fbFresh = new Set(feedbacks.filter(fbUnseen).map((f) => f.id));
-    const filterBtn = (k, label, n) => `
-      <button type="button" data-fb-filter="${k}" class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${state.fbFilter === k ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}">
-        ${label} <span class="opacity-70">${n}</span></button>`;
-    const count = (s) => feedbacks.filter((f) => (f.status || 'open') === s).length;
     openModal(`
       ${modalHeader(admin ? 'Geri Bildirimler 💬' : 'Geri Bildirimlerim 💬',
         admin ? 'Geri bildirimleri oku ve cevapla.' : 'Gönderdiğin geri bildirimler ve Admin\'in cevapları.', 'announcements')}
       <div class="p-5 space-y-4">
-        ${admin ? `<div class="flex gap-1.5 flex-wrap">
-            ${filterBtn('open', '⏳ Bekleyen', count('open'))}${filterBtn('answered', '✓ Cevaplanan', count('answered'))}${filterBtn('all', 'Tümü', feedbacks.length)}
-          </div>` : ''}
         <div id="fbList"></div>
         <p class="text-[10px] text-slate-400 text-center">💬 Yeni geri bildirimi sayfanın en altındaki <b class="text-slate-500">Geri Bildirim</b> kutusundan gönderebilirsin.</p>
         <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
@@ -295,7 +288,6 @@
     const drafts = {};
     box.querySelectorAll('[data-reply-input]').forEach((t) => { drafts[t.dataset.replyInput] = t.value; });
     let list = admin ? [...feedbacks] : feedbacks.filter((f) => f.userId === state.currentUserId);
-    if (admin && state.fbFilter !== 'all') list = list.filter((f) => (f.status || 'open') === state.fbFilter);
     list.sort((a, b) => isoMs(b.createdAt) - isoMs(a.createdAt));
 
     const card = (f) => {
@@ -328,7 +320,7 @@
     };
     box.innerHTML = list.length
       ? `<ul class="space-y-3">${list.map(card).join('')}</ul>`
-      : emptyState(admin ? 'Bu filtrede geri bildirim yok.' : 'Henüz geri bildirim göndermedin.');
+      : emptyState(admin ? 'Henüz geri bildirim yok.' : 'Henüz geri bildirim göndermedin.');
     box.querySelectorAll('[data-reply-input]').forEach((t) => { if (drafts[t.dataset.replyInput]) t.value = drafts[t.dataset.replyInput]; });
     markFeedbackSeen();
   }
@@ -690,6 +682,11 @@
         </form>
 
         <div>
+          <h4 class="text-xs font-bold text-slate-700 mb-2">Görünüm</h4>
+          <div id="themeSetting">${themeToggleHTML()}</div>
+        </div>
+
+        <div>
           <h4 class="text-xs font-bold text-slate-700 mb-2">Giriş Yöntemleri</h4>
           <ul class="space-y-2">
             ${method(hasGoogle, '🟢', 'Google', hasGoogle ? 'Bağlı · Google ile tek tıkla giriş' : 'Bağlı değil',
@@ -729,6 +726,28 @@
           </div>
         </div>
       </div>`, 'lg');
+  }
+
+  /* Koyu mod anahtarı (Ayarlar) · tercih bu tarayıcıda saklanır, tema hemen değişir (bkz. js/theme.js) */
+  function themeToggleHTML() {
+    const on = isDarkMode();
+    return `
+      <button type="button" data-theme-toggle aria-pressed="${on}"
+        class="w-full flex items-center gap-3 p-3 rounded-xl border text-left transition ${on ? 'border-brand-200 bg-brand-50/40' : 'border-slate-100 bg-white hover:border-slate-200'}">
+        <span class="w-9 h-9 rounded-xl bg-white shadow-soft flex items-center justify-center shrink-0 text-base">${on ? '🌙' : '☀️'}</span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-xs font-semibold text-slate-700">Koyu Mod</span>
+          <span class="block text-[10px] text-slate-400">${on ? 'Açık · göz yormayan koyu renkler' : 'Kapalı · açık renkli görünüm'} · bu cihazda hatırlanır</span>
+        </span>
+        <span class="relative w-9 h-5 rounded-full shrink-0 transition ${on ? 'bg-emerald-500' : 'bg-slate-300'}">
+          <span class="absolute top-0.5 ${on ? 'left-[18px]' : 'left-0.5'} w-4 h-4 rounded-full bg-[#fff] shadow transition-all"></span>
+        </span>
+      </button>`;
+  }
+  function toggleDarkMode() {
+    setThemePref(isDarkMode() ? 'light' : 'dark');
+    const box = $('#themeSetting');
+    if (box) box.innerHTML = themeToggleHTML();
   }
 
   async function handleSaveName(fd) {
