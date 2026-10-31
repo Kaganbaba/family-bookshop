@@ -88,6 +88,8 @@
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
       if ((m = el('[data-edit-winter]')))      return openWinterDealModal(m.dataset.editWinter);
       if ((m = el('[data-theme-toggle]')))     return toggleDarkMode();
+      if ((m = el('[data-reveal]')))           return revealSection(m);
+      if ((m = el('[data-theme-info]')))       return openThemeInfoModal();
       if ((m = el('[data-open-giftbox]')))     return openGiftBoxModal();
       if ((m = el('[data-claim-gift]')))       { m.disabled = true; return claimGiftFromModal(); }
       if ((m = el('[data-open-giftbox-settings]'))) return openGiftBoxSettings();

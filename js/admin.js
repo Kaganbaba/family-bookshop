@@ -445,15 +445,16 @@
       ${modalHeader('Kategorileri Yönet ⚙️', 'Kitap türleri · değişiklikler tüm sekmelere anında yansır.', 'tag')}
       <div class="p-5 space-y-4">
         <ul class="space-y-2">${rows || `<li>${emptyState('Henüz tür yok.')}</li>`}</ul>
-        <form data-form="saveType" class="p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
-          <p class="text-[11px] font-semibold text-slate-600">Yeni Tür Ekle</p>
+        <button type="button" data-reveal="addTypeForm" class="${BTN_SOFT} w-full !py-2.5 border-dashed">${icon('plus', 'w-3.5 h-3.5')}Kategori Ekle</button>
+        <form id="addTypeForm" data-form="saveType" class="hidden p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
+          <p class="text-[11px] font-semibold text-slate-600">Yeni Kategori Ekle</p>
           <input name="label" required maxlength="24" class="${INPUT_CLS} !py-1.5" placeholder="Örn. Şiir" />
           ${paletteOptions({ color: '#10b981' })}
           <label class="flex items-center gap-2 text-[11px] text-slate-500">
             <input type="checkbox" name="inDeals" class="rounded border-slate-300 text-brand-600" />
             Günün indirimi döngüsüne girsin
           </label>
-          <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Türü Ekle</button>
+          <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Kategoriyi Ekle</button>
         </form>
         <p class="text-[10px] text-slate-400 leading-relaxed">Ad ve renk ayarı için türün yanındaki ⚙️ simgesine bas. İndirim ayarı tür oluşturulurken seçilir ve sonra değişmez; böylece sıralı indirim döngüsü bozulmaz. Silinen türdeki kitaplar indirim ayarı aynı olan ilk türe taşınır.</p>
         <button type="button" data-quick="bookSettings" class="${BTN_SOFT} w-full !py-2.5">← Kitap Ayarları</button>
@@ -497,30 +498,47 @@
   const themeEmojiInput = (value) => `
     <input name="emoji" maxlength="8" value="${escapeHTML(value || '')}" data-theme-preview="1" aria-label="Emoji" placeholder="🙂"
       class="${INPUT_CLS} !py-1.5 !w-14 shrink-0 text-center" />`;
+  const THEME_DESC_MAX = 300;
+  const themeDescInput = (value) => field('Açıklama (isteğe bağlı)', `
+    <textarea name="desc" rows="2" maxlength="${THEME_DESC_MAX}" class="${INPUT_CLS} resize-y" placeholder="Bu tema ne anlatıyor? Kitaplar'daki ⓘ Temalar penceresinde görünür.">${escapeHTML(value || '')}</textarea>`);
   const themeBookCount = (id) => [...books, ...museumBooks].filter((b) => themeIdsOf(b).includes(id)).length;
 
   /* Tema formundaki önizleme rozeti (ad + renk + logo) */
   function updateThemePreview(form) {
     const box = form?.querySelector('[data-theme-chip]');
     if (!box) return;
-    box.innerHTML = themeChipHTML({ label: form.elements.label.value.trim() || 'Tema', emoji: form.elements.emoji.value.trim(), color: form.elements.color.value, logo: state.themeDraftLogo });
+    state.themeDraftLogoSize = THEME_LOGO_SIZES[form.elements.logoSize?.value] ? form.elements.logoSize.value : state.themeDraftLogoSize;
+    box.innerHTML = themeChipHTML({ label: form.elements.label.value.trim() || 'Tema', emoji: form.elements.emoji.value.trim(), color: form.elements.color.value, logo: state.themeDraftLogo, logoSize: state.themeDraftLogoSize });
   }
 
-  /* Tema logosu: PNG yüklenir (saydamlık korunur, 128 px'e küçültülür) · varsa rozette emojinin yerine geçer */
-  const THEME_LOGO_SIZE = 128;
+  /* Tema logosu: PNG yüklenir (saydamlık korunur, saydam kenarlar kırpılır, 128 px'e küçültülür) ·
+     varsa rozette emojinin yerine geçer · boyutu Küçük / Orta / Büyük */
+  const THEME_LOGO_PX = 128;
   function themeLogoField() {
     const logo = state.themeDraftLogo;
+    const sizeBtn = (k) => `
+      <label class="cursor-pointer">
+        <input type="radio" name="logoSize" value="${k}" ${state.themeDraftLogoSize === k ? 'checked' : ''} data-theme-preview="1" class="peer sr-only" />
+        <span class="block px-2.5 py-1 rounded-lg text-[10px] font-semibold text-slate-500 transition peer-checked:bg-gradient-to-r peer-checked:from-brand-500 peer-checked:to-brand-700 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300">${THEME_LOGO_SIZES[k].label}</span>
+      </label>`;
     return `
-      <div data-theme-logo class="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-brand-100">
-        <span class="w-10 h-10 rounded-lg bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
-          ${logo ? `<img src="${logo}" alt="Logo" class="w-8 h-8 object-contain" />` : '<span class="text-[9px] text-slate-400">Logo</span>'}
-        </span>
-        <span class="flex-1 min-w-0 text-[10px] text-slate-400 leading-snug">${logo ? 'Logo emojinin yerine görünür.' : 'İsteğe bağlı · saydam arka planlı kare PNG önerilir.'}</span>
-        <label class="${BTN_SOFT} !py-1.5 !px-2.5 cursor-pointer shrink-0">
-          ${logo ? 'Değiştir' : 'Logo Yükle'}
-          <input type="file" accept="image/png,image/webp,image/gif,image/jpeg" data-theme-logo-input class="sr-only" />
-        </label>
-        ${logo ? `<button type="button" data-remove-theme-logo class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50 shrink-0" title="Logoyu kaldır" aria-label="Logoyu kaldır">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
+      <div data-theme-logo class="p-2 rounded-xl bg-white border border-brand-100 space-y-2">
+        <div class="flex items-center gap-2.5">
+          <span class="w-10 h-10 rounded-lg bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
+            ${logo ? `<img src="${logo}" alt="Logo" class="w-8 h-8 object-contain" />` : '<span class="text-[9px] text-slate-400">Logo</span>'}
+          </span>
+          <span class="flex-1 min-w-0 text-[10px] text-slate-400 leading-snug">${logo ? 'Logo emojinin yerine görünür.' : 'İsteğe bağlı · saydam arka planlı kare PNG önerilir (kenar boşluğu kendiliğinden kırpılır).'}</span>
+          <label class="${BTN_SOFT} !py-1.5 !px-2.5 cursor-pointer shrink-0">
+            ${logo ? 'Değiştir' : 'Logo Yükle'}
+            <input type="file" accept="image/png,image/webp,image/gif,image/jpeg" data-theme-logo-input class="sr-only" />
+          </label>
+          ${logo ? `<button type="button" data-remove-theme-logo class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50 shrink-0" title="Logoyu kaldır" aria-label="Logoyu kaldır">${icon('trash', 'w-3.5 h-3.5')}</button>` : ''}
+        </div>
+        ${logo ? `
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[10px] font-medium text-slate-500">Logo boyutu</span>
+            <span class="inline-flex gap-0.5 p-0.5 rounded-xl bg-slate-100">${Object.keys(THEME_LOGO_SIZES).map(sizeBtn).join('')}</span>
+          </div>` : ''}
       </div>`;
   }
   function refreshThemeLogo(form) {
@@ -533,7 +551,7 @@
     const form = input.closest('form');
     if (!file) return;
     try {
-      state.themeDraftLogo = await readImageFile(file, THEME_LOGO_SIZE, THEME_LOGO_SIZE, 'image/png');
+      state.themeDraftLogo = await readImageFile(file, THEME_LOGO_PX, THEME_LOGO_PX, 'image/png', true);
       refreshThemeLogo(form);
     } catch (err) {
       toast(err.message || 'Logo yüklenemedi.', 'error');
@@ -548,6 +566,7 @@
   function openThemeManager() {
     if (!requireAdmin()) return;
     state.themeDraftLogo = '';
+    state.themeDraftLogoSize = 'm';
     const rows = allThemes().map((t) => `
       <li class="flex items-center gap-2.5 p-2.5 pl-3.5 rounded-xl border border-slate-100">
         <div class="flex-1 min-w-0">
@@ -562,7 +581,8 @@
       ${modalHeader('Temaları Yönet 🏷️', 'Kitabın konusunu gösteren renkli etiketler · kitap adının yanında ve kitap penceresinde görünür.', 'tag')}
       <div class="p-5 space-y-4">
         <ul class="space-y-2">${rows}</ul>
-        <form data-form="saveTheme" class="p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
+        <button type="button" data-reveal="addThemeForm" class="${BTN_SOFT} w-full !py-2.5 border-dashed">${icon('plus', 'w-3.5 h-3.5')}Tema Ekle</button>
+        <form id="addThemeForm" data-form="saveTheme" class="hidden p-3 rounded-2xl bg-brand-50/50 border border-brand-100 space-y-2.5" autocomplete="off">
           <div class="flex items-center justify-between gap-2">
             <p class="text-[11px] font-semibold text-slate-600">Yeni Tema Ekle</p>
             <span data-theme-chip>${themeChipHTML({ label: 'Tema', color: '#7c3aed' })}</span>
@@ -573,10 +593,11 @@
           </div>
           ${themeColorInput('#7c3aed')}
           ${themeLogoField()}
+          ${themeDescInput('')}
           <p class="text-[10px] text-slate-400 -mt-1">Emoji ve logo isteğe bağlı · logo varsa emojinin yerine görünür · Windows'ta Win + . ile emoji seçebilirsin.</p>
           <button type="submit" class="${BTN_PRIMARY} w-full !py-2">${icon('plus', 'w-3.5 h-3.5')}Temayı Ekle</button>
         </form>
-        <p class="text-[10px] text-slate-400 leading-relaxed">Kitaplara tema, kitabı düzenlerken eklenir. Ad ve renk için temanın yanındaki ⚙️ simgesine bas. Silinen tema kitaplardan da kalkar.</p>
+        <p class="text-[10px] text-slate-400 leading-relaxed">Kitaplara tema, kitabı düzenlerken eklenir. Ad, renk, logo ve açıklama için temanın yanındaki ⚙️ simgesine bas. Açıklamalar herkese Kitaplar sayfasındaki ⓘ Temalar penceresinde görünür. Silinen tema kitaplardan da kalkar.</p>
         <button type="button" data-quick="bookSettings" class="${BTN_SOFT} w-full !py-2.5">← Kitap Ayarları</button>
       </div>`);
   }
@@ -586,6 +607,7 @@
     const t = getTheme(id);
     if (!t) return;
     state.themeDraftLogo = isImageData(t.logo) ? t.logo : '';
+    state.themeDraftLogoSize = THEME_LOGO_SIZES[t.logoSize] ? t.logoSize : 'm';
     openModal(`
       ${modalHeader(`${escapeHTML(t.label)} · Ayarlar ⚙️`, `${themeBookCount(t.id)} kitap`, 'cog')}
       <form data-form="saveTheme" data-edit-id="${t.id}" class="p-5 space-y-3.5" autocomplete="off">
@@ -599,6 +621,7 @@
         </div>
         ${themeColorInput(t.color)}
         ${themeLogoField()}
+        ${themeDescInput(t.desc)}
         <p class="text-[10px] text-slate-400 -mt-1.5">Emoji ve logo isteğe bağlı (boş bırakılabilir) · logo varsa emojinin yerine görünür · Windows'ta Win + . ile emoji seçebilirsin.</p>
         ${t.id === WINTER_THEME_ID ? winterRatesHTML() : ''}
         <div class="grid grid-cols-2 gap-2.5 pt-2">
@@ -646,12 +669,14 @@
     const color = isHexColor(fd.color) ? fd.color.toLowerCase() : '#64748b';
     const emoji = (fd.emoji || '').trim().slice(0, 8);
     const logo = isImageData(state.themeDraftLogo) ? state.themeDraftLogo : '';
+    const logoSize = THEME_LOGO_SIZES[fd.logoSize] ? fd.logoSize : state.themeDraftLogoSize;
+    const desc = String(fd.desc || '').trim().slice(0, THEME_DESC_MAX);
     let done;
     if (editId) {
       if (!getTheme(editId)) return;
       const batch = db.batch();
       // Kış Sezonu teması henüz kaydedilmediyse ilk düzenlemede oluşturulur
-      batch.set(col('bookThemes').doc(editId), { label, emoji, logo, color, order: getTheme(editId).order ?? 0 }, { merge: true });
+      batch.set(col('bookThemes').doc(editId), { label, emoji, logo, logoSize, desc, color, order: getTheme(editId).order ?? 0 }, { merge: true });
       // Kış Fırsatları indirimleri: yalnızca değişenler yazılır
       if (editId === WINTER_THEME_ID) {
         Object.keys(fd).filter((k) => k.startsWith('rate:')).forEach((k) => {
@@ -665,7 +690,7 @@
       done = batch.commit();
     } else {
       const order = allThemes().reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
-      done = col('bookThemes').doc(uid('th')).set({ label, emoji, logo, color, order });
+      done = col('bookThemes').doc(uid('th')).set({ label, emoji, logo, logoSize, desc, color, order });
     }
     const ok = await run(done, editId ? `"${label}" güncellendi.` : `"${label}" teması eklendi.`);
     if (ok && state.modalOpen) openThemeManager();

@@ -67,7 +67,7 @@
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
-  /* bookThemes/{id} · tema (etiket): { label, emoji, logo (base64 PNG, isteğe bağlı · varsa emojinin yerine), color ('#rrggbb'), order } · kitapta themes: [temaId…] ·
+  /* bookThemes/{id} · tema (etiket): { label, emoji, logo (base64 PNG, isteğe bağlı · varsa emojinin yerine), logoSize ('s' | 'm' | 'l'), desc (açıklama · Kitaplar'daki ⓘ Temalar penceresinde), color ('#rrggbb'), order } · kitapta themes: [temaId…] ·
      'kis-sezonu' sabit temadır (silinemez, Kış Fırsatları'na yalnızca bu temadaki kitaplar girer) */
   const bookThemes = [];
   /* winterDeals/{bookId} · Kış Fırsatları indirimi: { bookId, rate (0 | 15 | 25 | 50), updatedAt, updatedBy } ·
@@ -221,8 +221,14 @@
   /* Tema rozeti: logo (varsa, emojinin yerine) ya da emoji + ad, kendi renginde yazı, açık tonlu zemin */
   // Tamamı geçerli base64 olmalı (src'ye kaçışsız yazılır)
   const isImageData = (s) => /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/.test(s || '');
+  /* Logo boyutu (temada logoSize · yoksa Orta) · eksi kenar boşluğu rozetin yüksekliğini büyütmez */
+  const THEME_LOGO_SIZES = {
+    s: { label: 'Küçük', cls: 'w-3.5 h-3.5' },
+    m: { label: 'Orta',  cls: 'w-[18px] h-[18px] -my-0.5' },
+    l: { label: 'Büyük', cls: 'w-[22px] h-[22px] -my-1 -ml-0.5' }
+  };
   const themeIconHTML = (t) => (isImageData(t.logo)
-    ? `<img src="${t.logo}" alt="" class="w-3.5 h-3.5 object-contain shrink-0" />`
+    ? `<img src="${t.logo}" alt="" class="${(THEME_LOGO_SIZES[t.logoSize] || THEME_LOGO_SIZES.m).cls} object-contain shrink-0" />`
     : t.emoji ? `<span>${escapeHTML(t.emoji)}</span>` : '');
   const themeChipHTML = (t) => {
     const c = isHexColor(t.color) ? t.color : '#64748b';
@@ -284,6 +290,7 @@
     freshAnnIds: new Set(), // bu ziyarette "Yeni" olarak işaretlenecek duyurular
     bookDraftCover: '',     // kitap formundaki kapak (base64)
     themeDraftLogo: '',     // tema formundaki logo (base64 PNG · boş = emoji kullanılır)
+    themeDraftLogoSize: 'm', // tema formundaki logo boyutu ('s' | 'm' | 'l')
     offerDraftCovers: ['', '', ''],
     coverBusy: false
   };
@@ -623,9 +630,37 @@
     if (slot) slot.innerHTML = html;
   };
 
+  /* Gizli bölümü açan düğme (ör. "+ Tema Ekle" → ekleme formu): data-reveal="hedefId" · düğme kaybolur, ilk alana odaklanılır */
+  function revealSection(btn) {
+    const box = document.getElementById(btn.dataset.reveal);
+    if (!box) return;
+    box.classList.remove('hidden');
+    btn.classList.add('hidden');
+    box.querySelector('input:not([type=hidden]):not(.sr-only), textarea, select')?.focus();
+  }
+
+  /* Görselin saydam olmayan kısmını çevreleyen dikdörtgen (saydam kenar boşluğu kırpmak için) · tamamen saydamsa null */
+  function opaqueBounds(img) {
+    const s = Math.min(1, 512 / Math.max(img.width, img.height));  // büyük görselde tarama küçük kopyada yapılır
+    const w = Math.max(1, Math.round(img.width * s)), h = Math.max(1, Math.round(img.height * s));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (px[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (x1 < 0) return null;
+    return { x: x0 / s, y: y0 / s, w: (x1 - x0 + 1) / s, h: (y1 - y0 + 1) / s };
+  }
+
   /* Yerel görsel dosyasını okuyup küçültür ve base64 döndürür (varsayılan JPEG · logolar saydamlık için 'image/png').
+     trim: saydam kenar boşluğu kırpılır (logo kendine ayrılan alanı doldursun).
      Küçültme, Firestore'un 1 MB belge sınırı için önemlidir. */
-  function readImageFile(file, maxW = 360, maxH = 540, format = 'image/jpeg') {
+  function readImageFile(file, maxW = 360, maxH = 540, format = 'image/jpeg', trim = false) {
     return new Promise((resolve, reject) => {
       if (!file || !/^image\//.test(file.type)) return reject(new Error('Lütfen bir görsel dosyası seçin.'));
       if (file.size > 10 * 1024 * 1024) return reject(new Error('Görsel en fazla 10 MB olabilir.'));
@@ -635,13 +670,14 @@
         const img = new Image();
         img.onerror = () => reject(new Error('Görsel açılamadı.'));
         img.onload = () => {
-          const scale = Math.min(1, maxW / img.width, maxH / img.height);
+          const src = (trim && opaqueBounds(img)) || { x: 0, y: 0, w: img.width, h: img.height };
+          const scale = Math.min(1, maxW / src.w, maxH / src.h);
           const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(img.width * scale));
-          canvas.height = Math.max(1, Math.round(img.height * scale));
+          canvas.width = Math.max(1, Math.round(src.w * scale));
+          canvas.height = Math.max(1, Math.round(src.h * scale));
           const ctx = canvas.getContext('2d');
           if (!ctx) return resolve(reader.result);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, src.x, src.y, src.w, src.h, 0, 0, canvas.width, canvas.height);
           resolve(canvas.toDataURL(format, 0.85));
         };
         img.src = reader.result;

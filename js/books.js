@@ -4,6 +4,38 @@
   const manageTypesBtn = () =>
     `<button type="button" data-quick="bookSettings" class="${BTN_SOFT}">Kitap Ayarları ⚙️</button>`;
 
+  /* --- 9.0.0 ⓘ Temalar: herkes görür · temaların rozeti, kitap sayısı ve Admin'in yazdığı açıklama --- */
+  const themeInfoBtn = () => `
+    <button type="button" data-theme-info title="Temalar hakkında" class="${BTN_SOFT}">
+      <span class="w-4 h-4 rounded-full border-[1.5px] border-current flex items-center justify-center text-[10px] font-extrabold leading-none" aria-hidden="true">i</span>Temalar
+    </button>`;
+  function openThemeInfoModal() {
+    const shown = visibleBooks();
+    const list = allThemes()
+      .map((t) => ({ t, n: shown.filter((b) => themeIdsOf(b).includes(t.id)).length }))
+      // Üyede boş ve açıklamasız tema gösterilmez · Admin hepsini görür
+      .filter(({ t, n }) => isAdmin() || n || String(t.desc || '').trim());
+    const rows = list.map(({ t, n }) => {
+      const desc = String(t.desc || '').trim();
+      return `
+        <li class="p-3 rounded-2xl border border-slate-100 bg-white">
+          <div class="flex items-center justify-between gap-2">
+            ${themeChipHTML(t)}
+            <span class="text-[10px] text-slate-400 shrink-0">${n} kitap</span>
+          </div>
+          ${desc
+            ? `<p class="text-[11px] text-slate-600 leading-relaxed mt-2 whitespace-pre-line">${escapeHTML(desc)}</p>`
+            : `<p class="text-[10px] text-slate-400 italic mt-1.5">${isAdmin() ? 'Açıklama yok · Kitap Ayarları → Temaları Yönet → ⚙️ ile yazabilirsin.' : 'Henüz açıklama yazılmadı.'}</p>`}
+        </li>`;
+    }).join('');
+    openModal(`
+      ${modalHeader('Temalar ℹ️', 'Kitap adlarının yanındaki renkli etiketler ne anlatıyor?', 'tag')}
+      <div class="p-5 space-y-4">
+        ${rows ? `<ul class="space-y-2">${rows}</ul>` : emptyState('Henüz tema yok.')}
+        <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
+      </div>`);
+  }
+
   /* Dinamik tür sekmeleri (Kitaplar + Kiralananlar ortak). attr: data-* adı, current: seçili tür */
   /* Kitaplar listesinde çarpıcı, mavi tonlu fiyat etiketi (indirimde eski fiyat + yüzde rozeti) */
   function priceTagHTML(b, eff) {
@@ -88,9 +120,9 @@
   };
 
   function renderBooks() {
-    setPageActions('books', isAdmin()
+    setPageActions('books', themeInfoBtn() + (isAdmin()
       ? `${manageTypesBtn()}<button type="button" data-quick="addBook" class="${BTN_PRIMARY}">${icon('plus', 'w-3.5 h-3.5')}Kitap Ekle</button>`
-      : '');
+      : ''));
 
     const now = Date.now();
     // "Tümü" sekmesi yok: yalnızca kategoriler (varsayılan ilk kategori) + en sonda Müze
