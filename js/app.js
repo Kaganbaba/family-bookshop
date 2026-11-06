@@ -19,7 +19,6 @@
       if ((m = t.closest('[data-toggle-member-view]'))) return setMemberView(!state.memberView);
       if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(); }
       if ((m = t.closest('[data-open-refunds]')))    { toggleProfile(false); return openRefundsModal(); }
-      if ((m = t.closest('[data-open-seasons]')))    { toggleProfile(false); return openSeasonModal(); }
       if ((m = t.closest('[data-quick-amount]')))    { const i = $('#bmAmount'); if (i) { i.value = m.dataset.quickAmount; i.focus(); } return; }
       if ((m = t.closest('[data-panel-user]')))      { state.panelUser = state.panelUser === m.dataset.panelUser ? null : m.dataset.panelUser; return renderAdminPanel(); }
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
@@ -86,13 +85,9 @@
       if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
       if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
-      if ((m = el('[data-edit-winter]')))      return openWinterDealModal(m.dataset.editWinter);
       if ((m = el('[data-theme-toggle]')))     return toggleDarkMode();
       if ((m = el('[data-reveal]')))           return revealSection(m);
       if ((m = el('[data-theme-info]')))       return openThemeInfoModal();
-      if ((m = el('[data-open-giftbox]')))     return openGiftBoxModal();
-      if ((m = el('[data-claim-gift]')))       { m.disabled = true; return claimGiftFromModal(); }
-      if ((m = el('[data-open-giftbox-settings]'))) return openGiftBoxSettings();
       if ((m = el('[data-delete-theme]')))     return deleteTheme(m.dataset.deleteTheme);
       if ((m = el('[data-edit-theme]')))       return openThemeEditor(m.dataset.editTheme);
       if ((m = el('[data-open-showcase]')))    return openShowcaseModal();
@@ -101,7 +96,6 @@
       if ((m = el('[data-open-cheque]')))      return m.disabled ? null : openChequeWithPoints(m.dataset.openCheque);
       if ((m = el('[data-delete-cheque]')))    return deleteCheque(m.dataset.deleteCheque);
       if ((m = el('#chq-all')))                { $$('[data-chq-user]').forEach((x) => { x.checked = m.checked; }); return; }
-      if ((m = el('[data-open-seasons]')))     return openSeasonModal();
       if ((m = el('[data-open-deal]')))        return openBookModal(m.dataset.openDeal);
       if ((m = el('[data-delete-rental]')))    return deleteRental(m.dataset.deleteRental);
       if ((m = el('[data-cancel-rental]')))    return cancelRental(m.dataset.cancelRental);
@@ -154,8 +148,6 @@
         case 'saveOffer':   return handleSaveOffer(fd, editId);
         case 'saveType':    return handleSaveType(fd, editId);
         case 'saveTheme':   return handleSaveTheme(fd, editId);
-        case 'saveWinterDeal': return handleSaveWinterDeal(fd, editId);
-        case 'saveGiftBox': return handleSaveGiftBox(fd);
         case 'moveToMuseum': return handleMoveToMuseum(fd, editId);
         case 'saveMuseumBook': return handleSaveMuseumBook(fd, editId);
         case 'saveExhibit': return handleSaveExhibit(fd, editId);
@@ -165,7 +157,6 @@
         case 'setPassword': return handleSetPassword(fd);
         case 'saveVitrine': return handleSaveVitrine(fd);
         case 'sendCheque':  return handleSendCheque(form);
-        case 'saveSeason':  return handleSaveSeason(fd);
         case 'saveShopCoupon': return handleSaveShopCoupon(fd, editId);
         case 'bulkNews':    return handleBulkNews(fd);
         case 'sendRefund':  return handleSendRefund(fd, form);
@@ -194,9 +185,8 @@
       if (t.id === 'bf-date') delete t.dataset.auto;
       if (t.id === 'vd-book') updateVitrinePreview();
       if (t.id === 'rentCoupon') updateRentCoupon();
-      if (t.id === 'sc-type' || t.id === 'sc-timed' || t.id === 'sc-winter') updateShopCouponForm();
+      if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();
-      if (t.matches('[data-gift-type]')) updateGiftRows();
       if (t.id === 'bn-cat' || t.matches('[data-bn-scope]')) updateBulkNewsPreview();
       if (t.matches('[data-filter-kind]')) { const p = t.dataset.filterKind; state[`${p}Kind`] = t.value; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if (t.matches('[data-filter-value]')) { const p = t.dataset.filterValue; state[`${p}Value`] = t.value; return rerenderFilter(p); }
@@ -276,8 +266,6 @@
     ['coupons', coupons, null, (d) => ({ id: d.id, ...d.data(), expiresMs: d.data().expiresAt?.toMillis?.() ?? 0 })],
     ['museumExhibits', museumExhibits, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
     ['bookThemes', bookThemes, (q) => q.orderBy('order')],
-    ['winterDeals', winterDeals, null, (d) => ({ id: d.id, ...d.data(), bookId: Number(d.data().bookId) })],
-    ['giftClaims', giftClaims],
     ['settings', appSettings]
   ];
   let unsubscribers = [];
@@ -294,7 +282,6 @@
       setupMissingLedgers();
       ensureFeedbackSync();
       expireStaleRefunds();
-      expireSeason();
       migrateSpecialToMuseum();
       expireExhibitUntil();
       expireExhibits();

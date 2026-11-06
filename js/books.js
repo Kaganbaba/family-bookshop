@@ -165,20 +165,14 @@
       const rented = isBookRented(b, now);
       const fresh = isNewBook(b, nowDate);
       const eff = getEffectiveDiscount(b, nowDate, dealIds);
-      // Kış sezonunda kış temalı kitap: karlı, buz mavisi desenli satır
-      const snowy = winterOn() && hasWinterTheme(b);
       return `
         <li>
           <button type="button" data-open-book="${b.id}"
-            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${snowy
-              ? 'winter-row border-l-4 border-sky-400'
-              : fresh
-                ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
-                : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
-            ${snowy ? '<span class="winter-drift absolute right-3 sm:right-12 top-1 text-sky-300/80 text-sm pointer-events-none select-none" aria-hidden="true">❄</span>' : ''}
+            class="relative w-full text-left flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 focus:outline-none transition ${fresh
+              ? 'bg-gradient-to-r from-amber-50 via-yellow-50/80 to-white border-l-4 border-amber-400 hover:from-amber-100/80 focus:from-amber-100'
+              : 'hover:bg-brand-50/40 focus:bg-brand-50/60'}">
             <div class="relative shrink-0">
               ${coverHTML(b, 'sm')}
-              ${snowy ? '<span class="absolute -top-1.5 -left-1.5 text-xs leading-none drop-shadow-sm" aria-hidden="true">❄️</span>' : ''}
               ${ratingBadgeHTML(b.id)}
               ${fresh ? `
                 <span class="twinkle absolute -top-1.5 -left-1.5 text-amber-400 text-xs">✦</span>
@@ -198,7 +192,7 @@
                  (sol bilgi uzasa da — ör. yeni kitap indirimi — kaymaz) -->
             <span class="hidden sm:block flex-1 min-w-0" aria-hidden="true"></span>
             <span class="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 max-w-[26%] pointer-events-none" aria-hidden="true">
-              <span class="ghost-title ${snowy ? 'is-winter' : fresh ? 'is-new' : ''} block truncate text-center text-xl lg:text-2xl px-3 select-none">${escapeHTML(b.title)}</span>
+              <span class="ghost-title ${fresh ? 'is-new' : ''} block truncate text-center text-xl lg:text-2xl px-3 select-none">${escapeHTML(b.title)}</span>
             </span>
             <!-- Sağ: çarpıcı mavi fiyat (indirim varsa eski fiyat + yüzde) · durum -->
             <div class="shrink-0 flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3">
@@ -249,19 +243,14 @@
     const slides = list.map((b, i) => {
       const fresh = isNewBook(b, nowDate);
       const eff = getEffectiveDiscount(b, nowDate, dealIds);
-      // Kış sezonunda kış temalı kitap: karlı, buz mavisi desenli kart
-      const snowy = winterOn() && hasWinterTheme(b);
       const series = Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? `<span class="font-semibold text-brand-500">#${b.seriesNo}</span> ·` : '';
       return `
-        <div data-slide="${i}" data-ghost="${snowy ? 'is-winter' : fresh ? 'is-new' : ''}" role="group" aria-roledescription="kitap" aria-label="${i + 1} / ${list.length}: ${escapeHTML(b.title)}"
+        <div data-slide="${i}" data-ghost="${fresh ? 'is-new' : ''}" role="group" aria-roledescription="kitap" aria-label="${i + 1} / ${list.length}: ${escapeHTML(b.title)}"
           class="book-slide w-[248px] sm:w-[290px]" style="${bookSlideStyle(wrapSlideD(i - cur, list.length))}">
-          <div class="relative overflow-hidden rounded-3xl shadow-soft-lg px-5 pt-6 pb-5 flex flex-col items-center text-center ${snowy
-            ? 'winter-row ring-2 ring-sky-300'
-            : fresh ? 'bg-gradient-to-b from-amber-50 via-yellow-50/70 to-white ring-2 ring-amber-300' : 'bg-white ring-1 ring-slate-100'}">
-            ${snowy ? '<span class="winter-drift absolute right-4 top-2 text-sky-300/80 text-base pointer-events-none select-none" aria-hidden="true">❄</span>' : ''}
+          <div class="relative overflow-hidden rounded-3xl shadow-soft-lg px-5 pt-6 pb-5 flex flex-col items-center text-center ${fresh
+            ? 'bg-gradient-to-b from-amber-50 via-yellow-50/70 to-white ring-2 ring-amber-300' : 'bg-white ring-1 ring-slate-100'}">
             <div class="relative w-36 h-52 sm:w-44 sm:h-64 shrink-0">
               ${coverHTML(b, 'fill')}
-              ${snowy ? '<span class="absolute -top-2 -left-2 text-base leading-none drop-shadow-sm" aria-hidden="true">❄️</span>' : ''}
               ${ratingBadgeHTML(b.id, 'absolute -bottom-2 -right-2 text-[11px]')}
               ${fresh ? `
                 <span class="twinkle absolute -top-2 -left-2 text-amber-400 text-base">✦</span>
@@ -358,7 +347,7 @@
     if (counter) counter.textContent = slideNo.no;
     const total = $('#bookSlideTotal');
     if (total) total.textContent = slideNo.total;
-    // Üst satırdaki parıldayan ad ortadaki kitabı izler (yeni kitapta altın, kış kitabında buz rengi)
+    // Üst satırdaki parıldayan ad ortadaki kitabı izler (yeni kitapta altın)
     const ghost = $('#bookGhostTitle');
     if (ghost) {
       ghost.textContent = getBook(state.bookSlideId)?.title || '';
@@ -1259,14 +1248,12 @@
     const inOffers = offers.filter((o) => o.items.some((it) => it.bookId === b.id));
     // Fırsatlar kapalı olsa da kayıt silinsin
     const vitrine = discounts.find((d) => d.bookId === b.id);
-    const winterDeal = winterDeals.find((d) => d.bookId === b.id);
     const parts = [
       anns.length && `${anns.length} duyuru`,
       rs.length && `${rs.length} kiralama kaydı`,
       logs.length && `${logs.length} fiyat logu`,
       inOffers.length && `${inOffers.length} özel teklif`,
-      vitrine && 'fırsat',
-      winterDeal && 'Kış Fırsatları kaydı'
+      vitrine && 'fırsat'
     ].filter(Boolean);
     openConfirm({
       title: 'Kitap silinsin mi?',
@@ -1285,9 +1272,7 @@
         anns.forEach((a) => ops.push((bt) => bt.delete(col('announcements').doc(a.id))));
         rs.forEach((r) => ops.push((bt) => bt.delete(col('rentals').doc(r.id))));
         logs.forEach((l) => ops.push((bt) => bt.delete(col('priceLogs').doc(l.id))));
-        if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));
-        if (winterDeal) ops.push((bt) => bt.delete(col('winterDeals').doc(winterDeal.id)));
-        bookRatings(b.id).forEach((x) => ops.push((bt) => bt.delete(col('ratings').doc(x.id))));
+        if (vitrine) ops.push((bt) => bt.delete(col('discounts').doc(vitrine.id)));        bookRatings(b.id).forEach((x) => ops.push((bt) => bt.delete(col('ratings').doc(x.id))));
         // Silinen kiralamalar puan kazandırmış olabilir → etkilenen kullanıcıların defteri yeniden hesaplanır
         ops.push(...pointsSyncOps(rs.map((r) => r.userId), { rentals: new Set(rs.map((r) => r.id)) }));
         // Teklif paketinden çıkarılır; paket boşalırsa teklif silinir

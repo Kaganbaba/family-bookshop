@@ -60,9 +60,8 @@
               <label class="cursor-pointer">
                 <input type="checkbox" name="theme:${t.id}" ${themeIdsOf(b).includes(t.id) ? 'checked' : ''} class="peer sr-only" />
                 <span class="block rounded-full transition opacity-40 grayscale hover:opacity-70 peer-checked:opacity-100 peer-checked:grayscale-0 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300">${themeChipHTML(t)}</span>
-              </label>`).join('')}
+              </label>`).join('') || '<span class="text-[11px] text-slate-400">Henüz tema yok · Kitap Ayarları → Temaları Yönet\'ten ekleyebilirsin.</span>'}
           </div>
-          ${winterOn() && !b ? `<p class="text-[10px] text-sky-600 mt-1">❄️ Kış sezonu açık · "${escapeHTML(getTheme(WINTER_THEME_ID).label)}" temalı yeni kitap yeni kitap indirimi almaz, sezon boyunca Kış Fırsatları'nda indirimsiz durur.</p>` : ''}
         </div>
         ${field('Açıklama', `<textarea name="description" rows="3" maxlength="1000" class="${INPUT_CLS} resize-y leading-relaxed" placeholder="Kitap hakkında kısa bilgi (isteğe bağlı)">${escapeHTML(b?.description || '')}</textarea>`)}
         <p class="text-[10px] text-slate-400 -mt-1.5">Planlanıyor / Yakında durumunda yalnızca ad ve tür zorunludur; diğer bilgiler boş kalabilir. Kiralık olmayan kitaplarda çıkış tarihi boş kalabilir.</p>
@@ -172,9 +171,6 @@
         extra = ' · Duyurular\'a haber düştü 📣';
       }
       batch.update(bookRef(b.id), data);
-      // Kış Sezonu teması kalktıysa Kış Fırsatları indirimi de silinir
-      const winterDeal = winterDeals.find((d) => d.bookId === b.id);
-      if (winterDeal && !hasWinterTheme(data)) batch.delete(col('winterDeals').doc(winterDeal.id));
       closeModal();
       run(batch.commit(), `"${title}" güncellendi · ${BOOK_STATUSES[status].label}${extra}.`);
       return;
@@ -183,8 +179,6 @@
     const { book, done } = addBook(data, announce);
     if (state.bookTab !== type) state.bookTab = type;
     closeModal();
-    // Kış sezonunda gelen kış kitabı yeni kitap indirimi yerine Kış Fırsatları'nda indirimsiz
-    if (!draft && winterOn() && hasWinterTheme(book)) return run(done, `"${book.title}" eklendi · ❄️ kış sezonu boyunca Kış Fırsatları'nda indirimsiz`);
     run(done, draft
       ? `"${book.title}" ${BOOK_STATUSES[status].label} olarak eklendi.`
       : book.newDiscountUntil
@@ -483,7 +477,7 @@
       </div>`);
   }
 
-  /* --- Temaları (kitap etiketlerini) yönet · Kış Sezonu teması silinemez (Kış Fırsatları buna bağlı) --- */
+  /* --- Temaları (kitap etiketlerini) yönet --- */
   /* Renk seçici: istenen renk serbestçe seçilir (tema ve kategori) */
   const colorPickerField = (value, attrs = '') => `
     <label class="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 bg-white cursor-pointer hover:border-brand-200 transition">
@@ -571,11 +565,10 @@
       <li class="flex items-center gap-2.5 p-2.5 pl-3.5 rounded-xl border border-slate-100">
         <div class="flex-1 min-w-0">
           ${themeChipHTML(t)}
-          <p class="text-[10px] text-slate-400 mt-1">${themeBookCount(t.id)} kitap${t.id === WINTER_THEME_ID ? ' · Kış Fırsatları\'na yalnızca bu temadaki kitaplar girer' : ''}</p>
+          <p class="text-[10px] text-slate-400 mt-1">${themeBookCount(t.id)} kitap</p>
         </div>
         <button type="button" data-edit-theme="${t.id}" title="Ayarlar" aria-label="${escapeHTML(t.label)} ayarları" class="${BTN_ICON} text-slate-400 hover:text-brand-600 hover:bg-brand-50">${icon('cog', 'w-4 h-4')}</button>
-        ${t.id === WINTER_THEME_ID ? '<span class="w-9 shrink-0"></span>'
-          : `<button type="button" data-delete-theme="${t.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-4 h-4')}</button>`}
+        <button type="button" data-delete-theme="${t.id}" title="Sil" class="${BTN_ICON} text-slate-400 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-4 h-4')}</button>
       </li>`).join('');
     openModal(`
       ${modalHeader('Temaları Yönet 🏷️', 'Kitabın konusunu gösteren renkli etiketler · kitap adının yanında ve kitap penceresinde görünür.', 'tag')}
@@ -622,42 +615,11 @@
         ${themeColorInput(t.color)}
         ${themeLogoField()}
         ${themeDescInput(t.desc)}
-        <p class="text-[10px] text-slate-400 -mt-1.5">Emoji ve logo isteğe bağlı (boş bırakılabilir) · logo varsa emojinin yerine görünür · Windows'ta Win + . ile emoji seçebilirsin.</p>
-        ${t.id === WINTER_THEME_ID ? winterRatesHTML() : ''}
-        <div class="grid grid-cols-2 gap-2.5 pt-2">
+        <p class="text-[10px] text-slate-400 -mt-1.5">Emoji ve logo isteğe bağlı (boş bırakılabilir) · logo varsa emojinin yerine görünür · Windows'ta Win + . ile emoji seçebilirsin.</p>        <div class="grid grid-cols-2 gap-2.5 pt-2">
           <button type="button" data-quick="manageThemes" class="py-2.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">← Geri</button>
           <button type="submit" class="${BTN_PRIMARY} !py-2.5">Kaydet</button>
         </div>
       </form>`);
-  }
-
-  /* Kış Sezonu teması ayarında: bu temadaki kitaplar ve Kış Fırsatları indirimleri (sezon kapalıyken de ayarlanır,
-     kış açılınca kendiliğinden uygulanır · kaydı olmayan kitap indirimsiz) · bu kışın kitabı sezon boyunca indirimsiz */
-  function winterRatesHTML() {
-    const list = [...books].filter((b) => hasWinterTheme(b)).sort(bySeriesThenTitle);
-    const rows = list.map((b) => {
-      const locked = isWinterNewBook(b);
-      const cur = winterDeals.find((d) => d.bookId === b.id)?.rate || 0;
-      return `
-        <li class="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-sky-100">
-          ${coverHTML(b, 'xs')}
-          <span class="flex-1 min-w-0">
-            <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(b.title)}</span>
-            <span class="block text-[10px] text-slate-400">${escapeHTML(seriesLabel(b))}${hasPrice(b) ? ` · ${formatMoney(b.price)}` : ''}${locked ? ' · <b class="text-sky-600">❄️ bu kışın kitabı</b>' : ''}</span>
-          </span>
-          <select name="rate:${b.id}" ${locked ? 'disabled title="Bu kışın kitabı · sezon boyunca indirimsiz"' : ''} aria-label="${escapeHTML(b.title)} indirimi"
-            class="shrink-0 text-xs font-semibold rounded-lg border border-sky-200 bg-white px-2 py-1.5 text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:bg-slate-50 disabled:text-slate-400">
-            ${WINTER_RATES.map((r) => `<option value="${r}" ${!locked && r === cur ? 'selected' : ''}>${r ? `%${r}` : 'İndirimsiz'}</option>`).join('')}
-          </select>
-        </li>`;
-    }).join('');
-    return `
-      <div class="rounded-2xl bg-sky-50/60 border border-sky-100 p-3 space-y-2">
-        <p class="text-[11px] font-bold text-sky-800">❄️ Kış Fırsatları indirimleri</p>
-        <p class="text-[10px] text-sky-800/70 leading-relaxed">Bu temadaki kitaplar kış sezonunda Kış Fırsatları'nda görünür. Seçtiğin indirim kış açılınca kendiliğinden uygulanır${winterOn() ? ' (şu an kış sezonu açık)' : ''}. Kış sezonunda gelen kitap o sezon boyunca indirimsiz kalır.</p>
-        ${list.length ? `<ul class="space-y-1.5 max-h-72 overflow-y-auto soft-scroll">${rows}</ul>`
-          : '<p class="text-[11px] text-slate-400 bg-white rounded-xl px-3 py-2.5">Bu temada henüz kitap yok · kitaba temayı Düzenle\'den ekleyebilirsin.</p>'}
-      </div>`;
   }
 
   async function handleSaveTheme(fd, editId) {
@@ -674,20 +636,7 @@
     let done;
     if (editId) {
       if (!getTheme(editId)) return;
-      const batch = db.batch();
-      // Kış Sezonu teması henüz kaydedilmediyse ilk düzenlemede oluşturulur
-      batch.set(col('bookThemes').doc(editId), { label, emoji, logo, logoSize, desc, color, order: getTheme(editId).order ?? 0 }, { merge: true });
-      // Kış Fırsatları indirimleri: yalnızca değişenler yazılır
-      if (editId === WINTER_THEME_ID) {
-        Object.keys(fd).filter((k) => k.startsWith('rate:')).forEach((k) => {
-          const b = getBook(k.slice(5));
-          const rate = Number(fd[k]);
-          if (!b || !hasWinterTheme(b) || !WINTER_RATES.includes(rate)) return;
-          if ((winterDeals.find((d) => d.bookId === b.id)?.rate || 0) === rate) return;
-          batch.set(col('winterDeals').doc(String(b.id)), { bookId: b.id, rate, updatedAt: isoAt(Date.now()), updatedBy: state.currentUserId });
-        });
-      }
-      done = batch.commit();
+      done = col('bookThemes').doc(editId).set({ label, emoji, logo, logoSize, desc, color, order: getTheme(editId).order ?? 0 }, { merge: true });
     } else {
       const order = allThemes().reduce((m, t) => Math.max(m, t.order ?? 0), 0) + 1;
       done = col('bookThemes').doc(uid('th')).set({ label, emoji, logo, logoSize, desc, color, order });
@@ -699,7 +648,7 @@
   function deleteTheme(id) {
     if (!requireAdmin()) return;
     const t = getTheme(id);
-    if (!t || id === WINTER_THEME_ID) return;
+    if (!t) return;
     const tagged = [...books, ...museumBooks].filter((b) => themeIdsOf(b).includes(id));
     openConfirm({
       title: `"${escapeHTML(t.label)}" silinsin mi?`,
@@ -1057,86 +1006,6 @@
     const i = Number(target.split('-')[1]);
     state.offerDraftCovers[i] = '';
     updateOfferSlotPreview(i);
-  }
-
-  /* --- Sezonlar (profil paneli → Sezonlar) · settings/season: { active, endsAt } ---
-     Sezon yalnızca temadır (kar yağışı, karlı desenler); indirimlere ve vitrinlere dokunmaz.
-     Süreli açılabilir: endsAt gelince sezon kendiliğinden kapanır. */
-  function openSeasonModal() {
-    if (!requireAdmin()) return;
-    const cur = activeSeason();
-    const end = seasonEndsMs();
-    const endDate = end ? new Date(end) : new Date(Date.now() + 30 * DAY_MS);
-    const pad = (n) => String(n).padStart(2, '0');
-    const opt = (key, ic, label, desc) => `
-      <label class="cursor-pointer block">
-        <input type="radio" name="season" value="${key || ''}" ${cur === key ? 'checked' : ''} class="peer sr-only" />
-        <span class="flex items-center gap-3 p-3 rounded-2xl border transition border-slate-100 bg-white hover:border-sky-200 peer-checked:bg-sky-50 peer-checked:border-sky-300 peer-checked:ring-2 peer-checked:ring-sky-200">
-          <span class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-lg shrink-0">${ic}</span>
-          <span class="min-w-0 flex-1">
-            <span class="block text-xs font-bold text-slate-700">${label}</span>
-            <span class="block text-[10px] text-slate-400">${desc}</span>
-          </span>
-          ${cur === key ? '<span class="text-[10px] font-bold text-sky-600 bg-white px-2 py-0.5 rounded-full border border-sky-200 shrink-0">✓ Şu an</span>' : ''}
-        </span>
-      </label>`;
-    openModal(`
-      ${modalHeader('Sezonlar 🗓️', 'Seçtiğin sezon herkeste anında açılır · istersen süreli aç, süre bitince kendiliğinden kapanır.', 'calendar', 'bg-sky-50 text-sky-600')}
-      <form data-form="saveSeason" class="p-5 space-y-2.5" autocomplete="off">
-        ${cur ? `<p class="text-[11px] text-sky-700 bg-sky-50 rounded-xl px-3 py-2">${SEASONS[cur].icon} ${SEASONS[cur].label} sezonu açık · ${end ? `<b>${formatDate(new Date(end).toISOString(), true)}</b>'da kapanacak (${formatRemaining(end - Date.now())})` : 'süresiz'}</p>` : ''}
-        ${opt(null, '🌤️', 'Sezon yok', 'Normal görünüm')}
-        ${Object.entries(SEASONS).map(([k, s]) => opt(k, s.icon, `${s.label} Sezonu`, s.desc)).join('')}
-        <label class="flex items-center gap-2 text-[11px] text-slate-600 pt-1">
-          <input type="checkbox" name="timed" ${end ? 'checked' : ''} class="rounded border-slate-300 text-sky-600" /> ⏳ Süreli (bu tarihte kendiliğinden kapansın)
-        </label>
-        <div class="grid grid-cols-[1fr_auto] gap-3">
-          ${field('Bitiş Tarihi', `<input name="endDate" type="date" min="${localDateKey()}" value="${localDateKey(endDate)}" class="${INPUT_CLS} min-w-0" />`)}
-          ${field('Saat', `<input name="endTime" type="time" value="${end ? `${pad(endDate.getHours())}:${pad(endDate.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
-        </div>
-        <p class="text-[10px] text-slate-400 leading-relaxed">❄️ Kış sezonunda ana sayfaya Kış Fırsatları gelir (Kış Sezonu temalı kitaplar); Günün İndirimi ve Fırsatlar sezon boyunca kapanır. Yeni Kitap, kuponlar, özel teklifler ve Müze Vitrini aynen sürer.</p>
-        ${formFooter('Kaydet')}
-      </form>`);
-  }
-
-  function handleSaveSeason(fd) {
-    if (!requireAdmin()) return;
-    const season = SEASONS[fd.season] ? fd.season : null;
-    const prev = activeSeason();
-    let endsAt = null;
-    if (season && fd.timed === 'on') {
-      if (!isDateKey(fd.endDate) || !isTimeKey(fd.endTime)) return toast('Geçerli bir bitiş tarihi ve saati seçin.', 'error');
-      const end = dateFromKey(fd.endDate);
-      end.setHours(...fd.endTime.split(':').map(Number), 0, 0);
-      if (end.getTime() <= Date.now()) return toast('Bitiş anı geçmiş olamaz.', 'error');
-      endsAt = Timestamp.fromDate(end);
-    }
-    // Aynı sezon: yalnızca bitiş değişir
-    const data = season === prev
-      ? { endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId }
-      : { active: season, endsAt, changedAt: isoAt(Date.now()), changedBy: state.currentUserId, startedAt: season ? isoAt(Date.now()) : null };
-    const msg = season === prev
-      ? (season ? `${SEASONS[season].icon} Sezon süresi güncellendi${endsAt ? ` · ${formatDate(endsAt.toDate().toISOString(), true)}'da kapanacak` : ' · süresiz'}.` : 'Sezon zaten kapalı.')
-      : season ? `${SEASONS[season].icon} ${SEASONS[season].label} sezonu açıldı!${endsAt ? ` · ${formatDate(endsAt.toDate().toISOString(), true)}'da kapanacak` : ''}` : '🌤️ Sezon kapatıldı.';
-    const batch = db.batch();
-    batch.set(col('settings').doc('season'), data, { merge: true });
-    // Kış sezonu açılınca Hediye Kutusu kendiliğinden yeni 7 günle başlar (ayarında kapatılmadıysa ve ödül varsa)
-    const gift = giftBoxDoc();
-    const autoGift = season === 'winter' && prev !== 'winter' && gift.autoWinter !== false && giftRewards().some((r) => r.type !== 'none');
-    if (autoGift) batch.set(col('settings').doc('giftBox'), newGiftBoxData(), { merge: true });
-    closeModal();
-    run(batch.commit(), `${msg}${autoGift ? ` · 🎁 Hediye Kutusu başladı (${GIFT_DAYS} gün)` : ''}`, season ? 'success' : 'info');
-  }
-
-  /* Süreli sezon bittiyse siteyi açan herkes sezonu kapatır (kural süre dolmuş mu denetler) · bir kez */
-  function expireSeason() {
-    if (!currentUser()) return;
-    const d = seasonDoc();
-    const end = seasonEndsMs();
-    if (!SEASONS[d.active] || end == null || end > Date.now() || state.purgePending.has(`seasonexp:${end}`)) return;
-    state.purgePending.add(`seasonexp:${end}`);
-    col('settings').doc('season').update({ active: null, endsAt: null, changedAt: isoAt(Date.now()), changedBy: 'auto' })
-      .then(() => isRealAdmin() && toast(`${SEASONS[d.active].icon} ${SEASONS[d.active].label} sezonunun süresi doldu · sezon kapatıldı.`, 'info'))
-      .catch((e) => console.error(e));
   }
 
   /* --- Müze (kitap detayı → 🏛️) · kitap kitaplıktan kalkar, Müze'de bilgileriyle sergilenir, kiralanamaz --- */

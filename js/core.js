@@ -67,17 +67,9 @@
   const ratings = [];        // ratings/{bookId_userId} · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
   const couponShop = [];     // couponShop/{id} · Admin'in mağaza kuponu: { type, value, free (Al-Öde), name, cost, endsAt|null, createdAt, createdBy }
   const coupons = [];        // coupons/{id} · alınan kupon: { userId, shopId, type, value, free, name, cost, boughtAt, expiresAt, usedAt, rentalIds, bookIds, freeBookIds, paidTotal }
-  /* bookThemes/{id} · tema (etiket): { label, emoji, logo (base64 PNG, isteğe bağlı · varsa emojinin yerine), logoSize ('s' | 'm' | 'l'), desc (açıklama · Kitaplar'daki ⓘ Temalar penceresinde), color ('#rrggbb'), order } · kitapta themes: [temaId…] ·
-     'kis-sezonu' sabit temadır (silinemez, Kış Fırsatları'na yalnızca bu temadaki kitaplar girer) */
+  /* bookThemes/{id} · tema (etiket): { label, emoji, logo (base64 PNG, isteğe bağlı · varsa emojinin yerine), logoSize ('s' | 'm' | 'l'), desc (açıklama · Kitaplar'daki ⓘ Temalar penceresinde), color ('#rrggbb'), order } · kitapta themes: [temaId…] */
   const bookThemes = [];
-  /* winterDeals/{bookId} · Kış Fırsatları indirimi: { bookId, rate (0 | 15 | 25 | 50), updatedAt, updatedBy } ·
-     Kış Sezonu temalı her kitap vitrinde görünür; kaydı yoksa indirimsizdir */
-  const winterDeals = [];
-  /* giftClaims/{boxId_gün_uid} · Hediye Kutusu'ndan alınan günlük ödül: { userId, boxId, day (1–7), reward, claimedAt } */
-  const giftClaims = [];
-  /* settings/{id} · 'giftBox': Hediye Kutusu { enabled, boxId, startAt, day2At (Timestamp), rewards: [7 ödül] } ·
-     'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları
-     'season': { active: 'winter' | null, endsAt (Timestamp | null), startedAt (ISO, sezon açıldığı an) } */
+  /* settings/{id} · 'deals': { pinDay, pinGroup, pinAt, removedDay, removedIds } · 'showcase': Vitrin Ayarları */
   const appSettings = [];
   /* feedback/{id} · { userId, type, message, createdAt, status ('open'|'answered'), replies: [{ by, text, at }],
      adminSeen, lastReplyAt, userSeenAt } · üye yalnızca kendininkini, Admin hepsini okur (ayrı dinleyici) */
@@ -193,31 +185,13 @@
     bogo:    { label: 'Al-Öde Kuponu', hint: 'Kaç kitap alınacak (2–5)', min: 2, max: 5, step: 1 }
   };
   const COUPON_DAYS = 7; // alınan kupon 1 hafta içinde kullanılmalı
-  /* Sezonlar (Admin profil panelindeki Sezonlar butonundan seçer) · Kış: karlı tema + Kış Fırsatları vitrini;
-     sezon boyunca Günün İndirimi, Yeni Kitap ve Fırsatlar kapalıdır */
-  const SEASONS = {
-    winter: { label: 'Kış', icon: '❄️', desc: 'Karlı tema · Kış Fırsatları açılır, Günün İndirimi ve Fırsatlar kapanır' }
-  };
-  /* Kış Fırsatları indirim seçenekleri (0 = indirimsiz) */
-  const WINTER_RATES = [0, 15, 25, 50];
-  /* Hediye Kutusu: 7 günlük ödül havuzu · her gün 10:00'da sıradaki gün açılır (kaçırılan gün geri gelmez) */
-  const GIFT_DAYS = 7;
-  const GIFT_REWARD_TYPES = {
-    none:    { label: 'Ödül yok',     icon: '—' },
-    balance: { label: 'Bakiye',       icon: '💰' },
-    cheque:  { label: 'Hediye Çeki',  icon: '🎁' },
-    coupon:  { label: 'Kupon',        icon: '🎟️' }
-  };
 
-  /* --- Temalar (kitap etiketleri) · Kış Sezonu teması her zaman vardır (belgesi yoksa varsayılanı kullanılır) --- */
-  const WINTER_THEME_ID = 'kis-sezonu';
-  const WINTER_THEME_DEFAULT = { id: WINTER_THEME_ID, label: 'Kış Sezonu', emoji: '❄️', color: '#0ea5e9', order: 0 };
+  /* --- Temalar (kitap etiketleri) --- */
   const isHexColor = (s) => /^#[0-9a-f]{6}$/i.test(s || '');
-  const allThemes = () => (bookThemes.some((t) => t.id === WINTER_THEME_ID) ? [...bookThemes] : [WINTER_THEME_DEFAULT, ...bookThemes]);
+  const allThemes = () => [...bookThemes];
   const getTheme = (id) => allThemes().find((t) => t.id === id) || null;
   const themeIdsOf = (b) => (Array.isArray(b?.themes) ? b.themes : []);
   const bookThemesOf = (b) => allThemes().filter((t) => themeIdsOf(b).includes(t.id));
-  const hasWinterTheme = (b) => themeIdsOf(b).includes(WINTER_THEME_ID);
   /* Tema rozeti: logo (varsa, emojinin yerine) ya da emoji + ad, kendi renginde yazı, açık tonlu zemin */
   // Tamamı geçerli base64 olmalı (src'ye kaçışsız yazılır)
   const isImageData = (s) => /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/.test(s || '');
@@ -808,33 +782,9 @@
   function renderCurrentPage() {
     if (!state.ready || !currentUser()) return;
     state.lastExhibitKey = exhibitKey(); // sergi süresi dolunca tick() yeniden çizdirir
-    applySeasonTheme();
     PAGE_RENDERERS[state.route]?.();
     updateBadges();
   }
-
-  /* Sezon teması: <body> sınıfı (season-winter) + ekran boyu kar yağışı katmanı (bir kez kurulur) */
-  function applySeasonTheme() {
-    state.renderedSeason = activeSeason(); // süreli sezon bitince tick() yeniden çizdirir
-    const winter = state.renderedSeason === 'winter';
-    document.body.classList.toggle('season-winter', winter);
-    let layer = $('#snowLayer');
-    if (winter && !layer) {
-      layer = document.createElement('div');
-      layer.id = 'snowLayer';
-      layer.className = 'snow-layer';
-      layer.setAttribute('aria-hidden', 'true');
-      layer.innerHTML = snowflakesHTML(42);
-      document.body.appendChild(layer);
-    }
-    if (!winter && layer) layer.remove();
-  }
-  /* Düşen kar taneleri (konum, boyut, hız ve gecikme sabit dağılımlı · her çizimde aynı) */
-  const snowflakesHTML = (count) => Array.from({ length: count }, (_, i) => {
-    const size = 3 + (i * 7) % 6;
-    return `<i style="left:${(i * 37 + 11) % 100}%;width:${size}px;height:${size}px;opacity:${(0.45 + ((i * 13) % 50) / 100).toFixed(2)};`
-      + `animation-duration:${(7 + (i * 5) % 9).toFixed(1)}s,${(3 + (i % 4)).toFixed(1)}s;animation-delay:-${((i * 1.7) % 12).toFixed(1)}s,-${(i % 3).toFixed(1)}s"></i>`;
-  }).join('');
 
   /* ==========================================================
      14) MODAL ALTYAPISI
@@ -967,8 +917,6 @@
     const now = new Date();
     // Tarihi gelen planlı fiyat değişimleri (dakikada bir)
     if (now.getSeconds() === 0) applyDuePrices(now.getTime());
-    // Süreli sezon bittiyse tema kalkar (her şey yeniden çizilir)
-    if (state.renderedSeason !== undefined && activeSeason() !== state.renderedSeason) return scheduleRender();
     // Müze Vitrini'nde süresi dolan sergi kalkar (Admin açıksa sergi geçmişine bitiş yazılır)
     if (exhibitKey() !== state.lastExhibitKey && !state.modalOpen) return scheduleRender();
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
@@ -981,8 +929,6 @@
       // Yeni kitap indirimi biten kitap vitrinden düşsün
       if (newBooksKey(now) !== state.lastNewKey) return renderDashboard();
       updateCountdown(now);
-      // Hediye Kutusu: kalan süre · 10:00'da yeni gün açılınca kutu yeniden çizilir
-      updateGiftBoxFab(now);
       // Fırsatlar: kartlardaki canlı geri sayım
       updateVitrineTimers(now);
     }

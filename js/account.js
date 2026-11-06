@@ -67,11 +67,6 @@
     rfBadge.classList.toggle('flex', !!rfCount);
     $('#panelRefundLabel').textContent = isAdmin() ? '⏳ Onay Bekleyenler' : '↩️ İadelerim';
     $('#fbDot').classList.toggle('hidden', !fbCount && !rfCount);
-    // Sezonlar butonu yalnızca Admin'de (Üye Görünümü'nde gizli) · açık sezon yazılır
-    const season = activeSeason();
-    $('#panelSeasonsBtn').classList.toggle('hidden', !isAdmin());
-    $('#panelSeasonsBtn').classList.toggle('flex', isAdmin());
-    $('#panelSeasonsLabel').textContent = season ? `${SEASONS[season].icon} Sezonlar · ${SEASONS[season].label} açık` : '🗓️ Sezonlar';
     // Üye Görünümü şeridi yalnızca gerçek Admin'de ve mod açıkken
     const banner = $('#memberViewBanner');
     const showBanner = isRealAdmin() && state.memberView;
