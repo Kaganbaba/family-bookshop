@@ -593,7 +593,7 @@
   }
 
   /* ==========================================================
-     17.0) PROFİLİM · ad, giriş yöntemleri, şifre belirle / değiştir / sıfırla
+     17.0) AYARLAR · ad, görünüm, giriş yöntemleri, şifre belirle / değiştir / sıfırla
      ========================================================== */
   const authProviders = () => (auth.currentUser?.providerData || []).map((p) => p.providerId);
   function googleProvider() {
@@ -620,8 +620,6 @@
     const prov = authProviders();
     const hasGoogle = prov.includes('google.com');
     const hasPassword = prov.includes('password');
-    const s = userStats(u.id);
-    const activeCount = rentals.filter((r) => r.userId === u.id && isActiveRental(r)).length;
 
     const method = (on, emoji, title, desc, action = '') => `
       <li class="flex items-center gap-3 p-3 rounded-xl border ${on ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-100 bg-white'}">
@@ -655,19 +653,6 @@
       </div>
 
       <div class="p-5 sm:p-6 space-y-5">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          ${[
-            { label: 'Bakiye', value: formatMoney(u.balance), tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
-            { label: 'Aktif Kiralık', value: `${activeCount} kitap`, tone: 'text-brand-700', bg: 'bg-brand-50/70' },
-            { label: 'Toplam Harcama', value: formatMoney(s.spent), tone: 'text-slate-800', bg: 'bg-slate-50' },
-            { label: 'Puan ⭐', value: formatPoints(s.points.available), tone: s.points.available < 0 ? 'text-rose-500' : 'text-amber-600', bg: 'bg-amber-50/70' }
-          ].map((t) => `
-            <div class="rounded-2xl ${t.bg} px-3 py-3">
-              <p class="text-[10px] text-slate-400 font-medium">${t.label}</p>
-              <p class="text-sm font-bold ${t.tone} truncate">${t.value}</p>
-            </div>`).join('')}
-        </div>
-
         <form data-form="saveName" class="space-y-2" autocomplete="off">
           <h4 class="text-xs font-bold text-slate-700">Ad Soyad</h4>
           <div class="flex gap-2">
@@ -715,10 +700,7 @@
 
         <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
           <button type="button" data-sign-out class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">Çıkış Yap</button>
-          <div class="flex gap-2">
-            <button type="button" data-user-stats="${u.id}" class="${BTN_SOFT}">📊 İstatistiklerim</button>
-            <button type="button" data-modal-close class="${BTN_PRIMARY}">Kapat</button>
-          </div>
+          <button type="button" data-modal-close class="${BTN_PRIMARY}">Kapat</button>
         </div>
       </div>`, 'lg');
   }
