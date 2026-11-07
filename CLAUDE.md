@@ -61,3 +61,10 @@ Ayarlar penceresinden açılır, tercih tarayıcıda (`localStorage` → `fb.the
 - Dosyanın **en üst seviyesinde, yükleme anında çalışan** kod (ör. `const X = foo();`, `const Y = [BAR, …]`) sadece **daha önce yüklenen** dosyalardaki veya aynı dosyada daha yukarıdaki tanımları kullanabilir. `function` tanımları başka dosyaya taşınınca hoisting ile öne gelmez.
 - Aynı global ad iki dosyada tanımlanamaz (`const`/`let` için tarayıcı hata verir).
 - Bir JS veya CSS dosyası değişince `index.html`'deki **tüm** `?v=N` sürümlerini birer artır ki tarayıcı eski dosyayı kullanmasın.
+
+## Güncelleme notları (sürüm notu için yenilik listesi)
+
+Kullanıcı "değişiklikleri / yenilikleri yaz" dediğinde sitedeki Güncellemeler'e yapıştırılacak bir liste ister:
+- Yalnızca üyelerin görmesi gereken, görünen yeni özellik ve değişiklikler. Admin'e özel işler, kurallar, kod düzenlemeleri yazılmaz.
+- Her yenilik tek satır, Türkçe, **emojisiz**. Listenin içinde ek açıklama olmaz.
+- Kapsam: sayı verilmezse yalnızca **commit edilmemiş** değişiklikler · "son N commit" → tam son N commit · "son N commit + şu anki" → son N commit ve commit edilmemiş değişiklikler.
