@@ -232,7 +232,9 @@
     lastNewKey: '',        // ana sayfadaki Yeni Kitap vitrininde gösterilen kitaplar
     lastExhibitKey: '',    // Müze Vitrini'nde sergide olan kitaplar (süre dolunca yeniden çizilir)
     statsUserId: null,     // açık istatistik modalındaki kullanıcı
-    statsPage: { rentals: 1 },
+    statsTab: 'summary',   // istatistik penceresi sekmesi: 'summary' | 'rentals' | 'coupons'
+    statsFilter: 'all',    // Kiralamalar sekmesi: 'all' | 'active' | 'ended'
+    statsPage: { rentals: 1, coupons: 1 },
     confirmAction: null,
     panelUser: null,       // profil panelindeki Kullanıcı Yönetimi: açık olan kullanıcı
     feedbackOpen: false,   // Geri Bildirim penceresi açık mı (canlı liste yenilemesi için)
@@ -921,6 +923,15 @@
     if (exhibitKey() !== state.lastExhibitKey && !state.modalOpen) return scheduleRender();
     // Süresi biten özel teklifler gün dönümünde vitrinden silinir
     if (purgeExpiredOffers(now) && state.route === 'offers' && !state.modalOpen) renderCurrentPage();
+    // İstatistik penceresi (Kiralamalar sekmesi): kalan süre çubukları · süresi biten kiralama "Biten"e geçsin
+    const statsBody = state.modalOpen && !document.hidden && $('#statsBody');
+    if (statsBody) {
+      let statsEnded = false;
+      statsBody.querySelectorAll('[data-rental-bar]').forEach((el) => {
+        if (applyProgress(el.dataset.rentalBar, now.getTime(), statsBody) <= 0) statsEnded = true;
+      });
+      if (statsEnded) renderStatsBody();
+    }
     if (!['dashboard', 'rentals'].includes(state.route) || document.hidden) return;
 
     if (state.route === 'dashboard') {

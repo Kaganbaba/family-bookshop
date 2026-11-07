@@ -158,7 +158,7 @@
       <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5">
         <div class="flex items-center justify-between gap-2 mb-3">
           <h2 class="text-sm font-bold text-slate-800">🎟️ Aktif Kuponlarım</h2>
-          <button type="button" data-user-stats="${u.id}" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">Tüm kuponlar → İstatistiklerim</button>
+          <button type="button" data-user-stats="${u.id}" data-stats-open="coupons" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">Tüm kuponlar → İstatistiklerim</button>
         </div>
         ${active.length
           ? `<ul class="grid grid-cols-1 md:grid-cols-2 gap-2.5">${active.map((c) => couponCardHTML(c, now, true)).join('')}</ul>`

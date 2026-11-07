@@ -49,6 +49,8 @@
       if ((m = el('[data-link-google]')))      return linkGoogle();
       if ((m = el('[data-send-reset]')))       return sendResetFromProfile();
       if ((m = el('[data-stats-page]')))       return goStatsPage(m.dataset.statsPage, m.dataset.page);
+      if ((m = el('[data-stats-tab]')))        return setStatsTab(m.dataset.statsTab);
+      if ((m = el('[data-stats-filter]')))     return setStatsFilter(m.dataset.statsFilter);
       if ((m = el('[data-stats-del-rental]'))) return deleteStatsRecord('rental', m.dataset.statsDelRental);
       if ((m = el('[data-stats-reset]')))      return resetUserStats(m.dataset.statsReset);
       if ((m = el('[data-reset-all]')))        return confirmResetStats(m.dataset.resetAll, null);
@@ -111,7 +113,6 @@
       if ((m = el('[data-slide]')))            return bookSlideClick(m);
       if ((m = el('[data-filter-clear]')))     { const p = m.dataset.filterClear; state[`${p}Kind`] = 'none'; state[`${p}Value`] = 'all'; return rerenderFilter(p); }
       if ((m = el('[data-all-logs]')))         return openBookPriceLogsModal(m.dataset.allLogs, m.dataset.backOffer || '');
-      if ((m = el('[data-stats-all-rentals]'))) return openStatsRentalsModal(m.dataset.statsAllRentals);
       if ((m = el('[data-book-rentals]')))     return m.disabled ? null : openBookRentalsModal(m.dataset.bookRentals, Number(m.dataset.rpage) || 1);
       if ((m = el('[data-rent-tab]')))         { state.rentTab = m.dataset.rentTab; return renderCurrentPage(); }
       if ((m = el('[data-rent-status]')))      { state.rentStatus = m.dataset.rentStatus; return renderCurrentPage(); }
@@ -129,7 +130,7 @@
       if ((m = el('[data-delete-offer]')))     return deleteOffer(m.dataset.deleteOffer);
       if ((m = el('[data-open-book]')))        return openBookModal(m.dataset.openBook, { backOfferId: m.dataset.backOffer || '' });
       if ((m = el('[data-open-offer]')))       return openOfferDetail(m.dataset.openOffer);
-      if ((m = el('[data-user-stats]')))       return openUserStatsModal(m.dataset.userStats);
+      if ((m = el('[data-user-stats]')))       return openUserStatsModal(m.dataset.userStats, m.dataset.statsOpen ? { tab: m.dataset.statsOpen } : null);
     });
 
     // Modal backdrop

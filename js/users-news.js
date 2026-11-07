@@ -140,9 +140,51 @@
       </div>`;
   }
 
-  /* İstatistik modalı listeleri: sayfa başına kayıt + sayfalama */
-  const STATS_PAGE_SIZE = 5;
+  /* ==========================================================
+     10.1) KULLANICI İSTATİSTİK PENCERESİ
+     Tek pencere, üç sekme: Özet · Kiralamalar · Kupon & Çekler.
+     Sekme / filtre / sayfa değişince pencere yeniden açılmaz, yalnızca #statsBody çizilir.
+     Yalnızca okuma yapar (veritabanına yazmaz) · kayıt silme ve sıfırlama Admin'e özel.
+     ========================================================== */
+  const STATS_PAGE_SIZE = 10;
+  const STATS_TABS = [
+    { key: 'summary', label: 'Özet',           emoji: '📊' },
+    { key: 'rentals', label: 'Kiralamalar',    emoji: '📚' },
+    { key: 'coupons', label: 'Kupon & Çekler', emoji: '🎟️' }
+  ];
+  /* Tasarruf çubuğunun parçaları (userStats().savings anahtarları) · Kış yalnızca eski kayıtlarda, varsa görünür */
+  const SAVING_PARTS = [
+    { key: 'deal',   label: 'Günün İndirimi', color: 'bg-rose-500' },
+    { key: 'new',    label: 'Yeni Kitap',     color: 'bg-amber-500' },
+    { key: 'custom', label: 'Fırsat',         color: 'bg-indigo-500' },
+    { key: 'offer',  label: 'Paket',          color: 'bg-violet-500' },
+    { key: 'coupon', label: 'Kupon',          color: 'bg-emerald-500' },
+    { key: 'winter', label: 'Kış Fırsatı',    color: 'bg-sky-500' }
+  ];
+  const VOUCHER_GROUPS = { active: 'Aktif', used: 'Kullanılan', expired: 'Süresi dolan' };
 
+  const statsMonthLabel = (d) => new Date(d).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+  const statsShortMonth = (d) => new Date(d).toLocaleDateString('tr-TR', { month: 'short' });
+  const statsChip = (txt, tone) => `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${tone} truncate max-w-full">${txt}</span>`;
+  const statsMoreBtn = (tab) => `<button type="button" data-stats-tab="${tab}" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700 shrink-0">Tümü →</button>`;
+  const statsSection = (title, right, body) => `
+    <section>
+      <div class="flex items-center justify-between gap-2 mb-2.5">
+        <h4 class="text-xs font-bold text-slate-700">${title}</h4>${right || ''}
+      </div>
+      ${body}
+    </section>`;
+  const statsMoneyHTML = (price, normal) => {
+    const rate = normal > price ? Math.round((1 - price / normal) * 100) : 0;
+    return `
+      <span class="inline-flex items-baseline gap-1 whitespace-nowrap">
+        ${rate ? `<span class="text-[11px] text-slate-400 line-through">${formatMoney(normal)}</span><span class="text-[10px] text-slate-300">→</span>` : ''}
+        <span class="text-sm font-bold ${rate ? 'text-emerald-600' : 'text-brand-600'}">${price > 0 ? formatMoney(price) : 'Bedava'}</span>
+        ${rate ? `<span class="text-[10px] font-extrabold text-rose-500">%${rate}</span>` : ''}
+      </span>`;
+  };
+
+  /* Sayfalama · kind: 'rentals' | 'coupons' */
   function pageSlice(list, kind, size = STATS_PAGE_SIZE) {
     const pages = Math.max(1, Math.ceil(list.length / size));
     const page = Math.min(Math.max(1, state.statsPage[kind] || 1), pages);
@@ -173,61 +215,208 @@
       </div>`;
   }
 
-  /* Geçmiş kiralamalar · istatistik penceresinde en yeni 5 (fazlası "Tümünü gör"),
-     full: Tümünü gör penceresinde 10'arlı sayfa */
-  const STATS_RENTALS_PREVIEW = 5;
-  const STATS_RENTALS_PAGE = 10;
-  function statsRentalsHTML(userId, full = false) {
-    const nowMs = Date.now();
-    const list = rentals.filter((r) => r.userId === userId)
-      .sort((a, b) => new Date(b.rentedAt) - new Date(a.rentedAt));
-    if (!list.length) return '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz kiralama yok.</p>';
-    const { items, page, pages } = full ? pageSlice(list, 'rentals', STATS_RENTALS_PAGE)
-      : { items: list.slice(0, STATS_RENTALS_PREVIEW), page: 1, pages: 1 };
-    const rows = items.map((r) => {
-      const b = getBook(r.bookId);
-      const active = isActiveRental(r, nowMs);
-      const statusChip = active
-        ? '<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-emerald-50 text-emerald-600">Aktif</span>'
-        : `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md bg-slate-100 text-slate-500">${endedLabel(r)}</span>`;
-      const tag = rentalDiscountTag(r);
-      const discChip = tag ? `<span class="text-[10px] font-semibold px-1.5 py-px rounded-md ${tag.tone} truncate max-w-full">${escapeHTML(tag.label)}</span>` : '';
-      return `
-        <li class="flex items-center gap-3 p-2.5 rounded-xl ${active ? 'bg-emerald-50/30 border border-emerald-100' : 'bg-slate-50/80'}">
+  /* --- Kiralamalar --- */
+  const statsRentalsOf = (userId) => rentals.filter((r) => r.userId === userId)
+    .sort((a, b) => new Date(b.rentedAt) - new Date(a.rentedAt));
+
+  /* Kiralamalar → kayıtlar: tekli kiralama tek kayıt, aynı paket satın alımının kitapları tek kayıt */
+  function statsRentalEntries(list) {
+    const out = [];
+    const pkgs = new Map();
+    list.forEach((r) => {
+      if (!r.offerId) return out.push({ kind: 'single', rs: [r], at: r.rentedAt });
+      const key = r.purchaseId || `${r.offerId}|${r.rentedAt}`;
+      let e = pkgs.get(key);
+      if (!e) {
+        e = { kind: 'package', rs: [], at: r.rentedAt, purchase: offerPurchases.find((p) => p.id === r.purchaseId) || null };
+        pkgs.set(key, e);
+        out.push(e);
+      }
+      e.rs.push(r);
+    });
+    return out;
+  }
+
+  const rentalStatusChip = (r, active) => active
+    ? statsChip('Aktif', 'bg-emerald-50 text-emerald-600')
+    : statsChip(endedLabel(r), 'bg-slate-100 text-slate-500');
+
+  /* Kalan süre çubuğu (ana sayfadakiyle aynı · tick() her saniye günceller) */
+  const statsBarHTML = (r) => `
+    <div class="mt-2 flex items-center gap-2.5">
+      <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div data-rental-bar="${r.id}" class="h-full rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
+      </div>
+      <span data-rental-left="${r.id}" class="text-[10px] font-semibold shrink-0 tabular-nums"></span>
+    </div>`;
+
+  function statsRentalRowHTML(r, nowMs) {
+    const b = getBook(r.bookId);
+    const active = isActiveRental(r, nowMs);
+    const tag = rentalDiscountTag(r);
+    return `
+      <li class="p-2.5 rounded-xl ${active ? 'bg-emerald-50/30 border border-emerald-100' : 'bg-slate-50/80'}">
+        <div class="flex items-center gap-3">
           ${coverHTML(b, 'xs')}
           <div class="flex-1 min-w-0">
             <p class="text-xs font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
-            <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">${statusChip}${discChip}</p>
+            <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">${rentalStatusChip(r, active)}${tag ? statsChip(escapeHTML(tag.label), tag.tone) : ''}</p>
             <p class="text-[10px] text-slate-400 mt-0.5">Kiraladı: ${formatDate(r.rentedAt, true)} · Bitiş: ${formatDate(r.dueAt, true)}</p>
           </div>
-          <div class="text-right shrink-0">
-            ${rentalPriceHTML(r, false)}
-          </div>
+          <div class="text-right shrink-0">${rentalPriceHTML(r, false)}</div>
           ${statsDeleteBtn('data-stats-del-rental', r.id)}
-        </li>`;
-    }).join('');
-    const footer = full ? pagerHTML('rentals', page, pages, list.length, STATS_RENTALS_PAGE)
-      : list.length > STATS_RENTALS_PREVIEW ? `<button type="button" data-stats-all-rentals="${userId}"
-          class="${BTN_SOFT} w-full !py-2 mt-3">Tümünü gör · ${list.length} kayıt →</button>` : '';
-    return `<ul class="space-y-2">${rows}</ul>${footer}`;
+        </div>
+        ${active ? statsBarHTML(r) : ''}
+      </li>`;
   }
 
-  /* Tümünü gör: kullanıcının bütün kiralamaları · 10'arlı sayfa */
-  function openStatsRentalsModal(userId) {
-    const u = getUser(userId);
-    if (!u || !canViewStats(userId)) return;
-    state.statsUserId = userId;
-    state.statsPage = { ...state.statsPage, rentals: 1 };
-    const total = rentals.filter((r) => r.userId === userId).length;
-    openModal(`
-      ${modalHeader(`Geçmiş Kiralamalar · ${escapeHTML(u.name)}`, `${total} kayıt · aktif + süresi dolan`, 'rentals')}
-      <div class="p-5 space-y-4">
-        <div id="statsRentalsAll">${statsRentalsHTML(userId, true)}</div>
-        <div class="grid grid-cols-2 gap-2.5">
-          <button type="button" data-user-stats="${userId}" class="${BTN_SOFT} !py-2.5">${icon('back', 'w-3.5 h-3.5')}İstatistiklere dön</button>
-          <button type="button" data-modal-close class="${BTN_PRIMARY} !py-2.5">Kapat</button>
+  /* Paket: kitapların kapakları yan yana tek kartta · silme paketin tamamını siler (deleteStatsRecord) */
+  function statsPackageCardHTML(e, nowMs) {
+    const first = e.rs[0];
+    const activeR = e.rs.find((r) => isActiveRental(r, nowMs));
+    const p = e.purchase;
+    const title = p?.offerTitle || offers.find((o) => o.id === first.offerId)?.title || 'Özel teklif';
+    const price = p ? p.price : sum(e.rs, (r) => r.price);
+    const normal = p ? p.normalTotal : sum(e.rs, (r) => r.listPrice ?? r.price);
+    const due = e.rs.reduce((m, r) => (new Date(r.dueAt) > new Date(m) ? r.dueAt : m), first.dueAt);
+    return `
+      <li class="p-3 rounded-xl ${activeR ? 'bg-violet-50/40 border border-violet-100' : 'bg-slate-50/80'}">
+        <div class="flex items-start gap-2">
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-700 truncate">🎁 ${escapeHTML(title)}</p>
+            <p class="flex items-center gap-1.5 mt-0.5 flex-wrap">${rentalStatusChip(activeR || first, !!activeR)}${statsChip(`Paket · ${e.rs.length} kitap`, 'bg-violet-50 text-violet-600')}</p>
+          </div>
+          <div class="text-right shrink-0">${statsMoneyHTML(price, normal)}</div>
+          ${statsDeleteBtn('data-stats-del-rental', first.id)}
         </div>
-      </div>`, 'lg');
+        <div class="flex flex-wrap gap-1.5 mt-2.5">${e.rs.map((r) => {
+          const b = getBook(r.bookId);
+          return `<span title="${escapeHTML(b?.title || 'Silinmiş kitap')}">${coverHTML(b, 'sm')}</span>`;
+        }).join('')}</div>
+        <p class="text-[10px] text-slate-400 mt-2">Kiraladı: ${formatDate(first.rentedAt, true)} · Bitiş: ${formatDate(due, true)}</p>
+        ${activeR ? statsBarHTML(activeR) : ''}
+      </li>`;
+  }
+
+  function statsRentalsTabHTML(userId) {
+    const nowMs = Date.now();
+    const all = statsRentalsOf(userId);
+    if (!all.length) return emptyState('Henüz kiralama yok.', '!py-8');
+    const nActive = all.filter((r) => isActiveRental(r, nowMs)).length;
+    const counts = { all: all.length, active: nActive, ended: all.length - nActive };
+    const f = counts[state.statsFilter] != null ? state.statsFilter : 'all';
+    const filters = [['all', 'Tümü'], ['active', 'Aktif'], ['ended', 'Biten']].map(([k, l]) => `
+      <button type="button" data-stats-filter="${k}"
+        class="flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-lg text-[11px] font-semibold transition ${f === k ? 'bg-white text-brand-700 shadow-soft' : 'text-slate-500 hover:text-brand-600'}">
+        ${l} <span class="${f === k ? 'text-brand-500' : 'text-slate-400'} tabular-nums">${counts[k]}</span>
+      </button>`).join('');
+    const head = `<div class="flex gap-1 p-1 rounded-xl bg-slate-100 mb-3">${filters}</div>`;
+
+    const entries = statsRentalEntries(all)
+      .filter((e) => f === 'all' || e.rs.some((r) => isActiveRental(r, nowMs)) === (f === 'active'));
+    if (!entries.length) return head + emptyState(f === 'active' ? 'Şu an aktif kiralama yok.' : 'Biten kiralama yok.', '!py-8');
+
+    const { items, page, pages } = pageSlice(entries, 'rentals');
+    let lastMonth = '';
+    const rows = items.map((e) => {
+      const m = statsMonthLabel(e.at);
+      const monthHead = m !== lastMonth ? `
+        <li class="flex items-center gap-2 ${lastMonth ? 'pt-2' : ''}">
+          <span class="text-[11px] font-bold text-slate-500">${m}</span><span class="flex-1 h-px bg-slate-100"></span>
+        </li>` : '';
+      lastMonth = m;
+      return monthHead + (e.kind === 'package' ? statsPackageCardHTML(e, nowMs) : statsRentalRowHTML(e.rs[0], nowMs));
+    }).join('');
+    return `${head}<ul class="space-y-2">${rows}</ul>${pagerHTML('rentals', page, pages, entries.length)}`;
+  }
+
+  /* --- Kupon & Çekler · kuponlar + hediye çekleri tek listede (aktif → kullanılan → süresi dolan) ---
+     Puanla açılmayı bekleyen çek de aktif sayılır (kilit notuyla). */
+  function statsVouchersOf(userId, now = Date.now()) {
+    const ms = (d) => new Date(d).getTime() || 0;
+    const cs = coupons.filter((c) => c.userId === userId)
+      .map((c) => ({ kind: 'coupon', x: c, st: couponState(c, now) }));
+    const qs = chequesOf(userId).map((c) => {
+      const s = chequeState(c, now);
+      return { kind: 'cheque', x: c, st: s === 'locked' ? 'active' : s, locked: s === 'locked' };
+    });
+    const order = { active: 0, used: 1, expired: 2 };
+    const key = (v) => (v.st === 'active' ? v.x.expiresMs : v.st === 'used' ? -ms(v.x.usedAt) : -v.x.expiresMs);
+    return [...cs, ...qs].sort((a, b) => order[a.st] - order[b.st] || key(a) - key(b));
+  }
+  const voucherBadge = (v) => (v.kind === 'coupon' ? couponBadge(v.x) : formatMoney(v.x.amount));
+  const voucherTitle = (v) => (v.kind === 'coupon' ? couponTitle(v.x) : `${formatMoney(v.x.amount)} Hediye Çeki${v.x.name ? ` · ${v.x.name}` : ''}`);
+  const voucherTone = (v) => (v.kind === 'coupon' ? `bg-gradient-to-br ${COUPON_TONES[couponTypeOf(v.x)]}` : 'cheque-card');
+  const voucherSmall = (v) => v.kind === 'coupon' && couponTypeOf(v.x) === 'bogo';
+  const voucherEnd = (v) => formatDate(new Date(v.x.expiresMs).toISOString(), true);
+  const voucherLeft = (v, now) => (v.locked ? `🔒 ⭐ ${formatPoints(v.x.cost)} ile açılır` : `⏳ ${formatRemaining(v.x.expiresMs - now)}`);
+  const voucherBooks = (v) => (v.kind === 'coupon'
+    ? (v.x.bookIds || (v.x.bookId ? [v.x.bookId] : []))
+    : [getRental(v.x.rentalId)?.bookId]).filter(Boolean).map(getBook).filter(Boolean);
+
+  /* Aktif: Hediyelerim'deki gibi renkli bilet · kullanılan: soluk, kitap kapağıyla · süresi dolan: gri */
+  function statsVoucherHTML(v, now) {
+    if (v.st === 'active') return `
+      <li class="flex rounded-2xl overflow-hidden bg-white shadow-soft border border-slate-100">
+        <div class="relative w-24 sm:w-28 shrink-0 ${voucherTone(v)} text-white flex flex-col items-center justify-center text-center px-2 py-3 border-r-2 border-dashed border-white/70">
+          <span class="absolute inset-0 offer-pattern opacity-50"></span>
+          <span class="relative ${voucherSmall(v) ? 'text-sm' : 'text-xl'} font-black leading-tight">${escapeHTML(voucherBadge(v))}</span>
+          <span class="relative text-[8px] font-bold tracking-widest mt-1">${v.kind === 'coupon' ? 'KUPON' : 'HEDİYE ÇEKİ'}</span>
+        </div>
+        <div class="flex-1 min-w-0 px-3 py-2.5">
+          <p class="text-xs font-semibold text-slate-700 leading-snug">${escapeHTML(voucherTitle(v))}</p>
+          <p class="text-[11px] font-bold ${v.locked ? 'text-amber-600' : 'text-rose-500'} tabular-nums mt-1">${voucherLeft(v, now)}</p>
+          <p class="text-[10px] text-slate-400">${v.locked ? `⏳ ${formatRemaining(v.x.expiresMs - now)} · ` : ''}son ${voucherEnd(v)}</p>
+        </div>
+      </li>`;
+    const used = v.st === 'used';
+    const books = used ? voucherBooks(v) : [];
+    return `
+      <li class="flex items-center gap-3 p-2.5 rounded-xl ${used ? 'bg-slate-50/80 opacity-60' : 'bg-slate-50 opacity-70 grayscale'}">
+        <span class="w-14 shrink-0 rounded-lg ${used ? voucherTone(v) : 'bg-slate-300'} text-white text-center py-1.5 px-1">
+          <span class="block ${voucherSmall(v) ? 'text-[8px]' : 'text-[11px]'} font-black leading-tight">${escapeHTML(voucherBadge(v))}</span>
+          <span class="block text-[7px] font-bold tracking-widest mt-0.5">${v.kind === 'coupon' ? 'KUPON' : 'ÇEK'}</span>
+        </span>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-semibold text-slate-600 truncate">${escapeHTML(voucherTitle(v))}</p>
+          <p class="text-[10px] text-slate-400 leading-snug">${used
+            ? `✓ ${books.length ? books.map((b) => `"${escapeHTML(b.title)}"`).join(', ') : 'Kitap'} için kullanıldı · ${formatDate(v.x.usedAt, true)}`
+            : `Süresi doldu · ${voucherEnd(v)}`}</p>
+        </div>
+        ${books.length ? `<div class="flex -space-x-3 shrink-0">${books.slice(0, 3).map((b) => coverHTML(b, 'xs')).join('')}</div>` : ''}
+      </li>`;
+  }
+
+  function statsCouponsTabHTML(userId) {
+    const now = Date.now();
+    const list = statsVouchersOf(userId, now);
+    if (!list.length) {
+      return userId === state.currentUserId ? `
+        <div class="text-center py-10 px-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50/40">
+          <div class="text-4xl">🎟️</div>
+          <p class="text-xs font-semibold text-slate-600 mt-3">Puanınla Hediyelerim'den kupon alabilirsin</p>
+          <a href="#gifts" data-modal-close class="${BTN_PRIMARY} mt-4 !px-5">🎁 Hediyelerim'e git</a>
+        </div>` : emptyState('Henüz kupon ya da hediye çeki yok.', '!py-8');
+    }
+    const counts = { active: 0, used: 0, expired: 0 };
+    list.forEach((v) => { counts[v.st]++; });
+    const { items, page, pages } = pageSlice(list, 'coupons');
+    // Sayfadaki kayıtlar grup grup (bir grup iki sayfaya bölünebilir · başlıkta grubun toplamı)
+    const chunks = [];
+    items.forEach((v) => {
+      const last = chunks[chunks.length - 1];
+      if (last && last.st === v.st) last.list.push(v); else chunks.push({ st: v.st, list: [v] });
+    });
+    const body = chunks.map((g) => `
+      <div>
+        <p class="flex items-center gap-2 mb-2">
+          <span class="text-[11px] font-bold text-slate-500">${VOUCHER_GROUPS[g.st]}</span>
+          <span class="text-[10px] font-semibold px-1.5 py-px rounded-full bg-slate-100 text-slate-500">${counts[g.st]}</span>
+          <span class="flex-1 h-px bg-slate-100"></span>
+        </p>
+        <ul class="${g.st === 'active' ? 'grid grid-cols-1 sm:grid-cols-2 gap-2.5' : 'space-y-2'}">${g.list.map((v) => statsVoucherHTML(v, now)).join('')}</ul>
+      </div>`).join('');
+    return `<div class="space-y-4">${body}</div>${pagerHTML('coupons', page, pages, list.length)}`;
   }
 
   /* Admin'e özel kayıt silme butonu (istatistik modalı) */
@@ -235,12 +424,12 @@
     ? `<button type="button" ${attr}="${id}" title="Kaydı sil" aria-label="Kaydı sil" class="${BTN_ICON} shrink-0 text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5')}</button>`
     : '';
 
-  /* İstatistik kaydı sil (Admin) · onaydan sonra aynı kullanıcının istatistiklerine dönülür */
+  /* İstatistik kaydı sil (Admin) · onaydan sonra aynı kullanıcının istatistiklerine, aynı sekme ve sayfaya dönülür */
   function deleteStatsRecord(kind, id) {
     if (!requireAdmin()) return;
     const userId = state.statsUserId;
-    const pages = { ...state.statsPage };
-    const back = () => { if (userId) openUserStatsModal(userId, pages); };
+    const keep = { tab: state.statsTab, filter: state.statsFilter, pages: { ...state.statsPage } };
+    const back = () => { if (userId) openUserStatsModal(userId, keep); };
     const r = kind === 'rental' ? getRental(id) : null;
     const p = kind === 'purchase' ? offerPurchases.find((x) => x.id === id) : null;
     if (!r && !p) return;
@@ -334,56 +523,209 @@
     confirmResetStats(form.dataset.userId, cats);
   }
 
-  /* Sayfa değişimi yalnızca "Tümünü gör" penceresinde (istatistik penceresi en yeni 5'i gösterir) */
-  function goStatsPage(kind, page) {
-    if (!state.statsUserId || kind !== 'rentals') return;
-    state.statsPage.rentals = Number(page) || 1;
-    const box = $('#statsRentalsAll');
-    if (box) box.innerHTML = statsRentalsHTML(state.statsUserId, true);
-  }
-
-  /* İstatistiklerde kuponlar: aktif → kullanılan → süresi dolan */
-  function statsCouponsHTML(userId) {
-    const now = Date.now();
-    const mine = coupons.filter((c) => c.userId === userId);
-    if (!mine.length) return '<p class="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2.5">Henüz kupon yok.</p>';
-    const group = (st, title) => {
-      const list = mine.filter((c) => couponState(c, now) === st)
-        .sort((a, b) => (st === 'active' ? a.expiresMs - b.expiresMs : b.expiresMs - a.expiresMs));
-      return list.length ? `
-        <p class="text-[10px] font-semibold text-slate-400 mt-2 mb-1.5">${title} (${list.length})</p>
-        <ul class="space-y-2">${list.map((c) => couponCardHTML(c, now)).join('')}</ul>` : '';
-    };
-    return group('active', 'Aktif kuponlar') + group('used', 'Kullanılan kuponlar') + group('expired', 'Süresi dolan kuponlar');
-  }
-
-  /* Detaylı Aile Üyesi İstatistikleri modalı */
-  function openUserStatsModal(userId, keepPages = null) {
+  /* --- Özet sekmesi --- */
+  function statsSummaryHTML(userId) {
     const u = getUser(userId);
-    if (!u) return;
-    if (!canViewStats(userId)) return toast('Yalnızca kendi istatistiklerini görüntüleyebilirsin.', 'error');
+    const self = userId === state.currentUserId;
+    const now = Date.now();
+    const rs = statsRentalsOf(userId);
+
+    // Aktif kupon & çek önizlemesi (aktif yoksa bölüm yok)
+    const activeV = statsVouchersOf(userId, now).filter((v) => v.st === 'active');
+    const vouchersHTML = activeV.length ? statsSection(`🎟️ Aktif Kupon & Çekler <span class="text-slate-400 font-medium">· ${activeV.length}</span>`, statsMoreBtn('coupons'), `
+      <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2">${activeV.slice(0, 4).map((v) => `
+        <li class="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-slate-100 shadow-soft">
+          <span class="w-14 h-10 shrink-0 rounded-lg ${voucherTone(v)} text-white flex items-center justify-center text-center px-1 ${voucherSmall(v) ? 'text-[9px]' : 'text-xs'} font-black leading-tight">${escapeHTML(voucherBadge(v))}</span>
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold text-slate-700 truncate">${escapeHTML(voucherTitle(v))}</p>
+            <p class="text-[10px] font-semibold ${v.locked ? 'text-amber-600' : 'text-rose-500'} tabular-nums truncate">${voucherLeft(v, now)}</p>
+          </div>
+        </li>`).join('')}</ul>`) : '';
+
+    // Boş durum: sıfırlarla dolu kartlar yerine
+    if (!rs.length) return `
+      <div class="space-y-5">
+        <div class="text-center py-10 px-4 rounded-2xl border border-dashed border-brand-200 bg-brand-50/40">
+          <div class="text-5xl">📚</div>
+          <p class="text-sm font-bold text-slate-700 mt-3">${self ? 'Henüz kitap kiralamadın' : 'Henüz kitap kiralamadı'}</p>
+          <p class="text-[11px] text-slate-400 mt-1">${self ? 'İlk kitabını kiralayınca istatistiklerin burada görünecek.' : 'Kitap kiraladığında istatistikleri burada görünecek.'}</p>
+          ${self ? `<a href="#books" data-modal-close class="${BTN_PRIMARY} mt-4 !px-5">📖 Kitaplara göz at</a>` : ''}
+        </div>
+        ${vouchersHTML}
+      </div>`;
 
     const s = userStats(userId);
-    const board = computeLeaderboard();
-    const rank = board.findIndex((x) => x.user.id === userId);
-    const self = userId === state.currentUserId;
-
+    const rank = computeLeaderboard().findIndex((x) => x.user.id === userId);
     const tiles = [
-      { label: 'Kiralanan Kitap', value: `${s.count}`,             tone: 'text-brand-700', bg: 'bg-brand-50/70' },
-      { label: 'Toplam Harcama',  value: formatMoney(s.spent),     tone: 'text-slate-800', bg: 'bg-slate-50' },
-      { label: 'Güncel Bakiye',   value: formatMoney(u.balance),   tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
-      { label: 'Sıralama',        value: `#${rank + 1} ${rank < 3 && s.spent > 0 ? MEDALS[rank] : ''}`, tone: 'text-amber-600', bg: 'bg-amber-50/70' }
+      { label: 'Kiralanan Kitap', value: `${s.count}`,           tone: 'text-brand-700',   bg: 'bg-brand-50/70' },
+      { label: 'Toplam Harcama',  value: formatMoney(s.spent),   tone: 'text-slate-800',   bg: 'bg-slate-50' },
+      { label: 'Güncel Bakiye',   value: formatMoney(u.balance), tone: 'text-emerald-600', bg: 'bg-emerald-50/70' },
+      // Harcaması olmayan sıralamaya girmez
+      { label: 'Sıralama',        value: s.spent > 0 ? `#${rank + 1}${rank < 3 ? ` ${MEDALS[rank]}` : ''}` : '—', tone: 'text-amber-600', bg: 'bg-amber-50/70' }
     ].map((t) => `
       <div class="rounded-2xl ${t.bg} px-3 py-3">
         <p class="text-[10px] text-slate-400 font-medium">${t.label}</p>
         <p class="text-sm sm:text-base font-bold ${t.tone} truncate">${t.value}</p>
       </div>`).join('');
 
+    // Tasarruf: toplam + kaynaklara göre renkli çubuk (tasarruf yoksa kart yok)
+    const parts = SAVING_PARTS.map((p) => ({ ...p, v: round2(s.savings[p.key] || 0) })).filter((p) => p.v > 0);
+    const saved = round2(sum(parts, (p) => p.v));
+    const savingsHTML = saved > 0 ? `
+      <div class="rounded-2xl p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
+        <p class="text-[11px] font-semibold text-emerald-700">💸 İndirimlerle toplam tasarruf</p>
+        <p class="text-3xl font-black text-emerald-600 mt-0.5 tabular-nums">${formatMoney(saved)}</p>
+        <div class="flex gap-0.5 h-2.5 rounded-full overflow-hidden bg-white mt-3">${parts.map((p) =>
+          `<span class="${p.color} h-full" style="width:${(p.v / saved) * 100}%" title="${p.label}: ${formatMoney(p.v)}"></span>`).join('')}</div>
+        <ul class="flex flex-wrap gap-x-3.5 gap-y-1 mt-2.5">${parts.map((p) => `
+          <li class="flex items-center gap-1.5 text-[10px] text-slate-500">
+            <span class="w-2 h-2 rounded-full ${p.color}"></span>${p.label} <b class="text-slate-700 tabular-nums">${formatMoney(p.v)}</b>
+          </li>`).join('')}</ul>
+      </div>` : '';
+
+    // Son 6 ay: aylık kiralanan kitap sayısı
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(1);
+      d.setMonth(d.getMonth() - (5 - i));
+      return d;
+    });
+    const monthCounts = months.map((d) => rs.filter((r) => {
+      const x = new Date(r.rentedAt);
+      return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth();
+    }).length);
+    const maxCount = Math.max(1, ...monthCounts);
+    const chartHTML = statsSection('📈 Son 6 ay', `<span class="text-[10px] text-slate-400">${monthCounts.reduce((a, b) => a + b, 0)} kitap</span>`, `
+      <div class="rounded-2xl bg-slate-50 px-3 pt-3 pb-2">
+        <div class="grid grid-cols-6 gap-2 h-28">${monthCounts.map((n) => `
+          <div class="flex flex-col items-center justify-end gap-1">
+            <span class="text-[10px] font-bold ${n ? 'text-brand-700' : 'text-slate-300'} tabular-nums">${n}</span>
+            <div class="w-full max-w-[2.25rem] rounded-t-lg ${n ? 'bg-gradient-to-t from-brand-400 to-brand-600' : 'bg-slate-200'}" style="height:${n ? Math.max(6, Math.round((n / maxCount) * 80)) : 3}px"></div>
+          </div>`).join('')}
+        </div>
+        <div class="grid grid-cols-6 gap-2 mt-1.5 pt-1.5 border-t border-slate-200">${months.map((d, i) =>
+          `<span class="text-center text-[10px] ${i === 5 ? 'font-bold text-brand-600' : 'text-slate-400'}">${statsShortMonth(d)}</span>`).join('')}
+        </div>
+      </div>`);
+
+    // Puan kartı (eski haliyle)
+    const pointsHTML = `
+      <div class="rounded-2xl p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-100">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[11px] font-semibold text-amber-700">${self ? 'Puanın' : 'Puanı'} ⭐</p>
+            <p class="text-2xl font-black ${s.points.available < 0 ? 'text-rose-500' : 'text-amber-600'} mt-0.5">${formatPoints(s.points.available)}</p>
+          </div>
+          ${self ? `<a href="#gifts" class="${BTN_SOFT} !py-1.5 shrink-0">🎟️ Hediyelerim</a>` : ''}
+        </div>
+        <div class="flex flex-wrap gap-1.5 mt-2.5">
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-emerald-600">Kazanılan: ${formatPoints(s.points.earned)}</span>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Kupona harcanan: ${formatPoints(s.points.spent)}</span>
+        </div>
+        <p class="text-[10px] text-amber-700/70 mt-2">İndirimlerden kazanılan her 1 ₺ = 1 puan · kuponlu kiralamalar puan kazandırmaz${s.points.available < 0 ? ' · puan eksiye düştü: yeni kazanç önce açığı kapatır' : ''}</p>
+      </div>`;
+
+    // Son 3 kiralama
+    const recentHTML = statsSection('📚 Son kiralamalar', statsMoreBtn('rentals'), `
+      <ul class="space-y-1.5">${rs.slice(0, 3).map((r) => {
+        const b = getBook(r.bookId);
+        const active = isActiveRental(r, now);
+        return `
+          <li class="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50/80">
+            ${coverHTML(b, 'xs')}
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-slate-700 truncate">${b ? escapeHTML(b.title) : 'Silinmiş kitap'}</p>
+              <p class="text-[10px] text-slate-400">${formatDate(r.rentedAt, true)}</p>
+            </div>
+            ${active ? statsChip('Aktif', 'bg-emerald-50 text-emerald-600') : ''}
+            <span class="text-xs font-bold ${(r.listPrice ?? r.price) > r.price ? 'text-emerald-600' : 'text-brand-600'} shrink-0 tabular-nums">${r.price > 0 ? formatMoney(r.price) : 'Bedava'}</span>
+          </li>`;
+      }).join('')}</ul>`);
+
+    const first = rs[rs.length - 1];
+    return `
+      <div class="space-y-5">
+        <p class="text-[11px] text-slate-500 flex items-center gap-1.5">📅 İlk kiralama: <b class="text-slate-700">${formatLongDate(first.rentedAt)}</b></p>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">${tiles}</div>
+        ${savingsHTML}
+        ${chartHTML}
+        ${pointsHTML}
+        ${recentHTML}
+        ${vouchersHTML}
+      </div>`;
+  }
+
+  /* --- Pencere --- */
+  function statsTabsHTML() {
+    return STATS_TABS.map((t) => {
+      const on = state.statsTab === t.key;
+      return `
+        <button type="button" data-stats-tab="${t.key}" aria-selected="${on}" role="tab"
+          class="relative flex-1 sm:flex-none px-2 sm:px-4 py-3 text-[11px] sm:text-xs font-semibold whitespace-nowrap transition ${on ? 'text-brand-700' : 'text-slate-400 hover:text-slate-600'}">
+          <span class="hidden sm:inline">${t.emoji} </span>${t.label}
+          <span class="absolute left-2 right-2 bottom-0 h-0.5 rounded-full ${on ? 'bg-brand-600' : 'bg-transparent'}"></span>
+        </button>`;
+    }).join('');
+  }
+
+  /* Seçili sekmeyi çizer (pencere açık kalır) */
+  function renderStatsBody() {
+    const body = $('#statsBody');
+    const userId = state.statsUserId;
+    if (!body || !userId) return;
+    $('#statsTabs').innerHTML = statsTabsHTML();
+    const tab = state.statsTab;
+    body.innerHTML = tab === 'rentals' ? statsRentalsTabHTML(userId)
+      : tab === 'coupons' ? statsCouponsTabHTML(userId)
+      : statsSummaryHTML(userId);
+    if (tab === 'rentals') {
+      const nowMs = Date.now();
+      requestAnimationFrame(() => body.querySelectorAll('[data-rental-bar]').forEach((el) => applyProgress(el.dataset.rentalBar, nowMs, body)));
+    }
+  }
+
+  /* Aşağı kaydırılmışsa sekmelerin başına dön */
+  function scrollStatsTop() {
+    const panel = $('#modalPanel');
+    const top = $('#statsHead')?.offsetHeight || 0;
+    if (panel && panel.scrollTop > top) panel.scrollTo({ top, behavior: 'smooth' });
+  }
+
+  function setStatsTab(tab) {
+    if (!$('#statsBody') || !STATS_TABS.some((t) => t.key === tab)) return;
+    state.statsTab = tab;
+    renderStatsBody();
+    scrollStatsTop();
+  }
+
+  function setStatsFilter(f) {
+    if (!$('#statsBody')) return;
+    state.statsFilter = f;
+    state.statsPage.rentals = 1;
+    renderStatsBody();
+  }
+
+  function goStatsPage(kind, page) {
+    if (!$('#statsBody') || !['rentals', 'coupons'].includes(kind)) return;
+    state.statsPage[kind] = Number(page) || 1;
+    renderStatsBody();
+    scrollStatsTop();
+  }
+
+  /* Detaylı Aile Üyesi İstatistikleri · keep: { tab, filter, pages } (silme sonrası aynı yere dönmek için) */
+  function openUserStatsModal(userId, keep = null) {
+    const u = getUser(userId);
+    if (!u) return;
+    if (!canViewStats(userId)) return toast('Yalnızca kendi istatistiklerini görüntüleyebilirsin.', 'error');
+
     state.statsUserId = userId;
-    state.statsPage = keepPages || { rentals: 1 };
+    state.statsTab = STATS_TABS.some((t) => t.key === keep?.tab) ? keep.tab : 'summary';
+    state.statsFilter = keep?.filter || 'all';
+    state.statsPage = { rentals: 1, coupons: 1, ...(keep?.pages || {}) };
 
     openModal(`
-      <div class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
+      <div id="statsHead" class="relative p-5 sm:p-6 bg-gradient-to-br from-brand-500 to-brand-700 text-white overflow-hidden">
         <span class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></span>
         <span class="absolute right-20 -bottom-12 w-28 h-28 rounded-full bg-white/10"></span>
         <button type="button" data-modal-close aria-label="Kapat" class="absolute top-3 right-3 z-20 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 flex items-center justify-center transition">${icon('close', 'w-5 h-5 pointer-events-none')}</button>
@@ -400,45 +742,14 @@
         </div>
       </div>
 
-      <div class="p-5 sm:p-6 space-y-5">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">${tiles}</div>
+      <div id="statsTabs" role="tablist" class="sticky top-0 z-10 flex bg-white border-b border-slate-100 px-2 sm:px-4"></div>
+      <div id="statsBody" class="p-4 sm:p-6"></div>
 
-        <div class="rounded-2xl p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-100">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <p class="text-[11px] font-semibold text-amber-700">${self ? 'Puanın' : 'Puanı'} ⭐</p>
-              <p class="text-2xl font-black ${s.points.available < 0 ? 'text-rose-500' : 'text-amber-600'} mt-0.5">${formatPoints(s.points.available)}</p>
-            </div>
-            ${self ? `<a href="#gifts" class="${BTN_SOFT} !py-1.5 shrink-0">🎟️ Hediyelerim</a>` : ''}
-          </div>
-          <div class="flex flex-wrap gap-1.5 mt-2.5">
-            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-emerald-600">Kazanılan: ${formatPoints(s.points.earned)}</span>
-            <span class="text-[10px] font-semibold px-2 py-1 rounded-lg bg-white text-rose-500">Kupona harcanan: ${formatPoints(s.points.spent)}</span>
-          </div>
-          <p class="text-[10px] text-amber-700/70 mt-2">İndirimlerden kazanılan her 1 ₺ = 1 puan · kuponlu kiralamalar puan kazandırmaz${s.points.available < 0 ? ' · puan eksiye düştü: yeni kazanç önce açığı kapatır' : ''}</p>
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-2.5">
-            <h4 class="text-xs font-bold text-slate-700">🎟️ Kuponlar</h4>
-            <span class="text-[10px] text-slate-400">${activeCouponsOf(userId).length} aktif · ${coupons.filter((c) => c.userId === userId).length} toplam</span>
-          </div>
-          ${statsCouponsHTML(userId)}
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-2.5">
-            <h4 class="text-xs font-bold text-slate-700">📚 Geçmiş Kiralamalar</h4>
-            <span class="text-[10px] text-slate-400">Aktif + süresi dolan · ${rentals.filter((r) => r.userId === userId).length} kayıt</span>
-          </div>
-          <div id="statsRentals">${statsRentalsHTML(userId)}</div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          ${isAdmin() ? `<button type="button" data-stats-reset="${u.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}İstatistikleri Sıfırla</button>` : '<span></span>'}
-          <button type="button" data-modal-close class="${BTN_SOFT}">Kapat</button>
-        </div>
+      <div class="px-4 sm:px-6 pb-5 sm:pb-6 flex flex-wrap items-center justify-between gap-2">
+        ${isAdmin() ? `<button type="button" data-stats-reset="${u.id}" class="${BTN_SOFT} !text-rose-500 !border-rose-100 hover:!border-rose-300">${icon('trash', 'w-3.5 h-3.5')}İstatistikleri Sıfırla</button>` : '<span></span>'}
+        <button type="button" data-modal-close class="${BTN_SOFT}">Kapat</button>
       </div>`, 'lg');
+    renderStatsBody();
   }
 
   /* ==========================================================
