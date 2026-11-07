@@ -10,6 +10,7 @@
     renderNewBooks(now);
     renderVitrine(now);
     renderMuseumShowcase(now);
+    renderUpcoming();
     renderDeals(now);
     renderActiveRentals(now);
     renderExpiredRentals(now);
@@ -28,12 +29,16 @@
     const rentableNow = shown.filter((b) => isRentableStatus(b) && !isBookRented(b, nowMs)).length;
     const deals = getDailyDeals(now);
     const maxRate = deals.ids.length ? Math.max(...deals.ids.map(getDiscountRate)) : 0;
+    const lastUpd = sortedUpdates()[0];
 
     // href: karta basınca o sayfa açılır
     const cards = [
       { label: 'Toplam Kitap',   value: shown.length,              sub: typeSummary, icon: 'books',   tone: 'bg-brand-50 text-brand-600', href: '#books' },
       { label: 'Kirada',         value: active.length,             sub: `Sende ${myActive} · ${rentableNow} kitap kiralık`,                   icon: 'rentals', tone: 'bg-emerald-50 text-emerald-600', href: '#rentals' },
-      { label: 'Bakiyen',        value: formatMoney(currentUser().balance), sub: 'Kiralamalarda kullanılır',                                       icon: 'wallet',  tone: 'bg-indigo-50 text-indigo-600' },
+      // Son sürüm notu · basınca o güncelleme açılır
+      { label: 'Son Güncelleme', value: lastUpd ? escapeHTML(lastUpd.version) : '—',
+        sub: lastUpd ? `${lastUpd.title ? `${escapeHTML(lastUpd.title)} · ` : ''}${relativeDay(lastUpd.createdAt || lastUpd.releaseDate)}` : 'Henüz sürüm notu yok',
+        icon: 'sparkles', tone: 'bg-violet-50 text-violet-600', ann: lastUpd?.id, isNew: !!lastUpd && lastUpd.id === newUpdateId() },
       // Günün İndirimi vitrini kapalıysa kart hiç gösterilmez
       showcaseOn('deals') && { label: 'Günün İndirimi', value: deals.ids.length ? `%${maxRate}` : '—', sub: deals.ids.length ? `${deals.ids.length} kitapta · en yüksek` : 'Bugün fırsat yok', icon: 'tag', tone: 'bg-rose-50 text-rose-500' }
     ].filter(Boolean);
@@ -41,15 +46,20 @@
     // Mobilde yazılar kesilmesin: ikon küçülür, alt satır 2 satıra kadar kayar
     $('#dashStats').classList.toggle('lg:grid-cols-4', cards.length === 4);
     $('#dashStats').classList.toggle('lg:grid-cols-3', cards.length === 3);
-    $('#dashStats').innerHTML = cards.map((c) => `
-      <${c.href ? `a href="${c.href}"` : 'div'} class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-start justify-between gap-2 sm:gap-3 hover:shadow-soft-lg transition min-w-0${c.href ? ' cursor-pointer hover:ring-1 hover:ring-brand-200' : ''}">
+    // href → bağlantı · ann → duyuruyu açan düğme · ikisi de yoksa düz kart
+    $('#dashStats').innerHTML = cards.map((c) => {
+      const tag = c.href ? 'a' : c.ann ? 'button' : 'div';
+      const open = c.href ? `a href="${c.href}"` : c.ann ? `button type="button" data-open-ann="${c.ann}"` : 'div';
+      return `
+      <${open} class="bg-white rounded-2xl shadow-soft p-3 sm:p-4 flex items-start justify-between gap-2 sm:gap-3 hover:shadow-soft-lg transition min-w-0 text-left w-full${c.href || c.ann ? ' cursor-pointer hover:ring-1 hover:ring-brand-200' : ''}">
         <div class="min-w-0">
-          <p class="text-[11px] font-medium text-slate-400">${c.label}</p>
+          <p class="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">${c.label}${c.isNew ? newUpdateBadge : ''}</p>
           <p class="text-base sm:text-xl font-bold text-slate-800 mt-1 truncate">${c.value}</p>
           <p class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">${c.sub}</p>
         </div>
         <span class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${c.tone} flex items-center justify-center shrink-0">${icon(c.icon)}</span>
-      </${c.href ? 'a' : 'div'}>`).join('');
+      </${tag}>`;
+    }).join('');
   }
 
   /* --- 8.1.3 Ana Sayfa Ayarları (yalnızca Admin) · vitrinleri açar / kapatır ---
@@ -59,7 +69,8 @@
     { key: 'vitrine',  icon: '🏷️', label: 'Fırsatlar',  desc: "Admin'in seçtiği kitap + yüzde indirimleri" },
     { key: 'deals',    icon: '🔥', label: 'Günün İndirimi',  desc: `Her gün ${String(DISCOUNT_SETTINGS.resetHour).padStart(2, '0')}:00'da değişen 3'lü seri indirimi` },
     { key: 'newBooks', icon: '★',  label: 'Yeni Kitap',      desc: `Yeni çıkan kitaplara ${NEW_BOOK_DISCOUNT.days} gün %${NEW_BOOK_DISCOUNT.rate} indirim` },
-    { key: 'museum',   icon: '🏛️', label: 'Müze Vitrini',    desc: 'Müze\'deki kitaplar belirlenen süre ve fiyatla sergilenip kiralanır' }
+    { key: 'museum',   icon: '🏛️', label: 'Müze Vitrini',    desc: 'Müze\'deki kitaplar belirlenen süre ve fiyatla sergilenip kiralanır' },
+    { key: 'upcoming', icon: '📖', label: 'Yakında Geliyor', desc: 'Yakında / Planlanıyor durumundaki kitaplar · Günün İndirimleri\'nin üstünde' }
   ];
 
   /* Ana Sayfa Ayarları: sayfa başlığının sağında tek buton (kapalı vitrin sayısıyla) ·
@@ -490,6 +501,50 @@
     });
   }
 
+  /* --- 8.1.9 Yakında geliyor · Yakında / Planlanıyor durumundaki kitaplar (Günün İndirimleri'nin üstünde) ---
+     Kitap yoksa ya da Ana Sayfa Ayarları'nda kapalıysa bölüm görünmez · karta basınca kitabın detayı açılır */
+  function renderUpcoming() {
+    const box = $('#upcomingSection');
+    if (!box) return;
+    const order = { yakinda: 0, planlaniyor: 1 };
+    const list = showcaseOn('upcoming')
+      ? books.filter((b) => isDraftBook(b) && isVisibleBook(b))
+        .sort((a, b) => order[bookStatus(a)] - order[bookStatus(b)] || seriesRank(a) - seriesRank(b) || a.title.localeCompare(b.title, 'tr'))
+      : [];
+    if (!list.length) { box.innerHTML = ''; return; }
+    const cards = list.map((b) => {
+      const st = BOOK_STATUSES[bookStatus(b)];
+      return `
+        <button type="button" data-open-book="${b.id}"
+          class="group text-left flex gap-3 p-3 rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-sky-50/60 hover:border-sky-200 hover:shadow-soft-lg hover:-translate-y-0.5 transition duration-200 focus:outline-none focus:ring-2 focus:ring-sky-200 min-w-0">
+          ${coverHTML(b, 'md')}
+          <div class="flex-1 min-w-0 flex flex-col">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-sky-600 truncate">${escapeHTML(seriesLabel(b))}</p>
+            <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2 group-hover:text-brand-600 transition">${escapeHTML(b.title)}</p>
+            <div class="mt-auto pt-2">
+              <span class="inline-flex items-center gap-1.5 text-[10px] font-semibold leading-none px-2 py-1 rounded-full ${st.chip}">
+                <span class="w-1.5 h-1.5 rounded-full ${st.dot}"></span>${st.label}
+              </span>
+            </div>
+          </div>
+        </button>`;
+    }).join('');
+    box.innerHTML = `
+      <div class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-violet-500 text-white flex items-center justify-center shadow-soft text-base shrink-0">📖</span>
+            <div class="min-w-0">
+              <h2 class="text-sm font-bold text-slate-800">Yakında geliyor</h2>
+              <p class="text-[11px] text-slate-400">Yazılmakta ve planlanan kitaplar · detay için karta dokun</p>
+            </div>
+          </div>
+          <span class="text-[11px] font-semibold text-sky-600 bg-sky-50 px-2.5 py-1 rounded-full shrink-0">${list.length} kitap</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${cards}</div>
+      </div>`;
+  }
+
   /* --- 8.2 Günün indirimleri --- */
   function renderDeals(now) {
     // Vitrin Ayarları'nda kapalıysa bölüm hiç görünmez
@@ -539,7 +594,7 @@
             <div class="flex-1 min-w-0">
               <p class="flex items-center gap-1.5 flex-wrap text-[10px] font-semibold uppercase tracking-wider text-brand-500">${escapeHTML(seriesLabel(b))} ${tierBadge(tier)}</p>
               <p class="text-xs font-semibold text-slate-800 mt-0.5 line-clamp-2">${escapeHTML(b.title)}</p>
-              <p class="text-[11px] text-slate-400 truncate">${escapeHTML(authorName(b))}</p>
+              ${dealRatingHTML(b.id)}
               ${statusChipHTML(b, now.getTime(), 'mt-1.5')}
             </div>
           </div>
@@ -555,6 +610,12 @@
           </div>
         </div>`;
     }).join('');
+  }
+
+  /* Günün İndirimi kartında yazar yerine ortalama reyting (⭐ 4,5) · oylanmamış kitapta hiçbir şey */
+  function dealRatingHTML(bookId) {
+    const s = ratingSummary(bookId);
+    return s ? `<p class="text-[11px] font-bold text-slate-600 mt-0.5" title="${s.count} oy">⭐ ${s.text}</p>` : '';
   }
 
   function updateCountdown(now = new Date()) {
@@ -692,9 +753,9 @@
             <button type="button" data-open-book="${b.id}" class="shrink-0">${coverHTML(b, 'sm')}</button>
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <button type="button" data-open-book="${b.id}" class="block max-w-full text-left text-xs font-semibold text-slate-800 truncate hover:text-brand-600">${escapeHTML(b.title)}</button>
-                  <p class="text-[11px] text-slate-400 truncate">${typeLabel(b.type)}</p>
+                <div class="min-w-0 flex items-center gap-1.5">
+                  <button type="button" data-open-book="${b.id}" class="min-w-0 text-left text-xs font-semibold text-slate-800 truncate hover:text-brand-600">${escapeHTML(b.title)}</button>
+                  <span class="shrink-0 text-[9px] font-semibold px-1.5 py-px rounded-md ${typeStyle(b.type).chip}">${escapeHTML(seriesLabel(b))}</span>
                 </div>
                 <div class="text-right shrink min-w-0 max-w-[65%]">${rentalPriceHTML(r)}</div>
               </div>
@@ -708,7 +769,7 @@
                   <div data-rental-bar="${r.id}" class="h-full rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
                 </div>
                 <span data-rental-left="${r.id}" class="text-[11px] font-semibold shrink-0 tabular-nums"></span>
-                ${refundBtnHTML(r)}${rentalDeleteBtn(r)}
+                ${refundBtnHTML(r)}
               </div>
             </div>
           </div>
@@ -752,7 +813,7 @@
           <span class="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold text-rose-400 bg-rose-50/70 border border-rose-100 px-2.5 py-1 rounded-full">
             <span class="w-1.5 h-1.5 rounded-full bg-rose-300"></span>${endedLabel(r)}
           </span>
-          ${refundBtnHTML(r)}${rentalDeleteBtn(r)}
+          ${refundBtnHTML(r)}
         </li>`;
     }).join('');
   }

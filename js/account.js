@@ -6,18 +6,18 @@
   async function setRole(userId, role) {
     const u = getUser(userId);
     if (!u || !ROLES[role]) return;
-    if (!isAdmin()) { toast('Rol değiştirme yalnızca Admin yetkisindedir.', 'error'); return renderProfile(); }
+    if (!isAdmin()) { toast('Rol değiştirme yalnızca Admin yetkisindedir.', 'error'); return renderUserAdminList(); }
     if (u.role === role) return;
     if (isOwnerUser(u) && role !== 'admin') {
       toast('Ana Admin hesabının rolü değiştirilemez.', 'error');
-      return renderProfile();
+      return renderUserAdminList();
     }
     const ok = await run(col('users').doc(u.id).update({ role }), `${u.name} artık ${ROLES[role].label}.`);
-    if (!ok) renderProfile();
+    if (!ok) renderUserAdminList();
   }
 
   /* ==========================================================
-     17) PROFİL MENÜSÜ, BAKİYE & ROL PANELİ
+     17) PROFİL MENÜSÜ · KULLANICI YÖNETİMİ · BAKİYE GEÇMİŞİ
      ========================================================== */
   function renderProfile() {
     const u = currentUser();
@@ -39,20 +39,21 @@
     $('#panelEmail').textContent = u.email || state.authUser?.email || '';
     $('#panelStatsBtn').dataset.userStats = u.id;
 
-    // Hızlı özet
-    const s = userStats(u.id);
+    // Hızlı özet · Puan kutusu Hediyelerim'i açar
+    const pts = userPoints(u.id);
     const activeCount = rentals.filter((r) => r.userId === u.id && isActiveRental(r)).length;
     $('#panelQuick').innerHTML = [
       { icon: '💰', label: 'Bakiye', value: formatMoney(u.balance) },
       { icon: '📖', label: 'Aktif Kiralık', value: `${activeCount} kitap` },
-      { icon: '🧾', label: 'Harcama', value: formatMoney(s.spent) }
+      { icon: '⭐', label: 'Puan', value: formatPoints(pts.available), href: '#gifts' }
     ].map((c) => `
-      <div class="rounded-2xl bg-white/15 ring-1 ring-white/10 px-2.5 py-2 min-w-0">
-        <p class="text-[9px] uppercase tracking-wider text-brand-100">${c.icon} ${c.label}</p>
+      <${c.href ? `a href="${c.href}" title="Hediyelerim"` : 'div'} class="block rounded-2xl bg-white/15 ring-1 ring-white/10 px-2.5 py-2 min-w-0${c.href ? ' hover:bg-white/25 transition' : ''}">
+        <p class="text-[9px] uppercase tracking-wider text-brand-100">${c.icon} ${c.label}${c.href ? ' →' : ''}</p>
         <p class="text-xs font-bold truncate mt-0.5">${c.value}</p>
-      </div>`).join('');
+      </${c.href ? 'a' : 'div'}>`).join('');
 
     renderAdminPanel();
+    renderUserAdminList(); // Kullanıcı Yönetimi penceresi açıksa canlı güncellenir
     // Geri bildirim rozeti (panel butonu + profil düğmesindeki nokta)
     const fbCount = feedbackBadgeCount();
     const fbBadge = $('#fbBadge');
@@ -81,13 +82,12 @@
     state.memberView = !!on;
     try { localStorage.setItem('fb.memberView', on ? '1' : '0'); } catch { /* gizli sekme vb. */ }
     closeModal();
-    state.panelUser = null;
     renderProfile();
     renderCurrentPage();
     toast(on ? '👁️ Üye görünümüne geçtin · siteyi bir üyenin gözünden görüyorsun.' : '🛡️ Admin görünümüne döndün.', 'info');
   }
 
-  /* Kullanıcı (Admin olmayan) için panel: aktif kiralamalar + bilgi */
+  /* Paneldeki aktif kiralamalar (herkes · Admin de bir kullanıcıdır) */
   function memberPanelHTML(u) {
     const nowMs = Date.now();
     const active = rentals.filter((r) => r.userId === u.id && isActiveRental(r, nowMs))
@@ -112,15 +112,17 @@
       ${active.length
         ? `<ul class="space-y-1.5">${rows}</ul>${active.length > 4 ? `<p class="text-[10px] text-slate-400 mt-1.5 px-1">+${active.length - 4} kiralama daha</p>` : ''}`
         : '<p class="text-[11px] text-slate-400 bg-white border border-dashed border-slate-200 rounded-2xl px-3 py-2.5">Şu an kiraladığın kitap yok. Günün İndirimleri\'ne göz at! 📚</p>'}
-      <p class="text-[10px] text-slate-400 flex items-center gap-1.5 px-1 mt-2.5">
+      ${isAdmin() ? '' : `<p class="text-[10px] text-slate-400 flex items-center gap-1.5 px-1 mt-2.5">
         <span class="text-brand-300">${icon('lock', 'w-3 h-3')}</span>Bakiye yükleme ve yönetim işlemleri Admin'e aittir.
-      </p>`;
+      </p>`}`;
   }
 
+  /* Panelin alt kısmı: Üye Görünümü anahtarı (gerçek Admin) · Kullanıcı Yönetimi butonu (Admin, Üye Görünümü'nde gizli)
+     · ilk kurulum kartı · aktif kiralamalar */
   function renderAdminPanel() {
     const box = $('#adminPanel');
+    const u = currentUser();
 
-    // Gerçek Admin: Üye Görünümü anahtarı (iki modda da görünür)
     const viewSwitch = isRealAdmin() ? `
       <button type="button" data-toggle-member-view
         class="w-full mb-3 flex items-center gap-3 p-2.5 rounded-2xl border transition text-left ${state.memberView
@@ -135,71 +137,19 @@
         </span>
       </button>` : '';
 
-    if (!isAdmin()) {
-      box.innerHTML = viewSwitch + memberPanelHTML(currentUser());
-      return;
-    }
-
-    // Canlı güncellemede yazılmakta olan tutar kaybolmasın (aynı kullanıcı açıkken)
-    const prevAmount = $('#bmAmount')?.dataset.user === state.panelUser ? $('#bmAmount').value : '';
-    if (state.panelUser && !getUser(state.panelUser)) state.panelUser = null;
-
-    // Tek liste: her kullanıcı bir satır · dokununca bakiye + rol ayarı aynı yerde açılır
-    const row = (u) => {
-      const open = state.panelUser === u.id;
-      const owner = isOwnerUser(u);
-      return `
-        <li class="rounded-2xl border transition ${open ? 'border-brand-200 bg-brand-50/50 shadow-soft' : 'border-slate-100 bg-white hover:border-brand-100'}">
-          <button type="button" data-panel-user="${u.id}" aria-expanded="${open}" class="w-full flex items-center gap-2.5 p-2.5 text-left">
-            ${avatarHTML(u, 'w-8 h-8 text-[11px]')}
-            <span class="min-w-0 flex-1">
-              <span class="block text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</span>
-              <span class="inline-flex mt-0.5 text-[9px] font-semibold px-1.5 py-px rounded-full ${ROLES[u.role]?.chip || ''}">${owner ? '★ ' : ''}${ROLES[u.role]?.label || u.role}</span>
-              <span class="block mt-0.5 text-[9px] text-slate-400 truncate">🕒 Son giriş: ${u.lastLoginAt ? `${relativeDay(u.lastLoginAt)} ${formatTime(u.lastLoginAt)}` : 'Kayıt yok'}</span>
-            </span>
-            <span class="text-xs font-bold text-emerald-600 tabular-nums shrink-0">${formatMoney(u.balance)}</span>
-            <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
-          </button>
-          ${open ? `
-            <div class="px-2.5 pb-3 space-y-3">
-              <div>
-                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">💰 Bakiye</p>
-                <div class="flex gap-1.5 mb-1.5">
-                  ${[10, 25, 50, 100].map((v) => `<button type="button" data-quick-amount="${v}" class="flex-1 py-1 rounded-lg text-[10px] font-semibold bg-white border border-brand-100 text-brand-600 hover:bg-brand-50 transition">₺${v}</button>`).join('')}
-                </div>
-                <input id="bmAmount" data-user="${u.id}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Tutar (₺)" value="${escapeHTML(prevAmount)}"
-                  class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200" />
-                <div class="grid grid-cols-3 gap-1.5 mt-1.5">
-                  <button type="button" data-balance-action="add" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition">+ Ekle</button>
-                  <button type="button" data-balance-action="subtract" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-rose-50 text-rose-500 hover:bg-rose-100 transition">− Azalt</button>
-                  <button type="button" data-balance-action="set" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 transition">Eşitle</button>
-                </div>
-              </div>
-              <div>
-                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">⚙️ Rol & Yetki</p>
-                ${owner
-                  ? '<p class="text-[10px] text-slate-500 bg-white rounded-xl border border-slate-100 px-3 py-2">★ Ana Admin · rolü değiştirilemez.</p>'
-                  : `<div class="grid grid-cols-${Object.keys(ROLES).length} gap-1 p-1 bg-white rounded-xl border border-brand-100">
-                      ${Object.entries(ROLES).map(([k, r]) => `
-                        <button type="button" data-set-role="${k}" data-user="${u.id}" title="${escapeHTML(r.desc)}"
-                          class="py-1.5 rounded-lg text-[10px] font-semibold transition ${u.role === k ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600 hover:bg-brand-50'}">${r.label}</button>`).join('')}
-                    </div>
-                    <p class="text-[10px] text-slate-400 mt-1 px-1">${ROLES[u.role]?.desc || ''}</p>`}
-              </div>
-            </div>` : ''}
-        </li>`;
-    };
-    const waiting = ALLOWED_EMAILS.filter((e) => !users.some((u) => (u.email || '').toLowerCase() === e));
-    const body = `
-      <ul class="space-y-1.5">${users.map(row).join('')}</ul>
-      ${waiting.length ? `
-        <p class="px-1 mt-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">İzinli · henüz giriş yapmadı</p>
-        <ul class="space-y-1">
-          ${waiting.map((e) => `<li class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white border border-dashed border-brand-100 text-[11px] text-slate-500 truncate">⏳ ${escapeHTML(e)}</li>`).join('')}
-        </ul>` : ''}`;
+    const adminBtn = isAdmin() ? `
+      <button type="button" data-open-user-admin
+        class="w-full mb-3 flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-brand-100 hover:border-brand-300 hover:shadow-soft text-left transition">
+        <span class="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center text-base shrink-0">🛡️</span>
+        <span class="min-w-0 flex-1">
+          <span class="block text-xs font-bold text-slate-700">Kullanıcı Yönetimi</span>
+          <span class="block text-[10px] text-slate-400">${users.length} kişi · bakiye, rol ve izinli e-postalar</span>
+        </span>
+        <svg class="w-4 h-4 text-slate-300 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+      </button>` : '';
 
     // Firestore boşsa (ilk kurulum): örnek kataloğu taşıma kartı
-    const seedCard = !bookTypes.length && !books.length ? `
+    const seedCard = isAdmin() && !bookTypes.length && !books.length ? `
       <div class="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
         <p class="text-[11px] font-bold text-amber-800">🗄️ İlk kurulum · Firestore boş</p>
         <p class="text-[10px] text-amber-700 mt-0.5 leading-relaxed">Örnek katalog: türler, ${SEED_BOOKS.length} kitap, fiyat logu, duyurular ve özel teklifler. Kullanıcı ve kiralama verisi taşınmaz.</p>
@@ -209,24 +159,105 @@
         </div>
       </div>` : '';
 
-    box.innerHTML = `
-      ${viewSwitch}
-      ${seedCard}
-      <div class="rounded-3xl bg-white border border-brand-100 shadow-soft p-3">
-        <div class="flex items-center justify-between gap-2 px-1 mb-2.5">
-          <p class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">🛡️ Kullanıcı Yönetimi</p>
-          <span class="text-[10px] text-slate-400">${users.length} kişi · toplam ${formatMoney(sum(users, (u) => u.balance))}</span>
-        </div>
-        <p class="px-1 mb-2 text-[10px] text-slate-400">Bakiye ve rolü ayarlamak için kullanıcıya dokun.</p>
-        ${body}
-      </div>`;
+    box.innerHTML = viewSwitch + adminBtn + seedCard + memberPanelHTML(u);
   }
 
+  /* --- Kullanıcı Yönetimi penceresi (Admin) · kullanıcı kartları: bakiye + rol · izinli ama giriş yapmamış e-postalar --- */
+  function openUserAdminModal() {
+    if (!requireAdmin()) return;
+    toggleProfile(false);
+    openModal(`
+      ${modalHeader('Kullanıcı Yönetimi 🛡️', 'Bakiye ve rol ayarları · her bakiye değişikliği Bakiye Geçmişi\'ne kaydedilir.', 'users')}
+      <div class="p-4 sm:p-5 space-y-4">
+        <div id="userAdminList"></div>
+        <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
+      </div>`, 'lg');
+    renderUserAdminList();
+  }
+
+  /* Pencere açıksa listeyi çizer (canlı güncellemede yazılmakta olan tutarlar korunur) */
+  function renderUserAdminList() {
+    const box = $('#userAdminList');
+    if (!box) return;
+    if (!isAdmin()) return closeModal();
+    const drafts = {};
+    box.querySelectorAll('[data-bm-amount]').forEach((i) => { drafts[i.dataset.bmAmount] = i.value; });
+
+    const card = (u) => {
+      const owner = isOwnerUser(u);
+      return `
+        <li class="rounded-2xl border border-slate-100 bg-white shadow-soft p-3.5 flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            ${avatarHTML(u, 'w-10 h-10 text-xs')}
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(u.name)}${u.id === state.currentUserId ? ' <span class="text-[9px] text-brand-600">(sen)</span>' : ''}</p>
+              <span class="inline-flex mt-0.5 text-[9px] font-semibold px-1.5 py-px rounded-full ${ROLES[u.role]?.chip || ''}">${owner ? '★ ' : ''}${ROLES[u.role]?.label || u.role}</span>
+              <p class="mt-0.5 text-[9px] text-slate-400 truncate">🕒 Son giriş: ${u.lastLoginAt ? `${relativeDay(u.lastLoginAt)} ${formatTime(u.lastLoginAt)}` : 'Kayıt yok'}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="text-[10px] text-slate-400">Bakiye</p>
+              <p class="text-base font-bold text-emerald-600 tabular-nums">${formatMoney(u.balance)}</p>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">💰 Bakiye</p>
+              <button type="button" data-open-balance-log="${u.id}" class="text-[10px] font-semibold text-brand-600 hover:text-brand-700">Geçmiş →</button>
+            </div>
+            <div class="flex gap-1.5 mb-1.5">
+              ${[10, 25, 50, 100].map((v) => `<button type="button" data-quick-amount="${v}" data-user="${u.id}" class="flex-1 py-1 rounded-lg text-[10px] font-semibold bg-white border border-brand-100 text-brand-600 hover:bg-brand-50 transition">₺${v}</button>`).join('')}
+            </div>
+            <input data-bm-amount="${u.id}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Tutar (₺)"
+              class="w-full text-xs rounded-xl border border-brand-100 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-200" />
+            <div class="grid grid-cols-3 gap-1.5 mt-1.5">
+              <button type="button" data-balance-action="add" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition">+ Ekle</button>
+              <button type="button" data-balance-action="subtract" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-rose-50 text-rose-500 hover:bg-rose-100 transition">− Azalt</button>
+              <button type="button" data-balance-action="set" data-user="${u.id}" class="py-2 rounded-xl text-[11px] font-semibold bg-brand-600 text-white hover:bg-brand-700 transition">Eşitle</button>
+            </div>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">⚙️ Rol & Yetki</p>
+            ${owner
+              ? '<p class="text-[10px] text-slate-500 bg-slate-50 rounded-xl border border-slate-100 px-3 py-2">★ Ana Admin · rolü değiştirilemez.</p>'
+              : `<div class="grid grid-cols-${Object.keys(ROLES).length} gap-1 p-1 bg-white rounded-xl border border-brand-100">
+                  ${Object.entries(ROLES).map(([k, r]) => `
+                    <button type="button" data-set-role="${k}" data-user="${u.id}" title="${escapeHTML(r.desc)}"
+                      class="py-1.5 rounded-lg text-[10px] font-semibold transition ${u.role === k ? 'bg-brand-600 text-white shadow-soft' : 'text-slate-500 hover:text-brand-600 hover:bg-brand-50'}">${r.label}</button>`).join('')}
+                </div>
+                <p class="text-[10px] text-slate-400 mt-1 px-1">${ROLES[u.role]?.desc || ''}</p>`}
+          </div>
+        </li>`;
+    };
+    const waiting = ALLOWED_EMAILS.filter((e) => !users.some((u) => (u.email || '').toLowerCase() === e));
+    box.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-3 px-1 text-[11px] text-slate-500">
+        <span>${users.length} kişi</span>
+        <span>Toplam bakiye <b class="text-emerald-600 tabular-nums">${formatMoney(sum(users, (u) => u.balance))}</b></span>
+      </div>
+      <ul class="grid grid-cols-1 md:grid-cols-2 gap-3">${users.map(card).join('')}</ul>
+      ${waiting.length ? `
+        <p class="px-1 mt-4 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">İzinli · henüz giriş yapmadı</p>
+        <ul class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          ${waiting.map((e) => `<li class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-dashed border-brand-100 text-[11px] text-slate-500 truncate">⏳ ${escapeHTML(e)}</li>`).join('')}
+        </ul>` : ''}`;
+    box.querySelectorAll('[data-bm-amount]').forEach((i) => { if (drafts[i.dataset.bmAmount]) i.value = drafts[i.dataset.bmAmount]; });
+  }
+
+  /* Hızlı tutar düğmesi: o kullanıcının tutar kutusunu doldurur */
+  function fillQuickAmount(userId, value) {
+    const input = document.querySelector(`[data-bm-amount="${userId}"]`);
+    if (!input) return;
+    input.value = value;
+    input.focus();
+  }
+
+  /* Admin bakiye işlemi · bakiye + geçmiş kaydı tek batch'te */
   async function handleBalanceAction(action, userId) {
     if (!isAdmin()) return toast('Bu işlem için yetkiniz yok.', 'error');
 
     const target = getUser(userId);
-    const amount = parseFloat($('#bmAmount')?.value);
+    const input = document.querySelector(`[data-bm-amount="${userId}"]`);
+    const amount = parseFloat(input?.value);
 
     if (!target) return toast('Kullanıcı bulunamadı.', 'error');
     if (isNaN(amount) || amount < 0) return toast('Lütfen geçerli bir tutar girin.', 'error');
@@ -239,10 +270,150 @@
     if (newBalance < 0) return toast('Bakiye sıfırın altına düşemez.', 'error');
 
     newBalance = round2(newBalance);
-    $('#bmAmount').value = '';
+    if (input) input.value = '';
     const labels = { add: 'eklendi', subtract: 'düşüldü', set: 'eşitlendi' };
-    await run(col('users').doc(target.id).update({ balance: newBalance }),
-      `${target.name}: bakiye ${labels[action]} → ${formatMoney(newBalance)}`);
+    const by = currentUser()?.name || 'Admin';
+    const note = {
+      add: `${by} ${formatMoney(amount)} yükledi`,
+      subtract: `${by} ${formatMoney(amount)} düştü`,
+      set: `${by} bakiyeyi ${formatMoney(amount)} olarak eşitledi`
+    }[action];
+    const batch = db.batch();
+    batch.update(col('users').doc(target.id), { balance: newBalance });
+    logBalance(batch, { userId: target.id, type: action, before: target.balance, after: newBalance, note });
+    await run(batch.commit(), `${target.name}: bakiye ${labels[action]} → ${formatMoney(newBalance)}`);
+  }
+
+  /* --- Bakiye Geçmişi penceresi · herkes kendininkini, Admin herkesinkini görür ---
+     Kayıtlar pencere açıkken canlı dinlenir (yalnızca seçili kullanıcı) · kapanınca dinleme durur */
+  const BALANCE_LOG_PAGE = 30;
+  let balanceLogUnsub = null;
+
+  function openBalanceLogModal(userId = state.currentUserId) {
+    if (!getUser(userId)) return;
+    if (!canViewStats(userId)) return toast('Yalnızca kendi bakiye geçmişini görebilirsin.', 'error');
+    toggleProfile(false);
+    openModal(`
+      <div id="balLogHead"></div>
+      <div class="p-4 sm:p-5 space-y-4">
+        <div id="balLogBody"></div>
+        <button type="button" data-modal-close class="${BTN_SOFT} w-full !py-2.5">Kapat</button>
+      </div>`, 'lg');
+    watchBalanceLogs(userId);
+  }
+
+  function watchBalanceLogs(userId) {
+    stopBalanceLogs();
+    state.balanceLogUser = userId;
+    state.balanceLogs = null;   // null = yükleniyor
+    state.balanceLogError = '';
+    state.balanceLogLimit = BALANCE_LOG_PAGE;
+    renderBalanceLogs();
+    balanceLogUnsub = col('balanceLogs').where('userId', '==', userId).onSnapshot((snap) => {
+      if (state.balanceLogUser !== userId) return;
+      state.balanceLogs = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      if (!renderBalanceLogs()) stopBalanceLogs();
+    }, (err) => {
+      console.error('[balanceLogs]', err);
+      state.balanceLogs = [];
+      state.balanceLogError = fsErrorMsg(err);
+      renderBalanceLogs();
+    });
+  }
+
+  /* closeModal da çağırır */
+  function stopBalanceLogs() {
+    balanceLogUnsub?.();
+    balanceLogUnsub = null;
+    state.balanceLogUser = null;
+  }
+
+  function showMoreBalanceLogs() {
+    state.balanceLogLimit += BALANCE_LOG_PAGE;
+    renderBalanceLogs();
+  }
+
+  /* Pencere açık değilse false döner */
+  function renderBalanceLogs() {
+    const head = $('#balLogHead');
+    const body = $('#balLogBody');
+    const userId = state.balanceLogUser;
+    if (!head || !body || !userId) return false;
+    const u = getUser(userId);
+    const self = userId === state.currentUserId;
+    head.innerHTML = modalHeader('Bakiye Geçmişi 💰',
+      self ? 'Bakiyendeki her değişiklik · en yeni üstte' : `${escapeHTML(u?.name || 'Kullanıcı')} · bakiyedeki her değişiklik`,
+      'wallet', 'bg-emerald-50 text-emerald-600');
+
+    // Admin: kişi seçimi
+    const picker = isAdmin() && users.length > 1 ? `
+      <div class="flex gap-1.5 overflow-x-auto soft-scroll pb-1 -mx-1 px-1">${users.map((x) => `
+        <button type="button" data-balance-log-user="${x.id}"
+          class="shrink-0 flex items-center gap-1.5 pl-1 pr-3 py-1 rounded-full text-[11px] font-semibold border transition ${x.id === userId
+            ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-600 border-slate-200 hover:border-brand-200'}">
+          ${avatarHTML(x, 'w-5 h-5 text-[8px]')}${escapeHTML(x.name.split(' ')[0])}
+        </button>`).join('')}
+      </div>` : '';
+
+    const logs = state.balanceLogs;
+    if (logs === null) {
+      body.innerHTML = picker + '<p class="text-xs text-slate-400 text-center py-10">Yükleniyor…</p>';
+      return true;
+    }
+    const plus = round2(sum(logs.filter((l) => l.amount > 0), (l) => l.amount));
+    const minus = round2(sum(logs.filter((l) => l.amount < 0), (l) => -l.amount));
+    const summary = `
+      <div class="grid grid-cols-3 gap-2">
+        <div class="rounded-2xl bg-emerald-50/70 px-3 py-2.5 min-w-0">
+          <p class="text-[10px] text-slate-400 font-medium">Güncel bakiye</p>
+          <p class="text-sm sm:text-base font-bold text-emerald-600 truncate tabular-nums">${formatMoney(u?.balance || 0)}</p>
+        </div>
+        <div class="rounded-2xl bg-slate-50 px-3 py-2.5 min-w-0">
+          <p class="text-[10px] text-slate-400 font-medium">Giren</p>
+          <p class="text-sm sm:text-base font-bold text-emerald-600 truncate tabular-nums">+${formatMoney(plus)}</p>
+        </div>
+        <div class="rounded-2xl bg-slate-50 px-3 py-2.5 min-w-0">
+          <p class="text-[10px] text-slate-400 font-medium">Çıkan</p>
+          <p class="text-sm sm:text-base font-bold text-rose-500 truncate tabular-nums">−${formatMoney(minus)}</p>
+        </div>
+      </div>`;
+
+    let list;
+    if (state.balanceLogError) {
+      list = emptyState(`Bakiye geçmişi okunamadı: ${escapeHTML(state.balanceLogError)}`, '!py-8');
+    } else if (!logs.length) {
+      list = emptyState('Henüz bakiye hareketi yok. Bu özellik eklendikten sonraki her yükleme, ödeme ve iade burada görünür.', '!py-8');
+    } else {
+      let lastMonth = '';
+      const rows = logs.slice(0, state.balanceLogLimit).map((l) => {
+        const t = BALANCE_LOG_TYPES[l.type] || { label: 'Bakiye', emoji: '💰' };
+        const pos = l.amount > 0;
+        const m = new Date(l.at).toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+        const monthHead = m !== lastMonth ? `
+          <li class="flex items-center gap-2 ${lastMonth ? 'pt-2' : ''}">
+            <span class="text-[11px] font-bold text-slate-500">${m}</span><span class="flex-1 h-px bg-slate-100"></span>
+          </li>` : '';
+        lastMonth = m;
+        return monthHead + `
+          <li class="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-white border border-slate-100">
+            <span class="w-9 h-9 rounded-xl ${pos ? 'bg-emerald-50' : 'bg-rose-50'} flex items-center justify-center text-base shrink-0">${t.emoji}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-slate-700 leading-snug break-words">${escapeHTML(l.note || t.label)}</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">${t.label} · ${relativeDay(l.at)} ${formatTime(l.at)}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="text-sm font-bold tabular-nums ${pos ? 'text-emerald-600' : 'text-rose-500'}">${pos ? '+' : '−'}${formatMoney(Math.abs(l.amount))}</p>
+              <p class="text-[10px] text-slate-400 tabular-nums">Bakiye ${formatMoney(l.balanceAfter)}</p>
+            </div>
+          </li>`;
+      }).join('');
+      const more = logs.length > state.balanceLogLimit
+        ? `<button type="button" data-balance-log-more class="${BTN_SOFT} w-full !py-2 mt-3">Daha eskileri göster · ${logs.length - state.balanceLogLimit} kayıt</button>` : '';
+      list = `<ul class="space-y-2">${rows}</ul>${more}`;
+    }
+    body.innerHTML = `<div class="space-y-4">${picker}${summary}<div>${list}</div></div>`;
+    return true;
   }
 
   /* ==========================================================
@@ -566,6 +737,8 @@
       ...ratingCleanupOps([r]),         // o kitaba başka kiralaması yoksa oyu da silinir
       ...pointsSyncOps([u.id], { rentals: new Set([r.id]) }),
       (bt) => bt.update(col('users').doc(u.id), { balance: round2(u.balance + f.amount) }),
+      balanceLogOp({ userId: u.id, type: 'refund', before: u.balance, after: round2(u.balance + f.amount),
+        note: `↩️ "${getBook(f.bookId)?.title || 'Silinmiş kitap'}" iadesi onaylandı` }),
       (bt) => bt.update(col('refunds').doc(id), { status: 'approved', ...decided })
     ];
     await run(commitOps(ops), `✓ İade onaylandı · ${u.name} bakiyesine ${formatMoney(f.amount)} yüklendi.`);

@@ -542,6 +542,8 @@
       freeBookIds: lines.filter((l) => l.free).map((l) => l.book.id), paidTotal
     });
     batch.update(col('users').doc(u.id), { balance: round2(u.balance - paidTotal), lastTx: coupon.id, lastTxType: 'coupon' });
+    logBalance(batch, { userId: u.id, type: 'coupon', before: u.balance, after: round2(u.balance - paidTotal), id: coupon.id,
+      note: `🎟️ ${couponBadge(coupon)} kuponuyla ${lines.length === 1 ? `"${lines[0].book.title}"` : `${lines.length} kitap`} kiralandı` });
     return paidTotal;
   }
 
@@ -945,6 +947,8 @@
       balance: round2(u.balance - offerPrice(o)), lastTx: purchaseId, lastTxType: 'package',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})
     });
+    logBalance(batch, { userId: u.id, type: 'package', before: u.balance, after: round2(u.balance - offerPrice(o)), id: purchaseId,
+      note: `🎁 "${o.title}" paketi · ${bs.length} kitap` });
 
     closeModal();
     await run(batch.commit(), `🎁 "${o.title}" kiralandı · ${bs.length} kitap · ${formatMoney(offerPrice(o))}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);

@@ -23,6 +23,16 @@
     const shown = Math.floor(avg * 10 + 1e-9) / 10;
     return { avg, count: rs.length, text: shown.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) };
   }
+  /* Oy: 1–5 arası, buçuklu (1 · 1,5 · 2 … 5) · kural da aynı listeyi denetler */
+  const validScore = (s) => s >= 1 && s <= 5 && Number.isInteger(s * 2);
+  const formatScore = (s) => Number(s).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+  /* Yıldızlar (yarım yıldız destekli) · fill: o yıldızın dolu yüzdesi */
+  const starFill = (score, n) => (score >= n ? 100 : score >= n - 0.5 ? 50 : 0);
+  const starHTML = (fill) => `<span class="text-slate-200">★</span>${fill
+    ? `<span class="absolute inset-y-0 left-0 overflow-hidden whitespace-nowrap text-amber-400 pointer-events-none" style="width:${fill}%">★</span>` : ''}`;
+  const starsHTML = (score, cls = 'text-sm') => `<span class="inline-flex tracking-tight ${cls}">${[1, 2, 3, 4, 5]
+    .map((n) => `<span class="relative inline-block">${starHTML(starFill(score, n))}</span>`).join('')}</span>`;
+
   /* Kapak üstündeki ortalama rozeti: beyaz yazı, dolgulu renk */
   function ratingBadgeHTML(bookId, cls = 'absolute -bottom-1.5 -right-1.5 text-[10px]') {
     const s = ratingSummary(bookId);
@@ -50,9 +60,15 @@
     // Müze kitabına yalnızca Müze Vitrini'nde sergideyken puan verilir (kural da denetler)
     const closed = !!b.museum && !isOnExhibit(b);
     const canRate = !!userRentalOf(b.id) && !closed;
+    // Her yıldız iki yarım: sol yarı buçuk (ilk yıldızda 1), sağ yarı tam puan
+    const half = (n, score, side) => `
+      <button type="button" data-rate-book="${b.id}" data-score="${score}" title="${formatScore(score)} puan" aria-label="${formatScore(score)} puan"
+        class="absolute inset-y-0 ${side}-0 w-1/2 z-[1]"></button>`;
     const stars = [1, 2, 3, 4, 5].map((n) => `
-      <button type="button" data-rate-book="${b.id}" data-score="${n}" title="${n} puan" aria-label="${n} puan"
-        class="text-2xl leading-none transition hover:scale-110 ${mine && n <= mine.score ? 'text-amber-400' : 'text-slate-200 hover:text-amber-300'}">★</button>`).join('');
+      <span class="relative inline-block text-2xl leading-none select-none transition hover:scale-110">
+        ${starHTML(mine ? starFill(mine.score, n) : 0)}
+        ${half(n, Math.max(1, n - 0.5), 'left')}${half(n, n, 'right')}
+      </span>`).join('');
     return `
       <div class="rounded-2xl border border-slate-100 p-3.5 space-y-3">
         <div class="flex items-center justify-between gap-3">
@@ -69,7 +85,7 @@
         </div>
         ${canRate ? `
           <div class="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-dashed border-slate-100">
-            <span class="text-[11px] text-slate-500">${mine ? `Senin puanın: <b class="text-slate-700">${mine.score}</b> · değiştirmek için tıkla` : 'Puan ver (1 en kötü · 5 çok iyi)'}</span>
+            <span class="text-[11px] text-slate-500">${mine ? `Senin puanın: <b class="text-slate-700">${formatScore(mine.score)}</b> · değiştirmek için tıkla` : 'Puan ver (1 en kötü · 5 çok iyi · yıldızın yarısı buçuk)'}</span>
             <div class="flex items-center gap-1">${stars}</div>
           </div>
           ${mine ? `<button type="button" data-unrate-book="${b.id}" class="text-[10px] font-semibold text-slate-400 hover:text-rose-500">Puanımı kaldır</button>` : ''}`
@@ -84,7 +100,7 @@
     const b = getBook(bookId);
     const u = currentUser();
     score = Number(score);
-    if (!b || !u || !(score >= 1 && score <= 5)) return;
+    if (!b || !u || !validScore(score)) return;
     const rental = userRentalOf(b.id, u.id);
     if (!rental) return toast('Puan verebilmek için bu kitabı en az bir kez kiralamış olmalısın.', 'error');
     if (b.museum && !isOnExhibit(b)) return toast('Müze kitaplarına yalnızca sergideyken puan verilebilir.', 'error');
@@ -93,7 +109,7 @@
     const now = isoAt(Date.now());
     const ok = await run(col('ratings').doc(`${b.id}_${u.id}`).set({
       bookId: b.id, userId: u.id, score, rentalId: rental.id, createdAt: prev?.createdAt || now, updatedAt: now
-    }), prev ? `Puanın güncellendi: ${score} ⭐` : `"${b.title}" için ${score} puan verdin ⭐`);
+    }), prev ? `Puanın güncellendi: ${formatScore(score)} ⭐` : `"${b.title}" için ${formatScore(score)} puan verdin ⭐`);
     if (ok && $('#ratingBox')) $('#ratingBox').innerHTML = ratingBoxHTML(b);
   }
 
@@ -111,7 +127,8 @@
     if (!b) return;
     const s = ratingSummary(b.id);
     const list = bookRatings(b.id).sort((x, y) => new Date(y.updatedAt) - new Date(x.updatedAt));
-    const dist = [5, 4, 3, 2, 1].map((n) => ({ n, c: list.filter((r) => r.score === n).length }));
+    // Dağılım: buçuklu oy alt satırına sayılır (4,5 → 4 ★)
+    const dist = [5, 4, 3, 2, 1].map((n) => ({ n, c: list.filter((r) => Math.floor(r.score) === n).length }));
     const admin = isAdmin();
     openModal(`
       ${modalHeader(`Reyting · ${escapeHTML(b.title)}`, s ? `Ortalama ${s.text} · ${s.count} oy` : 'Henüz oy yok', 'chart', 'bg-amber-50 text-amber-600')}
@@ -135,7 +152,7 @@
                   <p class="text-xs font-semibold text-slate-700 truncate">${escapeHTML(usr?.name || 'Kullanıcı')}</p>
                   <p class="text-[10px] text-slate-400">${formatLongDate(r.updatedAt)} · Saat ${formatTime(r.updatedAt)}${r.updatedAt !== r.createdAt ? ' · düzenlendi' : ''}</p>
                 </div>
-                <span class="shrink-0 text-sm tracking-tight"><span class="text-amber-400">${'★'.repeat(r.score)}</span><span class="text-slate-200">${'★'.repeat(5 - r.score)}</span></span>
+                <span class="shrink-0 flex items-center gap-1.5">${starsHTML(r.score)}<b class="text-[11px] text-slate-600 tabular-nums w-6 text-right">${formatScore(r.score)}</b></span>
                 ${admin ? `<button type="button" data-delete-rating="${r.id}" data-book="${b.id}" title="Bu oyu sil" aria-label="Bu oyu sil"
                   class="${BTN_ICON} text-slate-300 hover:text-rose-500 hover:bg-rose-50 shrink-0">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
               </li>`;
@@ -154,7 +171,7 @@
     const b = getBook(bookId);
     const list = id === 'all' ? bookRatings(bookId) : ratings.filter((r) => r.id === id);
     if (!list.length) return;
-    const who = list.length === 1 ? `<b>${escapeHTML(getUser(list[0].userId)?.name || 'Kullanıcı')}</b> kullanıcısının ${list[0].score} puanlık oyu` : `<b>${list.length} oy</b>`;
+    const who = list.length === 1 ? `<b>${escapeHTML(getUser(list[0].userId)?.name || 'Kullanıcı')}</b> kullanıcısının ${formatScore(list[0].score)} puanlık oyu` : `<b>${list.length} oy</b>`;
     openConfirm({
       title: list.length > 1 ? 'Tüm oylar silinsin mi?' : 'Oy silinsin mi?',
       message: `"${escapeHTML(b?.title || 'Kitap')}" için ${who} silinecek. Ortalama yeniden hesaplanır; kullanıcı isterse yeniden oy verebilir.`,
@@ -832,6 +849,30 @@
     if (n) batch.commit().catch((e) => console.error(e)).finally(() => state.readPending.clear());
     updateBadges();
   }
+
+  /* --- Bakiye geçmişi · balanceLogs/{id}: { userId, type, amount (+ yükleme / − ödeme), balanceAfter, note, at, by } ---
+     • Üyenin kendi ödemesinde (kiralama / paket / kupon) belge adı = işlemin kimliği (users.lastTx): kural kaydı
+       yalnızca o ödemeyle aynı batch'te, tutar = işlem tutarı ve sonraki bakiye = yeni bakiye ise kabul eder.
+     • Admin işlemleri (ekle / azalt / eşitle) ve iade onayı Admin'in yazdığı kayıtlardır.
+     • Kayıtlar değiştirilemez; üye silemez. Tutarı 0 olan işlem (bedava kiralama) kayıt oluşturmaz. */
+  const BALANCE_LOG_TYPES = {
+    add:      { label: 'Admin yükledi',    emoji: '➕' },
+    subtract: { label: 'Admin düştü',      emoji: '➖' },
+    set:      { label: 'Admin eşitledi',   emoji: '⚖️' },
+    rental:   { label: 'Kiralama',         emoji: '📖' },
+    package:  { label: 'Paket',            emoji: '🎁' },
+    coupon:   { label: 'Kuponlu kiralama', emoji: '🎟️' },
+    refund:   { label: 'İade',             emoji: '↩️' }
+  };
+  function logBalance(batch, { userId, type, before, after, note, id = null }) {
+    const amount = round2(after - before);
+    if (Math.abs(amount) < 0.005) return;
+    batch.set(id ? col('balanceLogs').doc(id) : col('balanceLogs').doc(), {
+      userId, type, amount, balanceAfter: round2(after),
+      note: String(note || '').slice(0, 200), at: isoAt(Date.now()), by: state.currentUserId
+    });
+  }
+  const balanceLogOp = (args) => (bt) => logBalance(bt, args);
 
   /* Kullanıcı istatistikleri (liderlik tablosu + detay modalı) */
   function userStats(userId) {

@@ -14,13 +14,11 @@
       if ((m = t.closest('[data-open-profile]')))    return openProfileModal();
       if (t.closest('a[href^="#"]'))                 return toggleProfile(false);
       if ((m = t.closest('[data-seed]')))            return seedCatalog(m.dataset.seed);
-      if ((m = t.closest('[data-balance-action]')))  return handleBalanceAction(m.dataset.balanceAction, m.dataset.user);
-      if ((m = t.closest('[data-set-role]')))        return setRole(m.dataset.user, m.dataset.setRole);
       if ((m = t.closest('[data-toggle-member-view]'))) return setMemberView(!state.memberView);
       if ((m = t.closest('[data-open-feedback]')))   { toggleProfile(false); return openFeedbackModal(); }
       if ((m = t.closest('[data-open-refunds]')))    { toggleProfile(false); return openRefundsModal(); }
-      if ((m = t.closest('[data-quick-amount]')))    { const i = $('#bmAmount'); if (i) { i.value = m.dataset.quickAmount; i.focus(); } return; }
-      if ((m = t.closest('[data-panel-user]')))      { state.panelUser = state.panelUser === m.dataset.panelUser ? null : m.dataset.panelUser; return renderAdminPanel(); }
+      if ((m = t.closest('[data-open-user-admin]'))) return openUserAdminModal();
+      if ((m = t.closest('[data-open-balance-log]'))) return openBalanceLogModal();
       if ((m = t.closest('[data-user-stats]')))      return openUserStatsModal(m.dataset.userStats);
     });
 
@@ -48,6 +46,12 @@
       if ((m = el('[data-open-profile]')))     return openProfileModal();
       if ((m = el('[data-link-google]')))      return linkGoogle();
       if ((m = el('[data-send-reset]')))       return sendResetFromProfile();
+      if ((m = el('[data-balance-action]')))   return handleBalanceAction(m.dataset.balanceAction, m.dataset.user);
+      if ((m = el('[data-quick-amount]')))     return fillQuickAmount(m.dataset.user, m.dataset.quickAmount);
+      if ((m = el('[data-set-role]')))         return setRole(m.dataset.user, m.dataset.setRole);
+      if ((m = el('[data-open-balance-log]'))) return openBalanceLogModal(m.dataset.openBalanceLog || state.currentUserId);
+      if ((m = el('[data-balance-log-user]'))) return watchBalanceLogs(m.dataset.balanceLogUser);
+      if ((m = el('[data-balance-log-more]'))) return showMoreBalanceLogs();
       if ((m = el('[data-stats-page]')))       return goStatsPage(m.dataset.statsPage, m.dataset.page);
       if ((m = el('[data-stats-tab]')))        return setStatsTab(m.dataset.statsTab);
       if ((m = el('[data-stats-filter]')))     return setStatsFilter(m.dataset.statsFilter);

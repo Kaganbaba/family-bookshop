@@ -202,6 +202,43 @@ service cloud.firestore {
       }
     }
 
+    // ---------- Bakiye geçmişi ----------
+    // balanceLogs/{id} · { userId, type, amount (+/−), balanceAfter, note, at, by } · kimse değiştiremez, yalnızca Admin silebilir
+    // • Okuma: herkes kendi kayıtlarını (sorgu userId == kendi uid'i), Admin hepsini
+    // • Üye (ve kendi ödemesinde Admin): belge adı = ödemenin kimliği (users.lastTx) · yalnızca o ödemeyle aynı batch'te,
+    //   tutar = − işlem tutarı (kiralama fiyatı / paket fiyatı / kuponun paidTotal'ı), sonraki bakiye = yeni bakiye
+    // • Admin: bakiye ekleme / azaltma / eşitleme ve iade kayıtları
+    // (okumalar ödeme kuralının zaten eriştiği belgelere yapılır: batch'teki belge okuma sınırı (20) aşılmasın)
+    match /balanceLogs/{logId} {
+      allow read: if signedIn() && (resource.data.userId == uid() || isAdmin());
+      allow create: if signedIn() && validLog(request.resource.data)
+        && (ownPaymentLog(request.resource.data) || isAdmin());
+      allow update: if false;
+      allow delete: if isAdmin();
+
+      function validLog(l) {
+        return l.keys().hasOnly(['userId', 'type', 'amount', 'balanceAfter', 'note', 'at', 'by'])
+          && l.userId is string && l.amount is number && l.amount != 0
+          && l.balanceAfter is number && l.balanceAfter >= 0
+          && l.type in ['add', 'subtract', 'set', 'rental', 'package', 'coupon', 'refund']
+          && l.note is string && l.note.size() <= 200
+          && l.at is string && l.at.size() == 24
+          && l.by == uid();
+      }
+      function ownPaymentLog(l) {
+        let u = getAfter(path('users', uid())).data;
+        return l.userId == uid()
+          && u.get('lastTx', null) == logId && u.get('lastTxType', null) == l.type
+          && near(l.balanceAfter, u.balance)
+          && ((l.type == 'rental' && !exists(path('rentals', logId))
+                && near(l.amount, -getAfter(path('rentals', logId)).data.price))
+            || (l.type == 'package' && !exists(path('offerPurchases', logId))
+                && near(l.amount, -getAfter(path('offerPurchases', logId)).data.price))
+            || (l.type == 'coupon' && get(path('coupons', logId)).data.usedAt == null
+                && near(l.amount, -getAfter(path('coupons', logId)).data.paidTotal)));
+      }
+    }
+
     // ---------- Kitaplar ----------
     match /books/{bookId} {
       allow read: if signedIn();
@@ -485,7 +522,7 @@ service cloud.firestore {
         && get(path('books', bookId)).data.get('status', 'kiralik') == 'kiralik';
     }
 
-    // Reyting · belge adı = "{kitap}_{kullanıcı}" (kitap başına tek oy) · { bookId, userId, score (1–5), rentalId, createdAt, updatedAt }
+    // Reyting · belge adı = "{kitap}_{kullanıcı}" (kitap başına tek oy) · { bookId, userId, score (1–5, buçuklu), rentalId, createdAt, updatedAt }
     // Oy veren, o kitaba ait kendi kiralama kaydını göstermeli (en az 1 kez kiralamış olmalı)
     match /ratings/{ratingId} {
       allow read: if signedIn();
@@ -497,7 +534,7 @@ service cloud.firestore {
           && r.userId == uid()
           && r.bookId is int
           && ratingId == string(r.bookId) + '_' + uid()
-          && r.score is int && r.score >= 1 && r.score <= 5
+          && r.score in [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
           && r.rentalId is string
           && rentedBy(get(path('rentals', r.rentalId)).data, r.bookId)
           // Müze kitabına yalnızca Müze Vitrini'nde sergideyken puan verilir

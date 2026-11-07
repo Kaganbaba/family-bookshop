@@ -24,9 +24,9 @@
   <!-- Tailwind CSS (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Tailwind yapılandırması + koyu mod (renkler CSS değişkenlerinde) · defer değil: tema sayfa çizilmeden uygulanır -->
-  <script src="js/theme.js?v=68"></script>
+  <script src="js/theme.js?v=70"></script>
 
-  <link rel="stylesheet" href="css/styles.css?v=68" />
+  <link rel="stylesheet" href="css/styles.css?v=70" />
 </head>
 
 <body class="bg-gradient-to-b from-brand-50 via-white to-brand-50/60 min-h-screen flex flex-col font-sans text-slate-700 text-sm antialiased">
@@ -184,10 +184,15 @@
                   <span id="panelRefundLabel">↩️ İadelerim</span>
                   <span id="rfBadge" class="hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold items-center justify-center ring-2 ring-brand-600"></span>
                 </button>
+                <!-- Herkes kendi bakiye geçmişini görür (Admin pencerede başkasınınkini de seçebilir) -->
+                <button type="button" data-open-balance-log
+                  class="col-span-2 flex items-center justify-center gap-1 py-2 rounded-xl bg-white/15 hover:bg-white/25 ring-1 ring-white/20 text-[11px] font-semibold transition">
+                  💰 Bakiye Geçmişi
+                </button>
               </div>
             </div>
 
-            <!-- Kullanıcı: aktif kiralamalar · Admin: Kullanıcı Yönetimi (bakiye + rol) -->
+            <!-- Üye Görünümü anahtarı · Kullanıcı Yönetimi butonu (Admin) · aktif kiralamalar -->
             <div id="adminPanel" class="p-3"></div>
 
             <!-- Çıkış -->
@@ -235,6 +240,9 @@
 
       <!-- 1.8) Müze Vitrini (Müze'deki kitaplar camekânda · sergi süresince kiralanabilir) -->
       <div id="museumShowcaseSection"></div>
+
+      <!-- 1.9) Yakında geliyor (Yakında / Planlanıyor kitaplar · yoksa ya da Ana Sayfa Ayarları'nda kapalıysa boş) -->
+      <div id="upcomingSection"></div>
 
       <!-- 2) Günün İndirimleri (Vitrin Ayarları'nda kapalıysa gizlenir) -->
       <div id="dealsSection" class="bg-white rounded-2xl shadow-soft p-4 sm:p-5 mb-6">
@@ -382,14 +390,14 @@
   <div id="toastContainer" class="fixed bottom-4 right-4 left-4 sm:left-auto z-[60] flex flex-col gap-2 items-end pointer-events-none"></div>
 
   <!-- Uygulama kodu · normal (modül olmayan) scriptler; sıra önemli, global değişkenleri paylaşırlar -->
-  <script src="js/core.js?v=68" defer></script>
-  <script src="js/logic.js?v=68" defer></script>
-  <script src="js/home.js?v=68" defer></script>
-  <script src="js/books.js?v=68" defer></script>
-  <script src="js/users-news.js?v=68" defer></script>
-  <script src="js/shop.js?v=68" defer></script>
-  <script src="js/admin.js?v=68" defer></script>
-  <script src="js/account.js?v=68" defer></script>
-  <script src="js/app.js?v=68" defer></script>
+  <script src="js/core.js?v=70" defer></script>
+  <script src="js/logic.js?v=70" defer></script>
+  <script src="js/home.js?v=70" defer></script>
+  <script src="js/books.js?v=70" defer></script>
+  <script src="js/users-news.js?v=70" defer></script>
+  <script src="js/shop.js?v=70" defer></script>
+  <script src="js/admin.js?v=70" defer></script>
+  <script src="js/account.js?v=70" defer></script>
+  <script src="js/app.js?v=70" defer></script>
 </body>
 </html>

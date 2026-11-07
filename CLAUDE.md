@@ -27,13 +27,13 @@ Derleme adımı yok. Tüm JS dosyaları **normal (modül olmayan) `<script defer
 | `js/theme.js` | T) `tailwind.config` + koyu mod: Tailwind paleti CSS değişkenlerine bağlı (`--bg-*`, `--tx-*`, `--bd-*`), `applyTheme`, `setThemePref`, `isDarkMode`. `<head>` içinde **defer olmadan**, Tailwind CDN'den hemen sonra yüklenir |
 | `css/styles.css` | Özel CSS: animasyonlar, vitrinler, konfeti, şimşek, ghost-title · en altta koyu mod (`html.dark`) karşılıkları |
 | `js/core.js` | 0) Firebase + `ALLOWED_EMAILS` · 1) veri önbellek dizileri · 1.1) örnek katalog (`SEED_*`) · ayarlar ve `state` · 2) sabitler ve yardımcılar (`$`, `format*`, `escapeHTML`, `isAdmin`…) · 6–7) menü, rozetler, SPA yönlendirme (`PAGE_RENDERERS`, `router`) · 14) modal altyapısı · 18–19) aç/kapa ve canlı sayaç (`tick`) |
-| `js/logic.js` | 3) kiralama + reyting yardımcıları · 4) günün indirimleri motoru, vitrin/yeni kitap indirimi hesapları · 5) Firestore yazmaları, puan/kupon hesapları, liderlik |
-| `js/home.js` | 8) Ana sayfa: istatistik kartları, yeni kitap vitrini, vitrin indirimleri, günün indirimleri, son kiralananlar |
+| `js/logic.js` | 3) kiralama + reyting yardımcıları · 4) günün indirimleri motoru, vitrin/yeni kitap indirimi hesapları · 5) Firestore yazmaları, puan/kupon hesapları, bakiye geçmişi kaydı (`logBalance`), liderlik |
+| `js/home.js` | 8) Ana sayfa: istatistik kartları, yeni kitap vitrini, vitrin indirimleri, yakında geliyor, günün indirimleri, son kiralananlar |
 | `js/books.js` | 9) Kitaplar sayfası · 9.1) Kiralananlar sayfası · kitap detay modalı, kiralama (`rentBook`), fiyat logu modalı, filtre yardımcıları · 11) Fiyat değişimleri logu sayfası |
 | `js/users-news.js` | 10) Kullanıcılar: liderlik tablosu ve istatistik pencereleri · 12) Duyurular (haberler + güncellemeler) |
 | `js/shop.js` | 12.5) Hediyelerim: puan ve kuponlar · 13) Özel teklifler |
 | `js/admin.js` | 15) Admin formları (kitap, fiyat, sürüm notu, kiralama iptali, kategoriler, duyuru, teklif, kapak yükleme) · 17.1) örnek kataloğu Firestore'a taşıma |
-| `js/account.js` | 16–17) rol yönetimi, profil menüsü, bakiye paneli · 17.05) geri bildirim · 17.06) iade · 17.0) Profilim |
+| `js/account.js` | 16–17) rol yönetimi, profil menüsü, Kullanıcı Yönetimi penceresi (bakiye + rol), Bakiye Geçmişi penceresi · 17.05) geri bildirim · 17.06) iade · 17.0) Profilim |
 | `js/app.js` | 20) olay dinleyicileri (`bindEvents`) · 21) kimlik doğrulama, canlı senkron (`SYNC`, `startSync`), footer, `init` + `DOMContentLoaded` |
 
 **Yükleme sırası** (index.html'de bu sırayla): `theme` (head, defer yok) `→ core → logic → home → books → users-news → shop → admin → account → app`.

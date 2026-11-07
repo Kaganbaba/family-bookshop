@@ -37,6 +37,13 @@
   }
 
   /* Dinamik tür sekmeleri (Kitaplar + Kiralananlar ortak). attr: data-* adı, current: seçili tür */
+  /* Vitrin kartında kapağın sağ üstündeki rozet: indirimin çeşidi (yüzde fiyat satırında yazar) */
+  const DISCOUNT_KIND_BADGE = {
+    deal:   { label: '🔥 Günün İndirimi', tone: 'from-rose-500 to-orange-400' },
+    new:    { label: '★ Yeni Kitap',      tone: 'from-amber-400 to-yellow-500' },
+    custom: { label: '🏷️ Fırsat',         tone: 'from-indigo-500 to-violet-500' }
+  };
+
   /* Kitaplar listesinde çarpıcı, mavi tonlu fiyat etiketi (indirimde eski fiyat + yüzde rozeti) */
   function priceTagHTML(b, eff) {
     if (!hasPrice(b)) return '<span class="text-[11px] font-semibold italic text-slate-400 whitespace-nowrap">Fiyat yakında</span>';
@@ -255,7 +262,7 @@
               ${fresh ? `
                 <span class="twinkle absolute -top-2 -left-2 text-amber-400 text-base">✦</span>
                 <span class="twinkle twinkle-d1 absolute -bottom-1.5 -left-2 text-yellow-400 text-xs">✦</span>` : ''}
-              ${eff?.rate ? `<span class="absolute -top-2 -right-2 text-[11px] font-extrabold text-white bg-gradient-to-r ${eff.source === 'new' ? 'from-amber-400 to-yellow-500' : 'from-rose-500 to-orange-400'} px-2 py-1 rounded-xl shadow-soft">%${eff.rate}</span>` : ''}
+              ${eff?.rate ? `<span class="absolute -top-2 -right-2 max-w-[calc(100%+0.5rem)] truncate text-[11px] font-extrabold text-white bg-gradient-to-r ${DISCOUNT_KIND_BADGE[eff.source]?.tone || 'from-rose-500 to-orange-400'} px-2 py-1 rounded-xl shadow-soft">${DISCOUNT_KIND_BADGE[eff.source]?.label || discountSourceLabel(eff.source)}</span>` : ''}
             </div>
             <p class="mt-4 flex items-center justify-center gap-1.5 max-w-full">
               <span class="text-sm sm:text-base font-bold text-slate-800 line-clamp-2 leading-snug">${escapeHTML(b.title)}</span>
@@ -1179,6 +1186,8 @@
       });
       qBatch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
       qBatch.update(col('users').doc(u.id), { balance: round2(u.balance - qPrice), lastTx: ref.id, lastTxType: 'rental' });
+      logBalance(qBatch, { userId: u.id, type: 'rental', before: u.balance, after: round2(u.balance - qPrice), id: ref.id,
+        note: `"${b.title}" kiralandı · 🎁 ${formatMoney(cheque.amount)} hediye çekiyle` });
       qBatch.update(col('giftCheques').doc(cheque.id), { usedAt: isoAt(nowMs), rentalId: ref.id });
       closeModal();
       await run(qBatch.commit(), `"${b.title}" kiralandı · ${qPrice > 0 ? formatMoney(qPrice) : 'bedava'} · 🎁 ${formatMoney(cheque.amount)} hediye çeki kullanıldı`);
@@ -1206,6 +1215,8 @@
       balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental',
       ...(hasLedger(u) && gain > 0 ? { pointsEarned: round2(u.pointsEarned + gain) } : {})
     });
+    logBalance(batch, { userId: u.id, type: 'rental', before: u.balance, after: round2(u.balance - price), id: ref.id,
+      note: `"${b.title}" kiralandı${rate ? ` · ${discountSourceLabel(source)} %${rate}` : ''}` });
 
     closeModal();
     await run(batch.commit(), `"${b.title}" kiralandı · ${formatMoney(price)}${gain > 0 ? ` · ⭐ +${formatPoints(gain)}` : ''}`);
@@ -1232,6 +1243,8 @@
     });
     batch.update(bookRef(b.id), { lockUntil: Timestamp.fromMillis(due), lockBy: u.id, lockRental: ref.id });
     batch.update(col('users').doc(u.id), { balance: round2(u.balance - price), lastTx: ref.id, lastTxType: 'rental' });
+    logBalance(batch, { userId: u.id, type: 'rental', before: u.balance, after: round2(u.balance - price), id: ref.id,
+      note: `🏛️ "${b.title}" Müze Vitrini'nden kiralandı` });
     closeModal();
     await run(batch.commit(), `🏛️ "${b.title}" Müze Vitrini'nden kiralandı · ${formatMoney(price)}`);
   }
