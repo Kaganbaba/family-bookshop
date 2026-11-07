@@ -406,14 +406,44 @@
               <p class="text-sm font-bold tabular-nums ${pos ? 'text-emerald-600' : 'text-rose-500'}">${pos ? '+' : '−'}${formatMoney(Math.abs(l.amount))}</p>
               <p class="text-[10px] text-slate-400 tabular-nums">Bakiye ${formatMoney(l.balanceAfter)}</p>
             </div>
+            ${isAdmin() ? `<button type="button" data-delete-balance-log="${l.id}" title="Kaydı sil" aria-label="Kaydı sil"
+              class="${BTN_ICON} shrink-0 -mr-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50">${icon('trash', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
           </li>`;
       }).join('');
       const more = logs.length > state.balanceLogLimit
         ? `<button type="button" data-balance-log-more class="${BTN_SOFT} w-full !py-2 mt-3">Daha eskileri göster · ${logs.length - state.balanceLogLimit} kayıt</button>` : '';
-      list = `<ul class="space-y-2">${rows}</ul>${more}`;
+      // Admin: seçili kişinin tüm kayıtlarını silme
+      const clearAll = isAdmin() ? `
+        <div class="flex justify-end mb-2">
+          <button type="button" data-delete-balance-log="all" class="text-[11px] font-semibold text-rose-500 hover:text-rose-600 hover:underline">🗑️ Tümünü sil · ${logs.length} kayıt</button>
+        </div>` : '';
+      list = `${clearAll}<ul class="space-y-2">${rows}</ul>${more}`;
     }
     body.innerHTML = `<div class="space-y-4">${picker}${summary}<div>${list}</div></div>`;
     return true;
+  }
+
+  /* Admin: bakiye kaydı sil (id = 'all' → seçili kişinin tüm kayıtları) · yalnızca geçmiş silinir;
+     bakiye, kiralamalar, puan ve istatistikler değişmez · onaydan sonra aynı kişinin geçmişine dönülür */
+  function deleteBalanceLogs(id) {
+    if (!requireAdmin()) return;
+    const userId = state.balanceLogUser;
+    const logs = state.balanceLogs || [];
+    const list = id === 'all' ? logs : logs.filter((l) => l.id === id);
+    if (!userId || !list.length) return;
+    const one = list.length === 1 && id !== 'all' ? list[0] : null;
+    const name = escapeHTML(getUser(userId)?.name || 'Kullanıcı');
+    openConfirm({
+      title: one ? 'Bakiye kaydı silinsin mi?' : `${list.length} bakiye kaydı silinsin mi?`,
+      message: one
+        ? `"${escapeHTML(one.note || BALANCE_LOG_TYPES[one.type]?.label || 'Kayıt')}" (${one.amount > 0 ? '+' : '−'}${formatMoney(Math.abs(one.amount))}) geçmişten silinecek.<br/><b>Bakiye ve diğer hiçbir şey değişmez.</b>`
+        : `${name} kullanıcısının tüm bakiye geçmişi silinecek.<br/><b>Bakiye ve diğer hiçbir şey değişmez.</b>`,
+      onConfirm: async () => {
+        await run(commitOps(list.map((l) => (bt) => bt.delete(col('balanceLogs').doc(l.id)))),
+          one ? 'Bakiye kaydı silindi.' : `${list.length} bakiye kaydı silindi.`, 'info');
+        openBalanceLogModal(userId);
+      }
+    });
   }
 
   /* ==========================================================

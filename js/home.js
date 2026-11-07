@@ -223,7 +223,31 @@
       </div>`;
   }
 
-  /* --- 8.1.7 Fırsatlar (eski adları Vitrin İndirimleri, Özel Fırsatlar · açık çivit mavisi + altın) · Admin ekler/siler --- */
+  /* --- 8.1.7 Fırsatlar (eski adları Vitrin İndirimleri, Özel Fırsatlar) · Admin ekler / düzenler / siler ---
+     Sitenin kart tarzında bölüm (ikon + başlık + alt yazı, sağda Admin butonu) · kartlar renkli ve canlı (sabit renk, light-scope). */
+
+  /* Fırsat temaları · discounts/{id}.theme (alan yoksa 'normal') · yalnızca görünüm: indirim, fiyat ve süre kuralları aynı.
+     Yeni tema eklemek: buraya bir kayıt (+ styles.css'te .deal-theme-<anahtar> zemini; süs/kar gerekiyorsa dealDecorHTML).
+     section: true → bölümde bu temada fırsat varsa bölüm başlığı ve zemini de temaya geçer */
+  const DEAL_THEMES = {
+    normal: { label: 'Normal',        emoji: '🏷️', tag: 'Fırsat',          desc: 'Sitenin renkleriyle canlı fırsat kartı' },
+    winter: { label: 'Yılbaşı / Kış', emoji: '❄️', tag: 'Yılbaşı Fırsatı', desc: 'Gece / buz mavisi, kar yağışı, kar birikintisi ve süsler',
+      section: { icon: '❄️', iconTone: 'from-sky-400 to-indigo-600', title: 'Yılbaşı Fırsatları', sub: 'Kışa özel fırsatlar geldi · sınırlı süre ⛄',
+        bg: 'bg-gradient-to-b from-sky-50 via-white to-white', ring: 'ring-1 ring-sky-100' } }
+  };
+  const dealThemeOf = (d) => (DEAL_THEMES[d?.theme] ? d.theme : 'normal');
+
+  /* Temanın kart içi süsleri · mini: pencere önizlemesi (küçük) */
+  function dealDecorHTML(theme, mini = false) {
+    if (theme !== 'winter') return '<span class="absolute inset-0 offer-pattern opacity-40 pointer-events-none"></span>';
+    return `
+      <span class="deal-snow" aria-hidden="true"></span>
+      <span class="deal-snowcap" aria-hidden="true"></span>
+      <span class="deal-ornament spin ${mini ? 'right-1.5 top-3 text-xs' : 'right-3 top-5 text-lg'}" aria-hidden="true">❄️</span>
+      ${mini ? '' : `<span class="deal-ornament left-2 bottom-2 text-base -rotate-12 opacity-90" aria-hidden="true">🌲</span>
+      <span class="deal-ornament right-10 top-6 text-[10px] opacity-80" aria-hidden="true">✦</span>`}`;
+  }
+
   /* Süresi biten fırsatlar: herkes için gizlenir, siteyi açan herkes Firestore'dan da siler
      (kural süre dolmuş mu denetler · reddedilirse bu oturumda yeniden denenmez) */
   function purgeExpiredVitrine(now = new Date()) {
@@ -236,7 +260,7 @@
     });
   }
 
-  /* Fırsat kartı geri sayımı (oyun mağazası gibi: 2g 04:13:22) · cihaz saatiyle, veri harcamaz */
+  /* Fırsat kartı geri sayımı (2g 04:13:22) · cihaz saatiyle, veri harcamaz */
   function gsTimerText(ms) {
     if (ms <= 0) return '⏳ Süre doldu';
     const pad = (n) => String(n).padStart(2, '0');
@@ -244,13 +268,13 @@
     const clock = `${pad(Math.floor((ms % DAY_MS) / HOUR_MS))}:${pad(Math.floor((ms % HOUR_MS) / 6e4))}:${pad(Math.floor((ms % 6e4) / 1e3))}`;
     return `⏳ ${d ? `${d}g ` : ''}${clock}`;
   }
-  /* tick() her saniye çağırır · süresi biten fırsat vitrinden düşsün diye vitrin yeniden çizilir */
+  /* tick() her saniye çağırır · son 24 saatte kırmızı · süresi biten fırsat vitrinden düşsün diye vitrin yeniden çizilir */
   function updateVitrineTimers(now) {
     let expired = false;
     $$('#vitrineSection [data-gs-ends]').forEach((el) => {
       const left = Number(el.dataset.gsEnds) - now.getTime();
       el.textContent = gsTimerText(left);
-      el.classList.toggle('is-urgent', left < DAY_MS);
+      el.classList.toggle('deal-urgent', left < DAY_MS);
       if (left <= 0) expired = true;
     });
     if (expired) renderVitrine(now);
@@ -266,81 +290,89 @@
     const box = $('#vitrineSection');
     if (!showcaseOn('vitrine') || (!list.length && !admin)) { box.innerHTML = ''; return; }
 
-    /* Oyun mağazası teklif kartı · kademe indirime göre: %50+ efsane (altın-turuncu), %30+ süper (mor), altı fırsat (mavi) */
-    const tierOf = (rate) => (rate >= 100 ? { cls: 'gs-tier-ultra', label: '✦ ULTRA EFSANE · BEDAVA' }
-      : rate >= 50 ? { cls: 'gs-tier-legend', label: '★ EFSANE FIRSAT' }
-      : rate >= 30 ? { cls: 'gs-tier-epic', label: '◆ SÜPER FIRSAT' } : { cls: 'gs-tier-rare', label: '● FIRSAT' });
-    // Tek fırsat: geniş "öne çıkan teklif" (kapak solda, bilgiler sağda) · 2 fırsat: ortalı iki sütun
-    const wide = list.length === 1;
     const cards = list.map(({ d, b }) => {
+      const theme = dealThemeOf(d);
+      const t = DEAL_THEMES[theme];
       const eff = getEffectiveDiscount(b, now);
       const newPrice = round2(b.price * (1 - eff.rate / 100));
       const free = newPrice <= 0;
-      const tier = tierOf(eff.rate);
-      // Kiradaki kitap: "tükendi" gibi soluk kart, KİRADA damgası, gri düğme
       const rented = isBookRented(b, now.getTime()) || isBookLocked(b, now.getTime());
+      const left = d.endsMs == null ? null : d.endsMs - now.getTime();
       return `
         <div data-open-book="${b.id}" role="button" tabindex="0"
-          class="gs-card ${tier.cls} ${rented ? 'is-soldout' : ''} gs-shine group cursor-pointer text-left focus:outline-none focus:ring-4 focus:ring-amber-300/70">
-          ${admin ? `<button type="button" data-delete-vitrine="${d.id}" title="Fırsatı kaldır" aria-label="Fırsatı kaldır"
-            class="absolute top-2 left-2 z-[5] w-7 h-7 rounded-full bg-black/40 text-white hover:bg-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
-          <!-- Üst şerit: fırsat adı + canlı geri sayım (son 24 saatte kırmızı) -->
-          <div class="gs-ribbon relative z-[3] flex items-center justify-between gap-2 px-3 py-2 ${admin ? 'pl-11' : ''}">
-            <p class="gs-font gs-outline text-lg leading-none truncate">${escapeHTML(d.name || 'Fırsat')}</p>
-            ${d.endsMs == null ? '<span class="gs-timer shrink-0">∞ Süresiz</span>'
-              : `<span class="gs-timer shrink-0 tabular-nums ${d.endsMs - now.getTime() < DAY_MS ? 'is-urgent' : ''}" data-gs-ends="${d.endsMs}">${gsTimerText(d.endsMs - now.getTime())}</span>`}
-          </div>
-          <div class="${wide ? 'sm:flex sm:items-stretch' : ''}">
-            <!-- Sahne: dönen ışık hüzmeleri, süzülen kapak, yıldız patlaması rozeti -->
-            <div class="gs-scene relative z-[2] h-48 ${wide ? 'sm:h-auto sm:min-h-[17rem] sm:w-1/2' : ''} flex items-center justify-center overflow-hidden">
-              <span class="gs-card-rays" aria-hidden="true"></span>
-              <div class="gs-float relative">${coverHTML(b, 'lg')}</div>
-              <div class="gs-burst-wrap absolute top-2 right-2">
-                <div class="gs-burst flex flex-col items-center justify-center text-center">
-                  ${free ? '<span class="gs-font gs-outline text-lg leading-none">BEDAVA</span>' : `
-                  <span class="gs-font text-[10px] leading-none text-white/90">İNDİRİM</span>
-                  <span class="gs-font gs-outline text-2xl leading-none">-%${eff.rate}</span>`}
+          class="light-scope deal-card deal-theme-${theme} ${free ? 'is-free' : ''} ${rented ? 'is-rented' : ''} group relative overflow-hidden rounded-2xl text-white text-left shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition duration-200 cursor-pointer focus:outline-none focus:ring-4 focus:ring-brand-200">
+          ${dealDecorHTML(theme)}
+          <div class="relative z-[2] p-4 ${theme === 'winter' ? 'pt-6' : ''}">
+            <!-- Üst satır: tema etiketi + kalan süre · Admin: düzenle / kaldır -->
+            <div class="flex items-center justify-between gap-2">
+              <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${theme === 'winter' ? 'bg-sky-50 text-sky-800' : 'bg-white/20 text-white'} truncate">${t.emoji} ${escapeHTML(t.tag)}</span>
+              <span class="flex items-center gap-1.5 shrink-0">
+                ${left == null ? '<span class="deal-timer">∞ Süresiz</span>'
+                  : `<span class="deal-timer tabular-nums ${left < DAY_MS ? 'deal-urgent' : ''}" data-gs-ends="${d.endsMs}">${gsTimerText(left)}</span>`}
+                ${admin ? `
+                  <button type="button" data-edit-vitrine="${d.id}" title="Fırsatı düzenle" aria-label="Fırsatı düzenle"
+                    class="w-7 h-7 rounded-full bg-white/20 hover:bg-[#fff] hover:text-brand-600 flex items-center justify-center transition">${icon('pencil', 'w-3.5 h-3.5 pointer-events-none')}</button>
+                  <button type="button" data-delete-vitrine="${d.id}" title="Fırsatı kaldır" aria-label="Fırsatı kaldır"
+                    class="w-7 h-7 rounded-full bg-white/20 hover:bg-rose-500 flex items-center justify-center transition">${icon('close', 'w-3.5 h-3.5 pointer-events-none')}</button>` : ''}
+              </span>
+            </div>
+
+            <div class="flex gap-4 mt-3">
+              <div class="deal-cover relative shrink-0">
+                ${coverHTML(b, 'lg')}
+                ${rented ? '<span class="absolute inset-x-0 bottom-2 mx-auto w-fit text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900/80 text-white">🔒 Kirada</span>' : ''}
+              </div>
+              <div class="flex-1 min-w-0 flex flex-col">
+                <p class="text-[11px] font-semibold text-white/80 truncate">${escapeHTML(d.name || t.tag)}</p>
+                <p class="text-sm sm:text-base font-bold leading-snug line-clamp-2 mt-0.5">${escapeHTML(b.title)}</p>
+                <p class="text-[10px] font-semibold text-white/70 truncate mt-0.5">${escapeHTML(seriesLabel(b))}</p>
+                <!-- İndirim: yüzde büyük · eski fiyat üstü çizili · yeni fiyat belirgin -->
+                <div class="mt-auto pt-3 flex items-end justify-between gap-2">
+                  <div class="flex items-baseline gap-1 leading-none">
+                    ${free ? '<span class="text-3xl font-black tracking-tight">BEDAVA</span>' : `
+                    <span class="text-4xl font-black tracking-tight">%${eff.rate}</span>
+                    <span class="text-[10px] font-extrabold tracking-wider text-white/80">İNDİRİM</span>`}
+                  </div>
+                  <div class="text-right leading-tight">
+                    <p class="text-[11px] text-white/65 line-through">${formatMoney(b.price)}</p>
+                    <p class="text-lg font-black ${theme === 'winter' ? 'text-sky-100' : 'text-amber-200'}">${free ? 'Bedava' : formatMoney(newPrice)}</p>
+                  </div>
                 </div>
               </div>
-              ${rented ? '<span class="gs-stamp gs-font">KİRADA</span>' : ''}
             </div>
-            <!-- Alt (genişte sağ): kademe · ad · 3B fiyat düğmesi -->
-            <div class="relative z-[2] px-3 pb-3.5 text-center ${wide ? 'sm:w-1/2 sm:flex sm:flex-col sm:justify-center sm:px-6 sm:py-6' : ''}">
-              <p class="gs-font text-[11px] ${wide ? 'sm:text-sm' : ''} tracking-wider text-white/85">${tier.label}</p>
-              <p class="gs-font gs-outline text-lg ${wide ? 'sm:text-3xl' : ''} leading-tight truncate mt-0.5">${escapeHTML(b.title)}</p>
-              <p class="mt-1 flex items-center justify-center gap-2 min-w-0">
-                <span class="text-[11px] font-bold text-white/80 truncate">${escapeHTML(typeLabel(b.type))}${Number.isInteger(b.seriesNo) && getType(b.type)?.inDeals ? ` · #${b.seriesNo}` : ''}</span>
-                ${statusChipHTML(b, now.getTime(), 'shrink-0 ring-2 ring-[#160d3b]')}
-              </p>
-              <div class="gs-buy ${rented ? 'is-off' : ''} mt-3 ${wide ? 'sm:mt-5 sm:py-3' : ''} flex items-center justify-center gap-2.5 py-2">
-                ${rented ? '<span class="gs-font gs-outline text-xl leading-none">🔒 KİRADA</span>' : `
-                <span class="gs-font text-sm text-emerald-950/60 line-through decoration-2">${formatMoney(b.price)}</span>
-                <span class="gs-font gs-outline text-2xl ${wide ? 'sm:text-3xl' : ''} leading-none">${free ? 'BEDAVA' : formatMoney(newPrice)}</span>`}
-              </div>
-            </div>
+
+            <!-- Kirala: sitedeki buton tarzı (beyaz zemin üstünde marka rengi) · kitap detayını açar -->
+            <span class="mt-4 flex items-center justify-center gap-1.5 w-full py-2.5 rounded-xl text-xs font-semibold shadow-soft transition ${rented
+              ? 'bg-white/25 text-white/80'
+              : 'bg-[#fff] text-brand-700 group-hover:bg-brand-50'}">${rented ? '🔒 Şu an kirada · detay' : `Kirala ${free ? '· bedava' : `· ${formatMoney(newPrice)}`} →`}</span>
           </div>
         </div>`;
     }).join('');
-    const gridCls = wide ? 'grid-cols-1 max-w-2xl mx-auto'
+
+    // Tek fırsat: ortada dengeli genişlik · 2: iki sütun · 3+: üç sütun (telefonda hep alt alta)
+    const gridCls = list.length === 1 ? 'grid-cols-1 max-w-md mx-auto'
       : list.length === 2 ? 'grid-cols-1 sm:grid-cols-2 max-w-3xl mx-auto' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+    // Bölüm teması: o temada (section tanımlı) en az bir fırsat varsa başlık ve zemin temaya geçer
+    const secKey = Object.keys(DEAL_THEMES).find((k) => DEAL_THEMES[k].section && list.some(({ d }) => dealThemeOf(d) === k));
+    const sec = secKey ? DEAL_THEMES[secKey].section : null;
 
     box.innerHTML = `
-      <div class="light-scope gs-panel relative overflow-hidden mb-6 p-4 sm:p-5">
-        <span class="gs-rays" aria-hidden="true"></span>
-        <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <div class="relative overflow-hidden rounded-2xl shadow-soft p-4 sm:p-5 mb-6 ${sec ? `${sec.bg} ${sec.ring}` : 'bg-white ring-1 ring-amber-100'}">
+        ${sec ? '<span class="deal-snow is-soft" aria-hidden="true"></span>' : ''}
+        <div class="relative z-[2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div class="flex items-center gap-3">
-            <span class="gs-icon shrink-0 w-12 h-12 flex items-center justify-center text-2xl">🏷️</span>
+            <span class="w-9 h-9 rounded-xl bg-gradient-to-br ${sec ? sec.iconTone : 'from-amber-400 to-rose-500'} text-white flex items-center justify-center shadow-soft text-base shrink-0">${sec ? sec.icon : '🏷️'}</span>
             <div>
-              <h2 class="gs-font gs-title text-3xl leading-none">FIRSATLAR</h2>
-              <p class="gs-font text-xs text-violet-100/90 mt-1 tracking-wide">⚡ Sınırlı süreli kitap fırsatları · kaçırma!</p>
+              <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">${sec ? sec.title : 'Fırsatlar'}
+                ${list.length ? `<span class="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">${list.length} fırsat</span>` : ''}</h2>
+              <p class="text-[11px] text-slate-400">${sec ? sec.sub : 'Sınırlı süreli kitap fırsatları · kaçırma!'}</p>
             </div>
           </div>
-          ${admin ? `<button type="button" data-add-vitrine
-            class="gs-add self-start sm:self-auto flex items-center gap-1.5 px-4 py-2 gs-font text-sm">${icon('plus', 'w-4 h-4')}İndirim Ekle</button>` : ''}
+          ${admin ? `<button type="button" data-add-vitrine class="${BTN_PRIMARY} self-start sm:self-auto">${icon('plus', 'w-3.5 h-3.5')}İndirim Ekle</button>` : ''}
         </div>
         ${list.length
-          ? `<div class="relative grid ${gridCls} gap-5 pb-1">${cards}</div>`
-          : `<p class="relative text-center text-xs text-violet-100/90 py-8 border-2 border-dashed border-white/25 rounded-2xl">Henüz fırsat yok · <b class="text-amber-300">İndirim Ekle</b> ile kitap ve yüzde seçerek ekleyebilirsin.<br/><span class="text-[10px] text-violet-200/75">Bu boş alanı yalnızca Adminler görür.</span></p>`}
+          ? `<div class="relative z-[2] grid ${gridCls} gap-4">${cards}</div>`
+          : emptyState('Henüz fırsat yok · <b>İndirim Ekle</b> ile kitap, yüzde ve tema seçerek ekleyebilirsin.<br/><span class="text-[10px]">Bu boş alanı yalnızca Adminler görür.</span>', 'relative z-[2] !py-8')}
       </div>`;
   }
 
@@ -402,51 +434,98 @@
       </div>`;
   }
 
-  /* Admin: fırsat ekle (aynı kitaba yeniden eklemek indirimi günceller).
-     Başka bir indirimdeki kitap (günün indirimi, yeni kitap, aktif özel teklif) seçilemez. */
-  function openVitrineModal() {
+  /* Admin: fırsat ekle / düzenle (aynı kitaba yeniden eklemek indirimi günceller).
+     Başka bir indirimdeki kitap (günün indirimi, yeni kitap, aktif özel teklif) seçilemez.
+     editId: düzenlenecek fırsat (kitap değiştirilemez; ad, yüzde, bitiş ve tema değişir) */
+  function openVitrineModal(editId = null) {
     if (!requireAdmin()) return;
     const now = new Date();
-    const dealIds = getDailyDeals(now).ids;
-    // Yalnızca Kiralık durumdaki kitaplar
-    const pickable = books
-      .filter((b) => hasPrice(b) && isRentableStatus(b))
-      .map((b) => ({ b, other: customDiscountOf(b, now) ? null : otherDiscountOf(b, now, dealIds) }))
-      .sort((x, y) => bySeriesThenTitle(x.b, y.b)); // seri sırasıyla (başka indirimdekiler yerinde, seçilemez)
-    if (!pickable.some((x) => !x.other)) return toast('Fırsatlar\'a eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
-    const defaultEnd = localDateKey(new Date(Date.now() + 7 * DAY_MS));
-    openModal(`
-      ${modalHeader('Fırsat Ekle 🏷️', 'Ana sayfadaki Fırsatlar\'da görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
-      <form data-form="saveVitrine" class="p-5 space-y-3.5" autocomplete="off">
-        ${field('İndirim Adı', `<input name="name" maxlength="60" required autofocus class="${INPUT_CLS}" placeholder="Örn. Hafta Sonu Fırsatı" />`)}
-        ${field('Kitap', `<select name="bookId" id="vd-book" required class="${INPUT_CLS}">
+    const edit = editId ? discounts.find((x) => x.id === editId) : null;
+    const editBook = edit ? getBook(edit.bookId) : null;
+    if (editId && !editBook) return toast('Fırsat bulunamadı.', 'error');
+    let bookField;
+    if (editBook) {
+      bookField = field('Kitap', `
+        <input type="hidden" name="bookId" id="vd-book" value="${editBook.id}" />
+        <p class="${INPUT_CLS} !bg-slate-50 text-slate-500 truncate">${escapeHTML(seriesLabel(editBook))} · ${escapeHTML(editBook.title)} · ${formatMoney(editBook.price)}</p>`,
+        'Düzenlerken kitap değiştirilemez; başka kitap için fırsatı kaldırıp yenisini ekle.');
+    } else {
+      const dealIds = getDailyDeals(now).ids;
+      // Yalnızca Kiralık durumdaki kitaplar
+      const pickable = books
+        .filter((b) => hasPrice(b) && isRentableStatus(b))
+        .map((b) => ({ b, other: customDiscountOf(b, now) ? null : otherDiscountOf(b, now, dealIds) }))
+        .sort((x, y) => bySeriesThenTitle(x.b, y.b)); // seri sırasıyla (başka indirimdekiler yerinde, seçilemez)
+      if (!pickable.some((x) => !x.other)) return toast('Fırsatlar\'a eklenebilecek kitap yok (Kiralık kitapların hepsi başka bir indirimde).', 'info');
+      bookField = field('Kitap', `<select name="bookId" id="vd-book" required class="${INPUT_CLS}">
           ${pickable.map(({ b, other }) => {
             const cur = customDiscountOf(b, now);
             return `<option value="${b.id}" ${other ? 'disabled' : ''}>${escapeHTML(seriesLabel(b))} · ${escapeHTML(b.title)} · ${formatMoney(b.price)}${cur ? ` (fırsatta %${cur.rate})` : ''}${other ? ` — ${other}` : ''}</option>`;
           }).join('')}
-        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Zaten fırsatta olan kitabı seçersen indirimi güncellenir.')}
-        ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" class="${INPUT_CLS}" placeholder="Örn. 30" />`,
+        </select>`, 'Yalnızca Kiralık kitaplar listelenir; başka bir indirimdekiler seçilemez. Zaten fırsatta olan kitabı seçersen indirimi güncellenir.');
+    }
+    const end = edit?.endsMs ? new Date(edit.endsMs) : new Date(Date.now() + 7 * DAY_MS);
+    const pad = (n) => String(n).padStart(2, '0');
+    const theme = edit ? dealThemeOf(edit) : 'normal';
+    // Tema seçimi: her seçenekte küçük önizleme (DEAL_THEMES'ten · yeni tema kendiliğinden listelenir)
+    const themePicker = `
+      <div>
+        <span class="block text-[11px] font-medium text-slate-500 mb-1">Tema</span>
+        <div class="grid grid-cols-2 gap-2.5">${Object.entries(DEAL_THEMES).map(([k, t]) => `
+          <label class="cursor-pointer">
+            <input type="radio" name="theme" value="${k}" ${k === theme ? 'checked' : ''} class="peer sr-only" />
+            <span class="block rounded-2xl border-2 border-slate-100 p-1.5 transition peer-checked:border-brand-500 peer-checked:shadow-soft hover:border-brand-200">
+              <span class="light-scope deal-theme-${k} relative block h-14 rounded-xl overflow-hidden">
+                ${dealDecorHTML(k, true)}
+                <span class="relative z-[3] flex h-full items-end justify-between p-2">
+                  <span class="text-[9px] font-bold text-white bg-white/20 px-1.5 py-0.5 rounded-full">${t.emoji} ${t.tag}</span>
+                  <span class="text-base font-black text-white leading-none">%30</span>
+                </span>
+              </span>
+              <span class="block px-1 pt-1.5">
+                <span class="block text-[11px] font-bold text-slate-700">${t.emoji} ${t.label}</span>
+                <span class="block text-[10px] text-slate-400 leading-snug">${t.desc}</span>
+              </span>
+            </span>
+          </label>`).join('')}
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1">Tema yalnızca görünümü değiştirir · indirim, fiyat ve süre aynı kalır.</p>
+      </div>`;
+    openModal(`
+      ${modalHeader(edit ? 'Fırsatı Düzenle ✏️' : 'Fırsat Ekle 🏷️', 'Ana sayfadaki Fırsatlar\'da görünür · bitiş anında kendiliğinden kalkar.', 'tag', 'bg-amber-50 text-amber-600')}
+      <form data-form="saveVitrine" class="p-5 space-y-3.5" autocomplete="off">
+        ${field('İndirim Adı', `<input name="name" maxlength="60" required ${edit ? '' : 'autofocus'} value="${escapeHTML(edit?.name || '')}" class="${INPUT_CLS}" placeholder="Örn. Hafta Sonu Fırsatı" />`)}
+        ${bookField}
+        ${field('İndirim Yüzdesi (%)', `<input name="rate" id="vd-rate" type="number" min="1" max="${CUSTOM_DISCOUNT_MAX}" step="1" required inputmode="numeric" value="${edit ? edit.rate : ''}" class="${INPUT_CLS}" placeholder="Örn. 30" />`,
           `1–${CUSTOM_DISCOUNT_MAX} arası tam sayı · %100 = bedava`)}
         <div class="grid grid-cols-[1fr_auto] gap-3">
-          ${field('Bitiş Tarihi', `<input name="endDate" type="date" required min="${localDateKey(now)}" value="${defaultEnd}" class="${INPUT_CLS} min-w-0" />`)}
-          ${field('Saat', `<input name="endTime" type="time" required value="23:59" class="${INPUT_CLS} w-[6.5rem]" />`)}
+          ${field('Bitiş Tarihi', `<input name="endDate" type="date" required min="${localDateKey(now)}" value="${localDateKey(end)}" class="${INPUT_CLS} min-w-0" />`)}
+          ${field('Saat', `<input name="endTime" type="time" required value="${edit?.endsMs ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '23:59'}" class="${INPUT_CLS} w-[6.5rem]" />`)}
         </div>
-        <div id="vd-preview" class="rounded-2xl bg-gradient-to-br from-indigo-950 to-slate-900 text-white px-4 py-3 text-xs"></div>
-        ${announceCheckHTML('vd-announce', 'İndirim')}
-        ${formFooter('Fırsatlar\'a Ekle')}
+        ${themePicker}
+        <div id="vd-preview"></div>
+        ${edit ? '' : announceCheckHTML('vd-announce', 'İndirim')}
+        ${formFooter(edit ? 'Değişiklikleri Kaydet' : 'Fırsatlar\'a Ekle')}
       </form>`);
     updateVitrinePreview();
   }
 
+  /* Pencerede fiyat önizlemesi · seçili temanın renkleriyle */
   function updateVitrinePreview() {
     const box = $('#vd-preview');
     if (!box) return;
     const b = getBook($('#vd-book')?.value);
     const rate = parseInt($('#vd-rate')?.value, 10);
+    const theme = DEAL_THEMES[$('[data-form="saveVitrine"] input[name="theme"]:checked')?.value] ? $('[data-form="saveVitrine"] input[name="theme"]:checked').value : 'normal';
     if (!b) { box.innerHTML = ''; return; }
-    box.innerHTML = rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX
-      ? `<span class="text-indigo-200/70">Fırsat fiyatı:</span> <span class="line-through text-indigo-200/50">${formatMoney(b.price)}</span> → <b class="vitrine-gold text-base">${rate === 100 ? 'BEDAVA' : formatMoney(round2(b.price * (1 - rate / 100)))}</b> <span class="text-amber-300 font-bold">(%${rate})</span>`
-      : `<span class="text-indigo-200/70">Normal fiyat ${formatMoney(b.price)} · yüzde gir, yeni fiyat burada görünsün.</span>`;
+    const ok = rate >= 1 && rate <= CUSTOM_DISCOUNT_MAX;
+    box.innerHTML = `
+      <div class="light-scope deal-theme-${theme} ${ok && rate === 100 ? 'is-free' : ''} relative overflow-hidden rounded-2xl px-4 py-3 text-xs text-white">
+        ${dealDecorHTML(theme, true)}
+        <p class="relative z-[3] ${theme === 'winter' ? 'pt-1' : ''}">${ok
+          ? `<span class="text-white/75">Fırsat fiyatı:</span> <span class="line-through text-white/60">${formatMoney(b.price)}</span> → <b class="text-base">${rate === 100 ? 'BEDAVA' : formatMoney(round2(b.price * (1 - rate / 100)))}</b> <span class="font-bold text-amber-200">(%${rate})</span>`
+          : `<span class="text-white/80">Normal fiyat ${formatMoney(b.price)} · yüzde gir, yeni fiyat burada görünsün.</span>`}</p>
+      </div>`;
   }
 
   function handleSaveVitrine(fd) {
@@ -454,6 +533,7 @@
     const b = getBook(fd.bookId);
     const rate = parseInt(fd.rate, 10);
     const name = (fd.name || '').trim();
+    const theme = DEAL_THEMES[fd.theme] ? fd.theme : 'normal';
     if (!name) return toast('İndirime bir ad verin.', 'error');
     if (!b || !hasPrice(b)) return toast('Fiyatı olan bir kitap seçin.', 'error');
     if (!isRentableStatus(b)) return toast('Fırsatlar\'a yalnızca Kiralık durumdaki kitaplar eklenebilir.', 'error');
@@ -466,10 +546,11 @@
     const other = prev ? null : otherDiscountOf(b);
     if (other) return toast(`"${b.title}" şu an ${other}; Fırsatlar'a eklenemez.`, 'error');
 
+    const t = DEAL_THEMES[theme];
     const batch = db.batch();
     batch.set(col('discounts').doc(String(b.id)), {
-      bookId: b.id, name, rate, endsAt: Timestamp.fromDate(end),
-      createdAt: isoAt(Date.now()), createdBy: state.currentUserId
+      bookId: b.id, name, rate, theme, endsAt: Timestamp.fromDate(end),
+      createdAt: prev?.createdAt || isoAt(Date.now()), createdBy: prev?.createdBy || state.currentUserId
     });
     if (fd.announce === 'on') {
       const newPrice = round2(b.price * (1 - rate / 100));
@@ -477,12 +558,12 @@
         type: 'news', category: 'İndirim',
         // Başlıkta yalnızca kitap + indirim (fırsat adı karışıklık yapıyordu · içerikte zaten yazıyor)
         title: `${b.title} ${rate === 100 ? 'bedava' : `%${rate} indirimli`}`,
-        body: `🏷️ ${name}\n"${b.title}" Fırsatlar'da! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
+        body: `${t.emoji} ${name}${theme !== 'normal' ? ` · ${t.tag}` : ''}\n"${b.title}" Fırsatlar'da! ${rate === 100 ? `${formatMoney(b.price)} yerine BEDAVA!` : `${formatMoney(b.price)} yerine ${formatMoney(newPrice)} · %${rate} indirim.`}\n⏳ Son: ${formatDate(end.toISOString(), true)} · kaçırma!`,
         bookId: b.id, authorId: state.currentUserId, createdAt: isoAt(Date.now()), pinned: false, readBy: []
       });
     }
     closeModal();
-    run(batch.commit(), prev ? `"${b.title}" fırsatı güncellendi · ${name} %${rate}` : `"${b.title}" ${name} ile %${rate} indirimle Fırsatlar'a eklendi 🏷️`);
+    run(batch.commit(), prev ? `"${b.title}" fırsatı güncellendi · ${name} %${rate}` : `"${b.title}" ${name} ile %${rate} indirimle Fırsatlar'a eklendi ${t.emoji}`);
   }
 
   function deleteVitrine(id) {

@@ -52,6 +52,7 @@
       if ((m = el('[data-open-balance-log]'))) return openBalanceLogModal(m.dataset.openBalanceLog || state.currentUserId);
       if ((m = el('[data-balance-log-user]'))) return watchBalanceLogs(m.dataset.balanceLogUser);
       if ((m = el('[data-balance-log-more]'))) return showMoreBalanceLogs();
+      if ((m = el('[data-delete-balance-log]'))) return deleteBalanceLogs(m.dataset.deleteBalanceLog);
       if ((m = el('[data-stats-page]')))       return goStatsPage(m.dataset.statsPage, m.dataset.page);
       if ((m = el('[data-stats-tab]')))        return setStatsTab(m.dataset.statsTab);
       if ((m = el('[data-stats-filter]')))     return setStatsFilter(m.dataset.statsFilter);
@@ -91,6 +92,7 @@
       if ((m = el('[data-rating-info]')))      return openRatingInfoModal(m.dataset.ratingInfo);
       if ((m = el('[data-delete-rating]')))    return deleteRating(m.dataset.deleteRating, m.dataset.book);
       if ((m = el('[data-delete-vitrine]')))   return deleteVitrine(m.dataset.deleteVitrine);
+      if ((m = el('[data-edit-vitrine]')))     return openVitrineModal(m.dataset.editVitrine);
       if ((m = el('[data-theme-toggle]')))     return toggleDarkMode();
       if ((m = el('[data-reveal]')))           return revealSection(m);
       if ((m = el('[data-theme-info]')))       return openThemeInfoModal();
@@ -188,7 +190,7 @@
       if (t.matches('[data-offer-slot]')) { updateOfferSlotPreview(Number(t.dataset.offerSlot)); return updateOfferCalc(); }
       if (t.id === 'bf-type' || t.id === 'bf-status' || t.id === 'bf-museum-type') return updateBookFormPreview();
       if (t.id === 'bf-date') delete t.dataset.auto;
-      if (t.id === 'vd-book') updateVitrinePreview();
+      if (t.id === 'vd-book' || (t.name === 'theme' && t.closest('[data-form="saveVitrine"]'))) updateVitrinePreview();
       if (t.id === 'rentCoupon') updateRentCoupon();
       if (t.id === 'sc-type' || t.id === 'sc-timed') updateShopCouponForm();
       if (t.matches('[data-bogo-slot]')) updateBogoSummary();

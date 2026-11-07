@@ -148,87 +148,68 @@
     /* Altın yazı (Fırsat Ekle penceresindeki fiyat önizlemesi) */
     .vitrine-gold { background: linear-gradient(180deg, #fffbeb, #fde68a 55%, #fbbf24); -webkit-background-clip: text; background-clip: text; color: transparent;
       filter: drop-shadow(0 1px 1px rgba(30, 27, 75, .45)); }
-    /* Fırsatlar vitrini · oyun mağazası teklifleri: kalın koyu çerçeve, dönen ışık hüzmeleri, kademeli renkler,
-       yıldız patlaması rozeti, 3B fiyat düğmesi (gs = game shop) */
-    /* Baloo 2: kalın, yuvarlak oyun yazısı · Türkçe harflerin hepsi var (İ, ş, ğ…) */
-    .gs-font { font-family: 'Baloo 2', 'Inter', system-ui, sans-serif; font-weight: 800; letter-spacing: .01em; }
-    .gs-outline { color: #fff; -webkit-text-stroke: 1.5px #160d3b; paint-order: stroke fill; text-shadow: 0 2px 0 #160d3b; }
-    .gs-title { color: #ffd23f; -webkit-text-stroke: 2px #160d3b; paint-order: stroke fill; text-shadow: 0 4px 0 #160d3b, 0 0 24px rgba(255, 210, 63, .45); }
-    .gs-panel {
-      border-radius: 28px; border: 3px solid #160d3b;
-      background: radial-gradient(130% 120% at 50% 0%, #7c3aed 0%, #5b21b6 40%, #2e1065 75%, #1e1b4b 100%);
-      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .18), 0 6px 0 #160d3b, 0 20px 40px -18px rgba(46, 16, 101, .6);
+    /* Fırsatlar vitrini · sitenin kart tarzında (Inter, rounded-2xl, shadow-soft) canlı renkli fırsat kartları.
+       Kart renkleri sabittir (kartta light-scope) · tema sınıfları: .deal-theme-<anahtar> (bkz. home.js → DEAL_THEMES) */
+    .deal-card { isolation: isolate; }
+    .deal-card .deal-cover > * { box-shadow: 0 10px 22px -8px rgba(15, 23, 42, .45); outline: 2px solid rgba(255, 255, 255, .85); outline-offset: 0; }
+    .deal-card.is-rented .deal-cover { filter: grayscale(.8) brightness(.9); }
+    .deal-timer { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: rgba(15, 23, 42, .28); color: #fff; }
+    .deal-timer.deal-urgent { background: #e11d48; animation: dealUrgent 1.2s ease-in-out infinite; }
+    @keyframes dealUrgent { 50% { box-shadow: 0 0 0 4px rgba(244, 63, 94, .3); } }
+    /* Hafif parlama (yalnızca üzerine gelince) */
+    .deal-card::after {
+      content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none; border-radius: inherit;
+      background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, .22) 50%, transparent 60%);
+      transform: translateX(-120%); transition: transform .7s ease;
     }
-    .gs-rays, .gs-card-rays {
-      position: absolute; left: 50%; aspect-ratio: 1; pointer-events: none;
-      background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .09) 0 9deg, transparent 9deg 18deg);
-      -webkit-mask: radial-gradient(circle, #000 15%, transparent 62%); mask: radial-gradient(circle, #000 15%, transparent 62%);
-      animation: gsSpin 60s linear infinite;
-    }
-    .gs-rays { top: -90%; width: 170%; transform: translateX(-50%); }
-    .gs-card-rays { top: 50%; width: 150%; transform: translate(-50%, -50%);
-      background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .22) 0 10deg, transparent 10deg 20deg); animation-duration: 22s; }
-    .gs-rays { animation-name: gsSpinX; }
-    @keyframes gsSpinX { to { transform: translateX(-50%) rotate(360deg); } }
-    @keyframes gsSpin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    .gs-icon { border-radius: 16px; border: 3px solid #160d3b; background: linear-gradient(180deg, #ff6b9a, #e11d74 55%, #9d174d);
-      box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .55), 0 3px 0 #160d3b; transform: rotate(-6deg); }
-    .gs-add { color: #3b2300; border-radius: 14px; border: 3px solid #160d3b; background: linear-gradient(180deg, #ffe066, #ffb703);
-      box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .16), inset 0 2px 0 rgba(255, 255, 255, .6), 0 4px 0 #160d3b; transition: transform .12s, box-shadow .12s; }
-    .gs-add:hover { transform: translateY(-1px); }
-    .gs-add:active { transform: translateY(3px); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .16), 0 1px 0 #160d3b; }
-    .gs-card {
-      position: relative; overflow: hidden; border-radius: 22px; border: 3px solid #160d3b;
-      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .35), 0 6px 0 #160d3b, 0 18px 30px -14px rgba(0, 0, 0, .55);
-      transition: transform .18s cubic-bezier(.3, 1.6, .5, 1), box-shadow .18s;
-    }
-    .gs-card:hover { transform: translateY(-5px) rotate(-.6deg) scale(1.015); }
-    .gs-card:active { transform: translateY(3px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .35), 0 2px 0 #160d3b; }
-    /* Bedava (%100): en üst kademe · akan gökkuşağı/hologram zemin */
-    .gs-tier-ultra {
+    .deal-card:hover::after { transform: translateX(120%); }
+
+    /* Normal tema: sitenin mavisi → çivit (bedava fırsat yeşil) */
+    .deal-theme-normal { background: linear-gradient(135deg, #3b82f6 0%, #4f46e5 55%, #7c3aed 100%); }
+    .deal-theme-normal.is-free { background: linear-gradient(135deg, #10b981 0%, #0d9488 55%, #0e7490 100%); }
+
+    /* ❄️ Yılbaşı / Kış teması: gece mavisi → buz mavisi, kar yağışı, üst kenarda kar birikintisi, köşe süsleri */
+    .deal-theme-winter { background: linear-gradient(160deg, #0b1b3a 0%, #13386a 50%, #2f78b7 100%); }
+    .deal-theme-winter .deal-cover > * { outline-color: rgba(224, 242, 254, .95); }
+    .deal-snowcap {
+      position: absolute; top: -1px; left: 0; right: 0; height: 16px; z-index: 3; pointer-events: none;
       background:
-        radial-gradient(90% 70% at 50% 38%, rgba(255, 255, 255, .55) 0%, transparent 60%),
-        linear-gradient(120deg, #ff3d7f, #ff9f1c, #ffe14d, #3ddc84, #22d3ee, #6366f1, #c026d3, #ff3d7f);
-      background-size: 100% 100%, 300% 300%;
-      animation: gsHolo 6s linear infinite;
+        linear-gradient(#fff, #fff) 0 0 / 100% 6px no-repeat,
+        radial-gradient(circle at 14px 2px, #fff 10px, transparent 10.5px) 0 0 / 28px 16px repeat-x,
+        radial-gradient(circle at 9px 3px, #f0f9ff 7px, transparent 7.5px) 7px 0 / 22px 14px repeat-x;
+      filter: drop-shadow(0 2px 1.5px rgba(11, 27, 58, .3));
     }
-    @keyframes gsHolo { from { background-position: 0 0, 0% 50%; } to { background-position: 0 0, 300% 50%; } }
-    .gs-tier-legend { background: radial-gradient(110% 80% at 50% 35%, #fff3a3 0%, #ffc93c 25%, #ff8c1a 60%, #d9480f 100%); }
-    .gs-tier-epic { background: radial-gradient(110% 80% at 50% 35%, #f5d0fe 0%, #d946ef 28%, #9333ea 62%, #581c87 100%); }
-    .gs-tier-rare { background: radial-gradient(110% 80% at 50% 35%, #cffafe 0%, #38bdf8 28%, #2563eb 62%, #1e3a8a 100%); }
-    .gs-ribbon { background: rgba(22, 13, 59, .55); border-bottom: 3px solid #160d3b; }
-    .gs-timer { font-size: 10px; font-weight: 800; color: #fff; padding: 3px 8px; border-radius: 999px;
-      background: #160d3b; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .25); }
-    /* Son 24 saat: kırmızı, nabız gibi atan geri sayım */
-    .gs-timer.is-urgent { background: #e11d48; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .45), 0 0 12px rgba(244, 63, 94, .6); animation: gsUrgent 1s ease-in-out infinite; }
-    @keyframes gsUrgent { 50% { transform: scale(1.07); } }
-    /* Kiradaki kitap: soluk sahne, eğik KİRADA damgası, gri düğme (tıklayınca kitap penceresi yine açılır) */
-    .gs-card.is-soldout .gs-scene > :not(.gs-stamp) { filter: grayscale(.85) brightness(.75); }
-    .gs-card.is-soldout .gs-float, .gs-card.is-soldout .gs-burst-wrap, .gs-card.is-soldout .gs-card-rays { animation-play-state: paused; }
-    .gs-stamp { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-14deg);
-      padding: 2px 16px; font-size: 1.75rem; line-height: 1.2; color: #fff; letter-spacing: .08em;
-      background: #e11d48; border: 3px solid #160d3b; border-radius: 12px; box-shadow: 0 4px 0 #160d3b;
-      -webkit-text-stroke: 1.5px #160d3b; paint-order: stroke fill; }
-    .gs-buy.is-off { background: linear-gradient(180deg, #cbd5e1, #94a3b8 60%, #64748b); }
-    .gs-float { animation: gsFloat 3.2s ease-in-out infinite; filter: drop-shadow(0 10px 8px rgba(0, 0, 0, .35)); }
-    .gs-float > * { border: 3px solid #160d3b; }
-    @keyframes gsFloat { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-7px) rotate(2deg); } }
-    .gs-burst-wrap { filter: drop-shadow(0 3px 0 #160d3b) drop-shadow(0 0 1.5px #160d3b); animation: gsPulse 1.6s ease-in-out infinite; }
-    .gs-burst { width: 84px; height: 84px; transform: rotate(-12deg);
-      background: radial-gradient(circle at 40% 35%, #ff8a8a, #ff2d55 55%, #c9184a);
-      clip-path: polygon(50% 0%, 60.1% 12.3%, 75% 6.7%, 77.6% 22.4%, 93.3% 25%, 87.7% 39.9%, 100% 50%, 87.7% 60.1%, 93.3% 75%, 77.6% 77.6%, 75% 93.3%, 60.1% 87.7%, 50% 100%, 39.9% 87.7%, 25% 93.3%, 22.4% 77.6%, 6.7% 75%, 12.3% 60.1%, 0% 50%, 12.3% 39.9%, 6.7% 25%, 22.4% 22.4%, 25% 6.7%, 39.9% 12.3%); }
-    @keyframes gsPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-    .gs-buy { border-radius: 14px; border: 3px solid #160d3b; background: linear-gradient(180deg, #8cf06c 0%, #3ccf4e 55%, #22a83a 100%);
-      box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .55), 0 4px 0 #160d3b; transition: transform .12s, box-shadow .12s; }
-    .gs-card:hover .gs-buy { filter: brightness(1.06); }
-    .gs-card:active .gs-buy { transform: translateY(2px); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18), 0 2px 0 #160d3b; }
-    .gs-shine::after {
-      content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
-      background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .38) 48%, rgba(255, 255, 255, .1) 54%, transparent 60%);
-      transform: translateX(-130%); animation: goldSweep 4.2s ease-in-out infinite;
+    .deal-ornament { position: absolute; z-index: 3; pointer-events: none; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .25)); }
+    .deal-ornament.spin { animation: dealSpin 9s linear infinite; }
+    @keyframes dealSpin { to { transform: rotate(360deg); } }
+
+    /* Kar yağışı katmanı · iki katman farklı hız/boy · --flake ile renk (kartta beyaz, bölüm zemininde açık mavi) */
+    .deal-snow { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; --flake: rgba(255, 255, 255, .9); }
+    .deal-snow::before, .deal-snow::after { content: ''; position: absolute; inset: 0; }
+    .deal-snow::before {
+      background-image:
+        radial-gradient(2px 2px at 18px 22px, var(--flake) 50%, transparent 55%),
+        radial-gradient(1.5px 1.5px at 64px 80px, var(--flake) 50%, transparent 55%),
+        radial-gradient(2.5px 2.5px at 102px 48px, var(--flake) 50%, transparent 55%),
+        radial-gradient(1.5px 1.5px at 40px 110px, var(--flake) 50%, transparent 55%);
+      background-size: 120px 120px; animation: dealSnowA 10s linear infinite;
     }
+    .deal-snow::after {
+      opacity: .65;
+      background-image:
+        radial-gradient(3px 3px at 30px 60px, var(--flake) 50%, transparent 55%),
+        radial-gradient(2px 2px at 130px 20px, var(--flake) 50%, transparent 55%),
+        radial-gradient(2.5px 2.5px at 90px 150px, var(--flake) 50%, transparent 55%);
+      background-size: 180px 180px; animation: dealSnowB 16s linear infinite;
+    }
+    @keyframes dealSnowA { to { background-position: 24px 120px; } }
+    @keyframes dealSnowB { to { background-position: -36px 180px; } }
+    /* Bölüm zemininde (kış teması varken) daha seyrek ve soluk */
+    .deal-snow.is-soft { --flake: rgba(125, 211, 252, .55); }
+    .deal-snow.is-soft::after { opacity: .4; }
     @media (prefers-reduced-motion: reduce) {
-      .gs-rays, .gs-card-rays, .gs-float, .gs-burst-wrap, .gs-shine::after, .gs-tier-ultra, .gs-timer.is-urgent { animation: none; }
+      .deal-snow::before, .deal-snow::after, .deal-ornament.spin, .deal-timer.deal-urgent { animation: none; }
+      .deal-card::after { display: none; }
     }
     /* %70+ özel teklif · ŞİMŞEK FIRSAT: fırtına zemini, dallanan beyaz şimşekler (gerçek gibi titreyerek çakar), gökyüzü parlaması */
     .offer-ultra-bg { background: radial-gradient(120% 90% at 50% 0%, #334155 0%, #1e1b4b 45%, #020617 100%); }
@@ -395,3 +376,5 @@
     }
     html.dark .ghost-title { background-image: linear-gradient(105deg, rgba(148, 163, 184, .18) 30%, rgba(96, 165, 250, .6) 47%, rgba(255, 255, 255, .9) 50%, rgba(96, 165, 250, .6) 53%, rgba(148, 163, 184, .18) 70%); }
     html.dark .book-slide.is-center:hover > div { box-shadow: 0 18px 44px -12px rgba(0, 0, 0, .7); }
+    /* Fırsatlar · kış temalı bölüm zemininde kar taneleri koyu zeminde soluk beyaz */
+    html.dark .deal-snow.is-soft { --flake: rgba(224, 242, 254, .3); }

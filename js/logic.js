@@ -652,13 +652,13 @@
     ]);
   }
 
-  /* İstatistik kategorileri (sıfırlama): her biri kendi kayıtlarını seçer */
+  /* İstatistik kategorileri (sıfırlama): her biri kendi kayıtlarını seçer
+     (kaldırılan Kış Fırsatı'nın eski kiralamaları 'winter' / 'winterNew' Fırsat kategorisinde silinir) */
   const STAT_CATS = {
     normal: { label: '📚 İndirimsiz kiralamalar', pick: (r) => !r.purchaseId && !r.discountSource },
     deal:   { label: '🔥 Günün İndirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'deal' },
     new:    { label: '⭐ Yeni Kitap indirimi kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'new' },
-    custom: { label: '🏷️ Fırsat kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'custom' },
-    winter: { label: '❄️ Kış Fırsatı kiralamaları', pick: (r) => !r.purchaseId && ['winter', 'winterNew'].includes(r.discountSource) },
+    custom: { label: '🏷️ Fırsat kiralamaları', pick: (r) => !r.purchaseId && ['custom', 'winter', 'winterNew'].includes(r.discountSource) },
     cheque: { label: '🎁 Hediye çekli kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'cheque' },
     museum: { label: '🏛️ Müze Vitrini kiralamaları', pick: (r) => !r.purchaseId && r.discountSource === 'museum' },
     coupon: { label: '🎟️ Kuponlar ve kuponlu kiralamalar', pick: (r) => !r.purchaseId && r.discountSource === 'coupon' }, // + kupon kayıtları

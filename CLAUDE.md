@@ -43,7 +43,7 @@ Derleme adımı yok. Tüm JS dosyaları **normal (modül olmayan) `<script defer
 Ayarlar penceresinden açılır, tercih tarayıcıda (`localStorage` → `fb.theme`) saklanır. Tailwind renk sınıfları kendiliğinden uyar; yeni kod yazarken:
 - Renkleri Tailwind sınıflarıyla ver (`bg-white`, `text-slate-800`, `bg-rose-50`…). CSS'te elle renk yazacaksan `rgb(var(--bg-slate-50))` gibi değişken kullan ya da `styles.css`'in sonundaki `html.dark` bölümüne koyu karşılığını ekle.
 - Koyu modda da hep beyaz kalması gereken şey (anahtar düğmesi vb.) → `bg-[#fff]`. Renkli zemin üstündeki yarı saydam beyaz zemin (`bg-white/20`, %50 altı) beyaz kalır; `bg-white/50` ve üstü yüzey sayılır ve koyulaşır.
-- Kendi sabit renkleriyle tasarlanmış bölüm (oyun mağazası vitrini, müze, alt bilgi) → köküne `light-scope` sınıfı: altı koyu modda da açık mod renkleriyle kalır.
+- Kendi sabit renkleriyle tasarlanmış bölüm (fırsat kartları, müze, alt bilgi) → köküne `light-scope` sınıfı: altı koyu modda da açık mod renkleriyle kalır.
 
 ## Yeni kod hangi dosyaya yazılır
 
